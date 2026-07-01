@@ -248,14 +248,18 @@ public class MainActivity extends Activity {
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(dp(14), dp(4), dp(14), dp(8));
+        tabs.setPadding(dp(14), dp(4), dp(14), dp(10));
         page.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
         TextView myTab = tab("我的录音", !communityTab);
-        TextView community = tab("VD社区", communityTab);
-        tabs.addView(myTab, new LinearLayout.LayoutParams(0, dp(40), 1));
-        tabs.addView(community, new LinearLayout.LayoutParams(0, dp(40), 1));
+        tabs.addView(myTab);
+        // Spacer between tabs
+        View spacer = new View(this);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(dp(8), 1));
+        tabs.addView(spacer);
+        TextView communityTabView = tab("VD社区", communityTab);
+        tabs.addView(communityTabView);
         myTab.setOnClickListener(v -> { communityTab = false; showHome(); });
-        community.setOnClickListener(v -> { communityTab = true; refreshAndDrain(); });
+        communityTabView.setOnClickListener(v -> { communityTab = true; refreshAndDrain(); });
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
@@ -280,14 +284,30 @@ public class MainActivity extends Activity {
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setGravity(Gravity.CENTER);
+        bottom.setGravity(Gravity.CENTER_HORIZONTAL);
         bottom.setPadding(0, dp(10), 0, dp(18));
         if (!communityTab) page.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
-        TextView fab = circleText("🎙", 68, Theme.RED, 28, 0xffffffff);
-        bottom.addView(fab);
+
+        // FAB: 68dp circle (use FrameLayout to prevent emoji stretching)
+        FrameLayout fabContainer = new FrameLayout(this);
+        fabContainer.setLayoutParams(new LinearLayout.LayoutParams(dp(68), dp(68)));
+        TextView fab = new TextView(this);
+        fab.setText("🎙");
+        fab.setTextSize(28);
+        fab.setTextColor(0xffffffff);
+        fab.setGravity(Gravity.CENTER);
+        fab.setBackground(round(Theme.RED, 34));
+        fab.setPadding(0, dp(8), 0, 0);
+        // Fixed size via FrameLayout params, not min
+        fab.setLayoutParams(new FrameLayout.LayoutParams(dp(68), dp(68)));
+        fabContainer.addView(fab);
+        bottom.addView(fabContainer);
+
         TextView label = text("轻点录音", 12, Theme.SECONDARY, Typeface.NORMAL);
         label.setLetterSpacing(0.08f);
         label.setPadding(0, dp(8), 0, 0);
+        label.setGravity(Gravity.CENTER);
+        label.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
         bottom.addView(label);
         fab.setOnClickListener(v -> startRecordingFlow());
     }
@@ -295,6 +315,7 @@ public class MainActivity extends Activity {
     private TextView tab(String label, boolean selected) {
         TextView view = text(label, 15, selected ? 0xffffffff : Theme.SECONDARY, Typeface.BOLD);
         view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(22), dp(10), dp(22), dp(10));
         view.setBackground(round(selected ? Theme.RED : 0x00ffffff, 20));
         return view;
     }
@@ -322,7 +343,9 @@ public class MainActivity extends Activity {
         lp.setMargins(0, 0, 0, dp(12));
         row.setLayoutParams(lp);
         row.addView(text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title, 17, Theme.INK, Typeface.BOLD));
-        TextView meta = text((post.author == null || post.author.isEmpty() ? "匿名作者" : post.author) + " · " + post.shareId, 13, Theme.FAINT, Typeface.NORMAL);
+        String dateStr = formatCommunityDate(post.firstSharedAt);
+        TextView meta = text((post.author == null || post.author.isEmpty() ? "匿名作者" : post.author)
+                + (dateStr.isEmpty() ? "" : " · " + dateStr), 13, Theme.FAINT, Typeface.NORMAL);
         meta.setPadding(0, dp(8), 0, 0);
         row.addView(meta);
         row.setOnClickListener(v -> openCommunityPost(post));
@@ -339,10 +362,20 @@ public class MainActivity extends Activity {
         lp.setMargins(0, 0, 0, dp(12));
         row.setLayoutParams(lp);
 
-        TextView wave = text("▂▆▄", 18, Theme.RED, Typeface.BOLD);
-        wave.setGravity(Gravity.CENTER);
-        wave.setBackground(round(0xfffbeae7, 14));
-        row.addView(wave, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        // Wave icon: 3 vertical bars with spacing
+        LinearLayout waveIcon = new LinearLayout(this);
+        waveIcon.setOrientation(LinearLayout.HORIZONTAL);
+        waveIcon.setGravity(Gravity.CENTER);
+        waveIcon.setBackground(round(0xfffbeae7, 14));
+        waveIcon.setPadding(dp(12), dp(12), dp(12), dp(12));
+        addWaveBar(waveIcon, dp(3), dp(11));
+        View gap1 = new View(this); gap1.setLayoutParams(new LinearLayout.LayoutParams(dp(4), 1));
+        waveIcon.addView(gap1);
+        addWaveBar(waveIcon, dp(3), dp(19));
+        View gap2 = new View(this); gap2.setLayoutParams(new LinearLayout.LayoutParams(dp(4), 1));
+        waveIcon.addView(gap2);
+        addWaveBar(waveIcon, dp(3), dp(14));
+        row.addView(waveIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.VERTICAL);
@@ -2333,6 +2366,12 @@ public class MainActivity extends Activity {
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);
         return view;
+    }
+
+    private void addWaveBar(LinearLayout parent, int width, int height) {
+        View bar = new View(this);
+        bar.setBackground(round(Theme.RED, 2));
+        parent.addView(bar, new LinearLayout.LayoutParams(width, height));
     }
 
     private TextView circleText(String value, int dp, int bg, int sp, int fg) {

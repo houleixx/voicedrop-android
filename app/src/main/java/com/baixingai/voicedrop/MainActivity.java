@@ -260,45 +260,62 @@ public class MainActivity extends Activity {
         topBar.addView(settings, new LinearLayout.LayoutParams(dp(44), dp(44)));
         settings.setOnClickListener(v -> showSettings());
 
-        // Title row: title + VD社区 tab
+        // Title row: "我的录音" title + VD社区 tab
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        titleRow.setPadding(dp(18), dp(4), dp(18), dp(4));
+        titleRow.setGravity(Gravity.BOTTOM);
+        titleRow.setPadding(dp(18), dp(4), dp(18), dp(0));
         page.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView mainTitle = text("我的录音", 24, Theme.INK, Typeface.BOLD);
+        TextView mainTitle = text("我的录音", 26, Theme.INK, Typeface.BOLD);
         titleRow.addView(mainTitle, new LinearLayout.LayoutParams(0, -2, 1));
 
         TextView communityTabView = text("VD社区", 18, communityTab ? Theme.RED : Theme.FAINT, Typeface.BOLD);
-        communityTabView.setPadding(dp(12), dp(4), dp(12), dp(4));
+        communityTabView.setPadding(dp(8), dp(6), dp(8), dp(6));
         titleRow.addView(communityTabView);
 
+        // Red underline: only under "我的录音" title, not full width
         final View underline = new View(this);
-        underline.setBackground(round(Theme.RED, 2));
-        underline.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(2)));
-        underline.setVisibility(communityTab ? View.GONE : View.VISIBLE);
+        underline.setBackground(round(Theme.RED, 1));
+        // Set width to match the title text width
+        mainTitle.getViewTreeObserver().addOnGlobalLayoutListener(
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    mainTitle.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(mainTitle.getWidth(), dp(3));
+                    underline.setLayoutParams(lp);
+                }
+            });
         page.addView(underline);
 
-        mainTitle.setOnClickListener(v -> {
-            communityTab = false;
-            underline.setVisibility(View.VISIBLE);
-            communityTabView.setTextColor(Theme.FAINT);
-            mainTitle.setText("我的录音");
-            refreshAndDrain();
-        });
-        communityTabView.setOnClickListener(v -> {
-            communityTab = true;
-            underline.setVisibility(View.GONE);
-            communityTabView.setTextColor(Theme.RED);
-            mainTitle.setText("VD社区");
-            refreshAndDrain();
-        });
-
-        // Spacer
+        // Spacer to give some breathing room
         View spacer = new View(this);
         spacer.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(10)));
         page.addView(spacer);
+
+        // Store references for tab switching
+        final View[] underlineRef = {underline};
+        final TextView[] mainTitleRef = {mainTitle};
+        final TextView[] communityTabRef = {communityTabView};
+
+        mainTitle.setOnClickListener(v -> {
+            if (communityTab) {
+                communityTab = false;
+                underlineRef[0].setVisibility(View.VISIBLE);
+                communityTabRef[0].setTextColor(Theme.FAINT);
+                mainTitleRef[0].setTextColor(Theme.INK);
+                refreshAndDrain();
+            }
+        });
+        communityTabView.setOnClickListener(v -> {
+            if (!communityTab) {
+                communityTab = true;
+                underlineRef[0].setVisibility(View.GONE);
+                communityTabRef[0].setTextColor(Theme.RED);
+                mainTitleRef[0].setTextColor(Theme.FAINT);
+                refreshAndDrain();
+            }
+        });
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
@@ -328,25 +345,23 @@ public class MainActivity extends Activity {
         if (!communityTab) page.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
 
         // FAB: red circle with white ring border + shadow
-        FrameLayout fabContainer = new FrameLayout(this);
-        fabContainer.setLayoutParams(new LinearLayout.LayoutParams(dp(76), dp(76)));
-
-        // Red circle with white stroke (ring effect)
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Theme.RED);
-        fabBg.setCornerRadius(dp(34));
-        fabBg.setStroke(dp(3), 0xffffffff); // white ring border
-
         TextView fab = new TextView(this);
         fab.setText("");
-        fab.setTextSize(32);
+        fab.setTextSize(30);
         fab.setTextColor(0xffffffff);
         fab.setGravity(Gravity.CENTER);
+        fab.setElevation(dp(6)); // drop shadow
+
+        // Red circle with thick white ring border
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setColor(Theme.RED);
+        fabBg.setCornerRadius(dp(36));
+        fabBg.setStroke(dp(5), 0xffffffff); // thick white ring
+
         fab.setBackground(fabBg);
         fab.setPadding(0, dp(8), 0, 0);
-        fab.setLayoutParams(new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
-        fabContainer.addView(fab);
-        bottom.addView(fabContainer);
+        fab.setLayoutParams(new LinearLayout.LayoutParams(dp(72), dp(72)));
+        bottom.addView(fab);
 
         TextView label = text("轻点录音", 12, Theme.SECONDARY, Typeface.NORMAL);
         label.setLetterSpacing(0.08f);

@@ -156,12 +156,18 @@ public class MainActivity extends Activity {
             }
         });
         root = new FrameLayout(this);
-        root.setFitsSystemWindows(true);
+        root.setFitsSystemWindows(false);
         setContentView(root);
-        // Immersive status bar: transparent, content extends behind it
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        // Immersive status bar: fully transparent, content draws behind it
+        // Use edge-to-edge approach for API 23+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        }
+        // Ensure status bar is transparent
+        getWindow().setStatusBarColor(0x00000000);
         handleShareIntent(getIntent());
         showHome();
         refreshAndDrain();
@@ -252,15 +258,19 @@ public class MainActivity extends Activity {
         logoText.setPadding(dp(6), 0, 0, 0);
         topBar.addView(logoText, new LinearLayout.LayoutParams(0, -2, 1));
 
-        // Settings button (rounded white background)
-        TextView settings = text("⚙", 22, Theme.SECONDARY, Typeface.NORMAL);
+        // Settings button (white background with border)
+        TextView settings = text("⚙", 20, Theme.SECONDARY, Typeface.NORMAL);
         settings.setGravity(Gravity.CENTER);
-        settings.setBackground(round(Theme.CARD, 10));
+        GradientDrawable settingsBg = new GradientDrawable();
+        settingsBg.setColor(Theme.CARD);
+        settingsBg.setCornerRadius(dp(10));
+        settingsBg.setStroke(dp(1), 0xffe0d8cc); // subtle border
+        settings.setBackground(settingsBg);
         settings.setPadding(dp(10), dp(10), dp(10), dp(10));
-        topBar.addView(settings, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        topBar.addView(settings, new LinearLayout.LayoutParams(dp(42), dp(42)));
         settings.setOnClickListener(v -> showSettings());
 
-        // Title row: "我的录音" title + VD社区 tab
+        // Title row: "我的录音" title (left) + VD社区 tab (right)
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.BOTTOM);
@@ -268,24 +278,29 @@ public class MainActivity extends Activity {
         page.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView mainTitle = text("我的录音", 26, Theme.INK, Typeface.BOLD);
-        titleRow.addView(mainTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        titleRow.addView(mainTitle, new LinearLayout.LayoutParams(-2, -2));
+
+        // Spacer to push VD社区 to the right
+        View titleSpacer = new View(this);
+        titleSpacer.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1));
+        titleRow.addView(titleSpacer);
 
         TextView communityTabView = text("VD社区", 18, communityTab ? Theme.RED : Theme.FAINT, Typeface.BOLD);
         communityTabView.setPadding(dp(8), dp(6), dp(8), dp(6));
         titleRow.addView(communityTabView);
 
-        // Red underline: only under "我的录音" title, not full width
+        // Red underline: only under "我的录音" title text
         final View underline = new View(this);
         underline.setBackground(round(Theme.RED, 1));
-        // Set width to match the title text width
+        // Match underline width to title text width after layout
         mainTitle.getViewTreeObserver().addOnGlobalLayoutListener(
             new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
                 @Override public void onGlobalLayout() {
                     mainTitle.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(mainTitle.getWidth(), dp(3));
-                    underline.setLayoutParams(lp);
+                    underline.setLayoutParams(new LinearLayout.LayoutParams(mainTitle.getWidth(), dp(3)));
                 }
             });
+        underline.setVisibility(communityTab ? View.GONE : View.VISIBLE);
         page.addView(underline);
 
         // Spacer to give some breathing room
@@ -302,6 +317,7 @@ public class MainActivity extends Activity {
             if (communityTab) {
                 communityTab = false;
                 underlineRef[0].setVisibility(View.VISIBLE);
+                underlineRef[0].setLayoutParams(new LinearLayout.LayoutParams(mainTitle.getWidth(), dp(3)));
                 communityTabRef[0].setTextColor(Theme.FAINT);
                 mainTitleRef[0].setTextColor(Theme.INK);
                 refreshAndDrain();

@@ -156,7 +156,12 @@ public class MainActivity extends Activity {
             }
         });
         root = new FrameLayout(this);
+        root.setFitsSystemWindows(true);
         setContentView(root);
+        // Immersive status bar: transparent, content extends behind it
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         handleShareIntent(getIntent());
         showHome();
         refreshAndDrain();
@@ -227,7 +232,7 @@ public class MainActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.TOP);
-        top.setPadding(dp(18), dp(16), dp(8), dp(8));
+        top.setPadding(dp(18), dp(16) + getStatusBarHeight(), dp(8), dp(8));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout titles = new LinearLayout(this);
@@ -472,7 +477,7 @@ public class MainActivity extends Activity {
 
         TextView status = text("●  正在录音", 14, Theme.SECONDARY, Typeface.NORMAL);
         status.setLetterSpacing(0.1f);
-        status.setPadding(0, dp(18), 0, 0);
+        status.setPadding(0, dp(18) + getStatusBarHeight(), 0, 0);
         page.addView(status);
 
         LinearLayout center = new LinearLayout(this);
@@ -610,7 +615,7 @@ public class MainActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12), dp(12), dp(8));
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(12), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -1061,7 +1066,7 @@ public class MainActivity extends Activity {
         // Nav bar with like button and more menu
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12), dp(8), dp(8));
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -1190,7 +1195,7 @@ public class MainActivity extends Activity {
         // Nav bar (simplified)
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12), dp(8), dp(8));
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -1580,7 +1585,7 @@ public class MainActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(12), dp(14), dp(16), dp(10));
+        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -2201,7 +2206,7 @@ public class MainActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(12), dp(14), dp(16), dp(10));
+        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -2238,7 +2243,7 @@ public class MainActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(12), dp(14), dp(16), dp(10));
+        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
         TextView back = text("‹", 34, Theme.SECONDARY, Typeface.NORMAL);
         back.setGravity(Gravity.CENTER);
@@ -2396,6 +2401,13 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private int getStatusBarHeight() {
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private void toast(String message) {

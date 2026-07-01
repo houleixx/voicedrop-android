@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">VoiceDrop</string>
+    <string name="home_subtitle">Android project initialized.</string>
+</resources>

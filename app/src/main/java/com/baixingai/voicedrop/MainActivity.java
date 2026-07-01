@@ -229,42 +229,76 @@ public class MainActivity extends Activity {
         page.setBackgroundColor(Theme.BG);
         root.addView(page, match());
 
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.TOP);
-        top.setPadding(dp(18), dp(16) + getStatusBarHeight(), dp(8), dp(8));
-        page.addView(top, new LinearLayout.LayoutParams(-1, -2));
+        // Top bar: logo + settings
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setPadding(dp(18), dp(8) + getStatusBarHeight(), dp(12), dp(8));
+        page.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
-        LinearLayout titles = new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(0, dp(4), 0, 0);
-        top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView brand = text("▮▮▮ VoiceDrop 口述", 13, Theme.SECONDARY, Typeface.BOLD);
-        brand.setLetterSpacing(0.05f);
-        titles.addView(brand);
-        TextView title = text("我的录音", 28, Theme.INK, Typeface.NORMAL);
-        title.setPadding(0, dp(10), 0, 0);
-        titles.addView(title);
+        // Logo (wave bars + text)
+        LinearLayout logo = new LinearLayout(this);
+        logo.setOrientation(LinearLayout.HORIZONTAL);
+        logo.setGravity(Gravity.CENTER_VERTICAL);
+        addWaveBar(logo, dp(3), dp(10));
+        View gap1 = new View(this); gap1.setLayoutParams(new LinearLayout.LayoutParams(dp(2), 1));
+        logo.addView(gap1);
+        addWaveBar(logo, dp(3), dp(16));
+        View gap2 = new View(this); gap2.setLayoutParams(new LinearLayout.LayoutParams(dp(2), 1));
+        logo.addView(gap2);
+        addWaveBar(logo, dp(3), dp(10));
+        topBar.addView(logo);
+        TextView logoText = text(" VoiceDrop 口述", 14, Theme.SECONDARY, Typeface.BOLD);
+        logoText.setPadding(dp(6), 0, 0, 0);
+        topBar.addView(logoText, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView settings = text("⚙", 28, Theme.SECONDARY, Typeface.NORMAL);
+        // Settings button (rounded white background)
+        TextView settings = text("⚙", 22, Theme.SECONDARY, Typeface.NORMAL);
         settings.setGravity(Gravity.CENTER);
-        top.addView(settings, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        settings.setBackground(round(Theme.CARD, 10));
+        settings.setPadding(dp(10), dp(10), dp(10), dp(10));
+        topBar.addView(settings, new LinearLayout.LayoutParams(dp(44), dp(44)));
         settings.setOnClickListener(v -> showSettings());
 
-        LinearLayout tabs = new LinearLayout(this);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(dp(14), dp(4), dp(14), dp(10));
-        page.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
-        TextView myTab = tab("我的录音", !communityTab);
-        tabs.addView(myTab);
-        // Spacer between tabs
+        // Title row: title + VD社区 tab
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(18), dp(4), dp(18), dp(4));
+        page.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView mainTitle = text("我的录音", 24, Theme.INK, Typeface.BOLD);
+        titleRow.addView(mainTitle, new LinearLayout.LayoutParams(0, -2, 1));
+
+        TextView communityTabView = text("VD社区", 18, communityTab ? Theme.RED : Theme.FAINT, Typeface.BOLD);
+        communityTabView.setPadding(dp(12), dp(4), dp(12), dp(4));
+        titleRow.addView(communityTabView);
+
+        final View underline = new View(this);
+        underline.setBackground(round(Theme.RED, 2));
+        underline.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(2)));
+        underline.setVisibility(communityTab ? View.GONE : View.VISIBLE);
+        page.addView(underline);
+
+        mainTitle.setOnClickListener(v -> {
+            communityTab = false;
+            underline.setVisibility(View.VISIBLE);
+            communityTabView.setTextColor(Theme.FAINT);
+            mainTitle.setText("我的录音");
+            refreshAndDrain();
+        });
+        communityTabView.setOnClickListener(v -> {
+            communityTab = true;
+            underline.setVisibility(View.GONE);
+            communityTabView.setTextColor(Theme.RED);
+            mainTitle.setText("VD社区");
+            refreshAndDrain();
+        });
+
+        // Spacer
         View spacer = new View(this);
-        spacer.setLayoutParams(new LinearLayout.LayoutParams(dp(8), 1));
-        tabs.addView(spacer);
-        TextView communityTabView = tab("VD社区", communityTab);
-        tabs.addView(communityTabView);
-        myTab.setOnClickListener(v -> { communityTab = false; showHome(); });
-        communityTabView.setOnClickListener(v -> { communityTab = true; refreshAndDrain(); });
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(10)));
+        page.addView(spacer);
 
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
@@ -293,18 +327,24 @@ public class MainActivity extends Activity {
         bottom.setPadding(0, dp(10), 0, dp(18));
         if (!communityTab) page.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
 
-        // FAB: 68dp circle (use FrameLayout to prevent emoji stretching)
+        // FAB: red circle with white ring border + shadow
         FrameLayout fabContainer = new FrameLayout(this);
-        fabContainer.setLayoutParams(new LinearLayout.LayoutParams(dp(68), dp(68)));
+        fabContainer.setLayoutParams(new LinearLayout.LayoutParams(dp(76), dp(76)));
+
+        // Red circle with white stroke (ring effect)
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setColor(Theme.RED);
+        fabBg.setCornerRadius(dp(34));
+        fabBg.setStroke(dp(3), 0xffffffff); // white ring border
+
         TextView fab = new TextView(this);
-        fab.setText("🎙");
-        fab.setTextSize(28);
+        fab.setText("");
+        fab.setTextSize(32);
         fab.setTextColor(0xffffffff);
         fab.setGravity(Gravity.CENTER);
-        fab.setBackground(round(Theme.RED, 34));
+        fab.setBackground(fabBg);
         fab.setPadding(0, dp(8), 0, 0);
-        // Fixed size via FrameLayout params, not min
-        fab.setLayoutParams(new FrameLayout.LayoutParams(dp(68), dp(68)));
+        fab.setLayoutParams(new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
         fabContainer.addView(fab);
         bottom.addView(fabContainer);
 

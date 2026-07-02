@@ -2,6 +2,17 @@ plugins {
     id "com.android.application"
 }
 
+def releaseSigningPropertiesFile = rootProject.file("signing/release-signing.properties")
+def releaseSigningProperties = new Properties()
+if (releaseSigningPropertiesFile.exists()) {
+    releaseSigningPropertiesFile.withInputStream { releaseSigningProperties.load(it) }
+}
+def releaseSigningStoreFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: releaseSigningProperties["storeFile"]
+def releaseSigningStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: releaseSigningProperties["storePassword"]
+def releaseSigningKeyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: releaseSigningProperties["keyAlias"]
+def releaseSigningKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: releaseSigningProperties["keyPassword"]
+def hasReleaseSigningConfig = releaseSigningStoreFile && releaseSigningStorePassword && releaseSigningKeyAlias && releaseSigningKeyPassword
+
 android {
     namespace "com.baixingai.voicedrop"
     compileSdk 36
@@ -11,18 +22,46 @@ android {
         minSdk 23
         targetSdk 36
         versionCode 1
-        versionName "1.0.0"
+        versionName "0.1.0"
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            release {
+                storeFile rootProject.file(releaseSigningStoreFile)
+                storePassword releaseSigningStorePassword
+                keyAlias releaseSigningKeyAlias
+                keyPassword releaseSigningKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ["META-INF/versions/9/OSGI-INF/MANIFEST.MF"]
+        }
+    }
 }
 
 dependencies {
     implementation "androidx.core:core:1.13.1"
+    implementation "androidx.viewpager:viewpager:1.0.0"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation "org.bouncycastle:bcprov-jdk18on:1.78.1"
+    implementation "com.kongzue.dialogx:DialogX:0.0.49"
+    implementation "com.kongzue.dialogx.style:DialogXIOSStyle:0.0.49"
     testImplementation "junit:junit:4.13.2"
 }

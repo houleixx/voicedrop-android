@@ -17,6 +17,7 @@ public final class AudioRecorder {
     private File currentFile;
     private ZonedDateTime start;
     private long startedAtMs;
+    private int peakAmplitude;
 
     public AudioRecorder(Context context) {
         this.context = context.getApplicationContext();
@@ -31,16 +32,18 @@ public final class AudioRecorder {
         recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         recorder.setAudioChannels(1);
-        recorder.setAudioSamplingRate(24000);
-        recorder.setAudioEncodingBitRate(64000);
+        recorder.setAudioSamplingRate(16000);
+        recorder.setAudioEncodingBitRate(32000);
         recorder.setOutputFile(currentFile.getAbsolutePath());
         recorder.prepare();
         recorder.start();
         startedAtMs = System.currentTimeMillis();
+        peakAmplitude = 0;
     }
 
     public Take stop(String place) {
         if (recorder == null || currentFile == null || start == null) return null;
+        sampleAmplitude();
         try {
             recorder.stop();
         } catch (RuntimeException ignored) {
@@ -53,10 +56,30 @@ public final class AudioRecorder {
         if (!currentFile.renameTo(finalFile)) {
             finalFile = currentFile;
         }
-        Take take = new Take(finalFile, start, duration);
+        Take take = new Take(finalFile, start, duration, peakAmplitude);
         currentFile = null;
         start = null;
+        peakAmplitude = 0;
         return take;
+    }
+
+    public void cancel() {
+        if (recorder != null) {
+            try {
+                recorder.stop();
+            } catch (RuntimeException ignored) {
+            }
+            recorder.release();
+            recorder = null;
+        }
+        if (currentFile != null && currentFile.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            currentFile.delete();
+        }
+        currentFile = null;
+        start = null;
+        startedAtMs = 0;
+        peakAmplitude = 0;
     }
 
     public boolean isRecording() {
@@ -69,6 +92,15 @@ public final class AudioRecorder {
 
     public ZonedDateTime startDate() {
         return start;
+    }
+
+    public int sampleAmplitude() {
+        if (recorder == null) return peakAmplitude;
+        try {
+            peakAmplitude = Math.max(peakAmplitude, recorder.getMaxAmplitude());
+        } catch (RuntimeException ignored) {
+        }
+        return peakAmplitude;
     }
 
     public static File documentsDir(Context context) {
@@ -96,11 +128,13 @@ public final class AudioRecorder {
         public final File file;
         public final ZonedDateTime start;
         public final double duration;
+        public final int peakAmplitude;
 
-        Take(File file, ZonedDateTime start, double duration) {
+        Take(File file, ZonedDateTime start, double duration, int peakAmplitude) {
             this.file = file;
             this.start = start.withZoneSameInstant(ZoneId.systemDefault());
             this.duration = duration;
+            this.peakAmplitude = peakAmplitude;
         }
     }
 }

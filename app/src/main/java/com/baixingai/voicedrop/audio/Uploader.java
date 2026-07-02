@@ -56,6 +56,7 @@ public final class Uploader {
                         "audio/mp4",
                         file);
                 if (response.ok()) {
+                    triggerMine();
                     if (prefs.deleteLocalAfterUpload()) {
                         //noinspection ResultOfMethodCallIgnored
                         file.delete();
@@ -78,6 +79,13 @@ public final class Uploader {
             }
         }
         return false;
+    }
+
+    private void triggerMine() {
+        try {
+            http.postJson(Api.filesBase() + "/mine", auth.bearer(), new byte[0]);
+        } catch (Exception ignored) {
+        }
     }
 
     public void drainPending() {

@@ -95,12 +95,19 @@ public final class AudioRecorder {
     }
 
     public int sampleAmplitude() {
+        sampleCurrentAmplitude();
+        return peakAmplitude;
+    }
+
+    public int sampleCurrentAmplitude() {
         if (recorder == null) return peakAmplitude;
+        int current = 0;
         try {
-            peakAmplitude = Math.max(peakAmplitude, recorder.getMaxAmplitude());
+            current = recorder.getMaxAmplitude();
+            peakAmplitude = Math.max(peakAmplitude, current);
         } catch (RuntimeException ignored) {
         }
-        return peakAmplitude;
+        return current;
     }
 
     public static File documentsDir(Context context) {

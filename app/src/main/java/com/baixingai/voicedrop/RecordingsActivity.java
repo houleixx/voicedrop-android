@@ -58,6 +58,7 @@ import com.baixingai.voicedrop.data.DeviceLinkStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
+import com.baixingai.voicedrop.data.PendingReplyStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
@@ -103,6 +104,7 @@ public final class RecordingsActivity extends Activity {
     protected HttpClient http;
     protected LibraryStore library;
     protected CommunityStore community;
+    protected PendingReplyStore pendingReplies;
     protected BlockStore blockStore;
     protected CommunityTerms communityTerms;
     protected SettingsStore settingsStore;
@@ -180,6 +182,7 @@ public final class RecordingsActivity extends Activity {
         http = new HttpClient();
         library = new LibraryStore(auth, http);
         community = new CommunityStore(auth, http);
+        pendingReplies = new PendingReplyStore(this);
         blockStore = new BlockStore(this);
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
@@ -346,7 +349,7 @@ public final class RecordingsActivity extends Activity {
                         android.graphics.PorterDuff.Mode.SRC_IN);
             }
             loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
-            TextView empty = text("正在加载 VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
+            TextView empty = text("正在加载VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(14), 0, 0);
             loadingLayout.addView(empty);
@@ -777,8 +780,12 @@ public final class RecordingsActivity extends Activity {
         return new View(this);
     }
     protected void addWaveBar(LinearLayout parent, int width, int height) {
+        addWaveBar(parent, width, height, Theme.RED);
+    }
+
+    protected void addWaveBar(LinearLayout parent, int width, int height, int color) {
         View bar = new View(this);
-        bar.setBackground(round(Theme.RED, 2));
+        bar.setBackground(round(color, 2));
         parent.addView(bar, new LinearLayout.LayoutParams(width, height));
     }
     protected TextView circleText(String value, int dp, int bg, int sp, int fg) {
@@ -854,7 +861,7 @@ public final class RecordingsActivity extends Activity {
         io.execute(() -> {
             uploader.drainPending();
             try {
-                recordings = library.load(uploader.pendingNames());
+                loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
@@ -874,7 +881,7 @@ public final class RecordingsActivity extends Activity {
             uploader.drainPending();
             try {
                 if (loadCommunity) posts = loadRankedCommunityPosts();
-                else recordings = library.load(uploader.pendingNames());
+                else loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
@@ -886,11 +893,21 @@ public final class RecordingsActivity extends Activity {
         io.execute(() -> {
             uploader.drainPending();
             try {
-                recordings = library.load(uploader.pendingNames());
+                loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
         });
+    }
+
+    protected void loadRecordingsAndPublishPendingReplies() throws Exception {
+        recordings = library.load(uploader.pendingNames());
+        int published = pendingReplies.publishReadyReplies(recordings,
+                (recording, replyToShareId) -> community.share(recording, replyToShareId) != null);
+        if (published > 0) {
+            posts = loadRankedCommunityPosts();
+            main.post(() -> toast("回应已发布到社区"));
+        }
     }
 
     protected void refreshRecordingsFromPull(PullRefreshLayout refresher) {
@@ -899,7 +916,7 @@ public final class RecordingsActivity extends Activity {
         io.execute(() -> {
             uploader.drainPending();
             try {
-                recordings = library.load(uploader.pendingNames());
+                loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
@@ -1109,6 +1126,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout fabCol = new LinearLayout(this);
         fabCol.setOrientation(LinearLayout.VERTICAL);
         fabCol.setGravity(Gravity.CENTER_HORIZONTAL);
+        fabCol.setClickable(true);
         FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-2, -2,
                 Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         fabColLp.bottomMargin = dp(22);
@@ -1119,21 +1137,25 @@ public final class RecordingsActivity extends Activity {
         FrameLayout fab = new FrameLayout(this);
         GradientDrawable fabBg = new GradientDrawable();
         fabBg.setColor(Theme.RED);
-        fabBg.setCornerRadius(dp(34));
+        fabBg.setCornerRadius(dp(30));
         fab.setBackground(fabBg);
         ImageView micIcon = new ImageView(this);
         AliIconFont.apply(micIcon, AliIconFont.MIC, 0xffffffff);
         micIcon.setScaleType(ImageView.ScaleType.CENTER);
-        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
-        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
-        fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(92), dp(92)));
+        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER));
+        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
+        fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
         TextView label = text("轻点录音", 12, Theme.SECONDARY, Typeface.NORMAL);
         label.setLetterSpacing(0.08f);
-        label.setPadding(0, dp(8), 0, 0);
+        label.setPadding(0, 0, 0, 0);
         label.setGravity(Gravity.CENTER);
-        fabCol.addView(label);
+        LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
+        labelLp.setMargins(0, -dp(3), 0, 0);
+        fabCol.addView(label, labelLp);
+        fabCol.setOnClickListener(v -> startRecordingFlow());
         fabRing.setOnClickListener(v -> startRecordingFlow());
+        label.setOnClickListener(v -> startRecordingFlow());
     }
 
     protected View communityRow(CommunityStore.Post post) {
@@ -1248,27 +1270,33 @@ public final class RecordingsActivity extends Activity {
         row.setBackground(round(Theme.CARD, 18));
         container.addView(row, new FrameLayout.LayoutParams(-1, -2));
 
+        boolean silent = rec.isEmpty;
+        int mutedIconBg = 0xfff4f0eb;
+        int mutedIconFg = 0xffd1c8bd;
+        int mutedText = 0xff6f6a63;
+        int mutedMeta = 0xffb9b2a8;
+
         LinearLayout waveIcon = new LinearLayout(this);
         waveIcon.setOrientation(LinearLayout.HORIZONTAL);
         waveIcon.setGravity(Gravity.CENTER);
-        waveIcon.setBackground(round(0xfffbeae7, 14));
+        waveIcon.setBackground(round(silent ? mutedIconBg : 0xfffbeae7, 14));
         waveIcon.setPadding(dp(12), dp(12), dp(12), dp(12));
-        addWaveBar(waveIcon, dp(3), dp(11));
+        addWaveBar(waveIcon, dp(3), dp(11), silent ? mutedIconFg : Theme.RED);
         View gap1 = new View(this);
         gap1.setLayoutParams(new LinearLayout.LayoutParams(dp(4), 1));
         waveIcon.addView(gap1);
-        addWaveBar(waveIcon, dp(3), dp(19));
+        addWaveBar(waveIcon, dp(3), dp(19), silent ? mutedIconFg : Theme.RED);
         View gap2 = new View(this);
         gap2.setLayoutParams(new LinearLayout.LayoutParams(dp(4), 1));
         waveIcon.addView(gap2);
-        addWaveBar(waveIcon, dp(3), dp(14));
+        addWaveBar(waveIcon, dp(3), dp(14), silent ? mutedIconFg : Theme.RED);
         row.addView(waveIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.VERTICAL);
         meta.setPadding(dp(14), 0, dp(8), 0);
         row.addView(meta, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView title = text(rec.rowTitle(), 16, Theme.INK, Typeface.BOLD);
+        TextView title = text(rec.rowTitle(), 16, silent ? mutedText : Theme.INK, Typeface.BOLD);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         meta.addView(title);
@@ -1278,16 +1306,32 @@ public final class RecordingsActivity extends Activity {
         sub.setGravity(Gravity.CENTER_VERTICAL);
         sub.setPadding(0, dp(7), 0, 0);
         meta.addView(sub);
-        sub.addView(text(rec.durationLabel().isEmpty() ? "录音" : rec.durationLabel(),
-                13, Theme.FAINT, Typeface.NORMAL));
-        TextView chip = text("  " + rec.statusLabel() + "  ", 12,
-                rec.hasArticles ? Theme.GREEN : Theme.AMBER, Typeface.NORMAL);
-        chip.setBackground(round(rec.hasArticles ? Theme.GREEN_BG : Theme.AMBER_BG, 8));
-        LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
-        chipLp.setMargins(dp(8), 0, 0, 0);
-        sub.addView(chip, chipLp);
+        String dateTime = formatArticleSubtitle(rec);
+        String duration = rec.durationLabel();
+        String metaText = dateTime.isEmpty()
+                ? (duration.isEmpty() ? "录音" : duration)
+                : dateTime + (duration.isEmpty() ? "" : "  " + duration);
+        sub.addView(text(metaText, 13, silent ? mutedMeta : Theme.FAINT, Typeface.NORMAL));
 
-        if (rec.hasArticles) {
+        int statusColor = silent ? mutedMeta : (rec.hasArticles ? Theme.GREEN : Theme.AMBER);
+        View statusDot = new View(this);
+        statusDot.setBackground(round(statusColor, 3));
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(5), dp(5));
+        dotLp.setMargins(dp(9), 0, dp(6), 0);
+        sub.addView(statusDot, dotLp);
+
+        TextView chip;
+        if (silent) {
+            chip = text("无语音", 13, mutedMeta, Typeface.NORMAL);
+            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
+            sub.addView(chip, chipLp);
+        } else {
+            chip = text(rec.statusLabel(), 13, statusColor, Typeface.NORMAL);
+            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
+            sub.addView(chip, chipLp);
+        }
+
+        if (rec.hasArticles && !silent) {
             chip.setOnLongClickListener(v -> {
                 IosDialog.show(this, "重新生成文章？", "会用相同的写作风格重新挖这篇文章，原文不变。",
                         "重新生成", () -> io.execute(() -> {
@@ -1397,7 +1441,7 @@ public final class RecordingsActivity extends Activity {
         center.setGravity(Gravity.CENTER);
         page.addView(center, new LinearLayout.LayoutParams(-1, 0, 1));
         long elapsed = recorder.elapsedSeconds();
-        int amp = recorder.sampleAmplitude();
+        int amp = recorder.sampleCurrentAmplitude();
         // Normalize amplitude: MediaRecorder max is 32767
         double level = amp / 32767.0;
         // Timer: ultra-light, large, centered
@@ -1417,21 +1461,18 @@ public final class RecordingsActivity extends Activity {
         LinearLayout stopCol = new LinearLayout(this);
         stopCol.setOrientation(LinearLayout.VERTICAL);
         stopCol.setGravity(Gravity.CENTER_HORIZONTAL);
+        stopCol.setClickable(true);
         FrameLayout.LayoutParams stopColLp = new FrameLayout.LayoutParams(dp(104), -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         stopColLp.bottomMargin = dp(26);
         bottom.addView(stopCol, stopColLp);
 
-        // Stop button: white circle with red rounded-square inside
-        GradientDrawable stopBg = new GradientDrawable();
-        stopBg.setColor(Theme.CARD);
-        stopBg.setCornerRadius(dp(33));
-        stopBg.setStroke(dp(1), 0xffe8dece);
         FrameLayout stopBtn = new SoftCircleShadowFrameLayout(this);
-        stopBtn.setBackground(stopBg);
+        FrameLayout stopFace = new FrameLayout(this);
+        stopFace.setBackground(round(Theme.RED, 30));
         View stopIcon = new View(this);
-        stopIcon.setBackground(round(Theme.RED, 6));
-        FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER);
-        stopBtn.addView(stopIcon, iconLp);
+        stopIcon.setBackground(round(0xffffffff, 6));
+        stopFace.addView(stopIcon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        stopBtn.addView(stopFace, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
         LinearLayout.LayoutParams stopBtnLp = new LinearLayout.LayoutParams(dp(82), dp(82));
         stopBtnLp.gravity = Gravity.CENTER_HORIZONTAL;
         stopCol.addView(stopBtn, stopBtnLp);
@@ -1439,9 +1480,13 @@ public final class RecordingsActivity extends Activity {
         TextView stopLabel = text("点击停止", 12, Theme.SECONDARY, Typeface.NORMAL);
         stopLabel.setGravity(Gravity.CENTER);
         stopLabel.setLetterSpacing(0.08f);
-        stopLabel.setPadding(0, dp(7), 0, 0);
-        stopCol.addView(stopLabel, new LinearLayout.LayoutParams(-1, -2));
+        stopLabel.setPadding(0, 0, 0, 0);
+        LinearLayout.LayoutParams stopLabelLp = new LinearLayout.LayoutParams(-1, -2);
+        stopLabelLp.setMargins(0, -dp(3), 0, 0);
+        stopCol.addView(stopLabel, stopLabelLp);
         stopBtn.setOnClickListener(v -> stopRecordingFlow());
+        stopCol.setOnClickListener(v -> stopRecordingFlow());
+        stopLabel.setOnClickListener(v -> stopRecordingFlow());
 
         // Camera button on the right
         LinearLayout camBox = new LinearLayout(this);
@@ -1703,6 +1748,7 @@ public final class RecordingsActivity extends Activity {
             LinearLayout fabCol = new LinearLayout(this);
             fabCol.setOrientation(LinearLayout.VERTICAL);
             fabCol.setGravity(Gravity.CENTER_HORIZONTAL);
+            fabCol.setClickable(true);
             FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
             fabColLp.bottomMargin = dp(22);
             contentArea.addView(fabCol, fabColLp);
@@ -1712,21 +1758,25 @@ public final class RecordingsActivity extends Activity {
         FrameLayout fab = new FrameLayout(RecordingsActivity.this);
         GradientDrawable fabBg = new GradientDrawable();
         fabBg.setColor(Theme.RED);
-        fabBg.setCornerRadius(dp(34));
+        fabBg.setCornerRadius(dp(30));
         fab.setBackground(fabBg);
         ImageView micIcon = new ImageView(RecordingsActivity.this);
         AliIconFont.apply(micIcon, AliIconFont.MIC, 0xffffffff);
         micIcon.setScaleType(ImageView.ScaleType.CENTER);
-        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
-        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
-        fabRing.setLayoutParams(new LinearLayout.LayoutParams(dp(92), dp(92)));
+        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER));
+        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
+        fabRing.setLayoutParams(new LinearLayout.LayoutParams(dp(82), dp(82)));
         fabCol.addView(fabRing);
 
             TextView label = text("按住说话", 13, Theme.SECONDARY, Typeface.NORMAL);
             label.setGravity(Gravity.CENTER);
-            label.setPadding(0, dp(8), 0, 0);
-            fabCol.addView(label);
+            label.setPadding(0, 0, 0, 0);
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
+            labelLp.setMargins(0, -dp(3), 0, 0);
+            fabCol.addView(label, labelLp);
+            fabCol.setOnClickListener(v -> startRecordingFlow());
             fabRing.setOnClickListener(v -> startRecordingFlow());
+            label.setOnClickListener(v -> startRecordingFlow());
         });
 
         // Handle the stopped recording — do NOT defer, upload immediately
@@ -1760,7 +1810,7 @@ public final class RecordingsActivity extends Activity {
             uploadCapturedPhotos(photos);
             uploader.upload(take.file);
             try {
-                recordings = library.load(uploader.pendingNames());
+                loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("刷新失败：" + e.getMessage());
             }

@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -45,6 +46,18 @@ import java.util.concurrent.Executors;
 
 public class SettingsActivity extends Activity {
     public static final String EXTRA_SHOW_WECHAT = "showWechat";
+    static final int[] SETTING_ROW_ICON_RES_IDS = {
+            R.drawable.ic_settings_account,
+            R.drawable.ic_settings_pen,
+            R.drawable.ic_settings_broadcast,
+            R.drawable.ic_settings_bolt,
+            R.drawable.ic_settings_community,
+            R.drawable.ic_settings_info,
+            R.drawable.ic_settings_update,
+            R.drawable.ic_settings_version,
+            R.drawable.ic_settings_export,
+            R.drawable.ic_settings_trash
+    };
 
     private AuthStore auth;
     private Prefs prefs;
@@ -107,33 +120,19 @@ public class SettingsActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        addSection(content, "账户");
-        addSettingRow(content, "账户", "匿名身份、数据与转移", this::openAccount);
-
-        addSection(content, "创作");
-        addSettingRow(content, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
-        addSettingRow(content, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
-        addSettingRow(content, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
-
-        addSection(content, "同步与社区");
-        addAutoShareSwitchRow(content);
-
-        addSection(content, "关于");
-        addSettingRow(content, "关于", "隐私、公约、屏蔽、联系", this::openAbout);
-        addSettingRow(content, "检查更新", null, () -> AppUpdateManager.checkManually(this));
-        addInfoRow(content, "版本", appVersionName());
+        rebuildPrimarySettings(content);
 
         // TODO: 恢复"本地" section
         // addSection(content, "本地");
-        // addSettingRow(content, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
-        // addSettingRow(content, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
+        // addSettingRow(content, R.drawable.ic_settings_export, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
+        // addSettingRow(content, R.drawable.ic_settings_trash, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
         //     prefs.setDeleteLocalAfterUpload(!prefs.deleteLocalAfterUpload());
         //     // Refresh this view
         //     content.removeAllViews();
         //     rebuildSettings(content);
         // });
 
-        // addSettingRow(content, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
+        // addSettingRow(content, R.drawable.ic_settings_info, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
 
         if (getIntent().getBooleanExtra(EXTRA_SHOW_WECHAT, false)) {
             root.post(this::openWechatSettings);
@@ -160,31 +159,35 @@ public class SettingsActivity extends Activity {
     }
 
     private void rebuildSettings(LinearLayout content) {
-        addSection(content, "账户");
-        addSettingRow(content, "账户", "匿名身份、数据与转移", this::openAccount);
-
-        addSection(content, "创作");
-        addSettingRow(content, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
-        addSettingRow(content, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
-        addSettingRow(content, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
-
-        addSection(content, "同步与社区");
-        addAutoShareSwitchRow(content);
-
-        addSection(content, "关于");
-        addSettingRow(content, "关于", "隐私、公约、屏蔽、联系", this::openAbout);
-        addSettingRow(content, "检查更新", null, () -> AppUpdateManager.checkManually(this));
-        addInfoRow(content, "版本", appVersionName());
+        rebuildPrimarySettings(content);
 
         addSection(content, "本地");
-        addSettingRow(content, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
-        addSettingRow(content, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
+        addSettingRow(content, R.drawable.ic_settings_export, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
+        addSettingRow(content, R.drawable.ic_settings_trash, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
             prefs.setDeleteLocalAfterUpload(!prefs.deleteLocalAfterUpload());
             content.removeAllViews();
             rebuildSettings(content);
         });
 
-        // addSettingRow(content, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
+        // addSettingRow(content, R.drawable.ic_settings_info, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
+    }
+
+    private void rebuildPrimarySettings(LinearLayout content) {
+        addSection(content, "账户");
+        addSettingRow(content, R.drawable.ic_settings_account, "账户", "匿名身份、数据与转移", this::openAccount);
+
+        addSection(content, "创作");
+        addSettingRow(content, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
+        addSettingRow(content, R.drawable.ic_settings_broadcast, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
+        addSettingRow(content, R.drawable.ic_settings_bolt, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
+
+        addSection(content, "同步与社区");
+        addAutoShareSwitchRow(content, R.drawable.ic_settings_community);
+
+        addSection(content, "关于");
+        addSettingRow(content, R.drawable.ic_settings_info, "关于", null, this::openAbout);
+        addSettingRow(content, R.drawable.ic_settings_update, "检查更新", null, () -> AppUpdateManager.checkManually(this));
+        addInfoRow(content, R.drawable.ic_settings_version, "版本", appVersionName());
     }
 
     private void finishWithPageTransition() {
@@ -224,12 +227,13 @@ public class SettingsActivity extends Activity {
         content.addView(section);
     }
 
-    private void addSettingRow(LinearLayout content, String title, String subtitle, Runnable action) {
+    private void addSettingRow(LinearLayout content, int iconResId, String title, String subtitle, Runnable action) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
         row.setBackground(round(Theme.CARD, 12));
+        row.addView(settingIcon(iconResId));
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
@@ -246,12 +250,13 @@ public class SettingsActivity extends Activity {
         row.setOnClickListener(v -> action.run());
     }
 
-    private void addInfoRow(LinearLayout content, String title, String value) {
+    private void addInfoRow(LinearLayout content, int iconResId, String title, String value) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
         row.setBackground(round(Theme.CARD, 12));
+        row.addView(settingIcon(iconResId));
         row.addView(text(title, 16, Theme.INK, Typeface.BOLD), new LinearLayout.LayoutParams(0, -2, 1));
         row.addView(text(value, 15, Theme.SECONDARY, Typeface.NORMAL));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -259,18 +264,20 @@ public class SettingsActivity extends Activity {
         content.addView(row, lp);
     }
 
-    private void addAutoShareSwitchRow(LinearLayout content) {
+    private void addAutoShareSwitchRow(LinearLayout content, int iconResId) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
         row.setBackground(round(Theme.CARD, 12));
         row.setClickable(true);
+        row.addView(settingIcon(iconResId));
 
         TextView title = text("自动分享到 VD社区", 16, Theme.INK, Typeface.BOLD);
         row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
         Switch autoShare = new Switch(this);
+        tintSwitch(autoShare);
         row.addView(autoShare, new LinearLayout.LayoutParams(-2, -2));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -322,6 +329,27 @@ public class SettingsActivity extends Activity {
                 autoShare.setChecked(!autoShare.isChecked());
             }
         });
+    }
+
+    private ImageView settingIcon(int iconResId) {
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconResId);
+        icon.setColorFilter(Theme.ACCENT);
+        icon.setScaleType(ImageView.ScaleType.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        lp.setMargins(0, 0, dp(12), 0);
+        icon.setLayoutParams(lp);
+        return icon;
+    }
+
+    private void tintSwitch(Switch view) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) return;
+        int[][] states = new int[][] {
+                new int[] { android.R.attr.state_checked },
+                new int[] {}
+        };
+        view.setThumbTintList(new ColorStateList(states, new int[] { Theme.ACCENT, 0xffffffff }));
+        view.setTrackTintList(new ColorStateList(states, new int[] { Theme.ACCENT_SOFT, 0xffe8ded0 }));
     }
 
     private String appVersionName() {

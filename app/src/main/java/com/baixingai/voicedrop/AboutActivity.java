@@ -24,6 +24,13 @@ import com.baixingai.voicedrop.ui.Theme;
 import java.util.List;
 
 public final class AboutActivity extends Activity {
+    static final int[] ABOUT_ROW_ICON_RES_IDS = {
+            R.drawable.ic_about_privacy,
+            R.drawable.ic_about_terms,
+            R.drawable.ic_about_blocked,
+            R.drawable.ic_about_support
+    };
+
     private BlockStore blockStore;
 
     @Override
@@ -72,11 +79,11 @@ public final class AboutActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        addSettingRow(content, "隐私说明", null, () -> IosDialog.show(this, "隐私说明",
+        addSettingRow(content, R.drawable.ic_about_privacy, "隐私说明", null, () -> IosDialog.show(this, "隐私说明",
                 "录音只上传到你自己的云端空间；麦克风仅在录音和语音修改时使用；身份是本机生成的匿名 ID。"));
-        addSettingRow(content, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
-        addSettingRow(content, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::showBlockedUsers);
-        addSettingRow(content, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
+        addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
+        addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::showBlockedUsers);
+        addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
     }
 
     @Override
@@ -132,12 +139,13 @@ public final class AboutActivity extends Activity {
         IosDialog.show(this, "已屏蔽用户", list, "关闭", () -> {});
     }
 
-    private void addSettingRow(LinearLayout content, String title, String subtitle, Runnable action) {
+    private void addSettingRow(LinearLayout content, int iconResId, String title, String subtitle, Runnable action) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
         row.setBackground(round(Theme.CARD, 12));
+        row.addView(settingIcon(iconResId));
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
@@ -152,6 +160,17 @@ public final class AboutActivity extends Activity {
         lp.setMargins(0, 0, 0, dp(8));
         content.addView(row, lp);
         row.setOnClickListener(v -> action.run());
+    }
+
+    private ImageView settingIcon(int iconResId) {
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconResId);
+        icon.setColorFilter(Theme.ACCENT);
+        icon.setScaleType(ImageView.ScaleType.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        lp.setMargins(0, 0, dp(12), 0);
+        icon.setLayoutParams(lp);
+        return icon;
     }
 
     private TextView text(String value, int sp, int color, int style) {

@@ -54,6 +54,7 @@ import com.baixingai.voicedrop.data.DeviceLinkStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
+import com.baixingai.voicedrop.data.PendingReplyStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
@@ -113,6 +114,7 @@ public final class CommunityDetailActivity extends Activity {
     protected HttpClient http;
     protected LibraryStore library;
     protected CommunityStore community;
+    protected PendingReplyStore pendingReplies;
     protected BlockStore blockStore;
     protected CommunityTerms communityTerms;
     protected SettingsStore settingsStore;
@@ -159,11 +161,22 @@ public final class CommunityDetailActivity extends Activity {
     protected int articleIndex;                // current article section index in multi-article docs
     protected String replyToShareId;           // when recording a reply to a community post
     protected boolean communityRecording;      // true while recording a community reply
+    protected static final class CommunityRecordingUi {
+        final TextView timer;
+        final List<View> waveBars;
+        int phase;
+
+        CommunityRecordingUi(TextView timer, List<View> waveBars) {
+            this.timer = timer;
+            this.waveBars = waveBars;
+        }
+    }
+
     protected final Runnable communityTimerTick = new Runnable() {
         @Override public void run() {
             if (recorder != null && recorder.isRecording() && communityRecording) {
                 updateCommunityRecordingTimer();
-                main.postDelayed(this, 500);
+                main.postDelayed(this, 120);
             }
         }
     };
@@ -183,6 +196,7 @@ public final class CommunityDetailActivity extends Activity {
         http = new HttpClient();
         library = new LibraryStore(auth, http);
         community = new CommunityStore(auth, http);
+        pendingReplies = new PendingReplyStore(this);
         blockStore = new BlockStore(this);
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
@@ -787,6 +801,12 @@ public final class CommunityDetailActivity extends Activity {
         drawable.setCornerRadius(dp(radiusDp));
         return drawable;
     }
+
+    protected GradientDrawable roundStroke(int color, int radiusDp, int strokeColor, int strokeDp) {
+        GradientDrawable drawable = round(color, radiusDp);
+        drawable.setStroke(dp(strokeDp), strokeColor);
+        return drawable;
+    }
     protected FrameLayout.LayoutParams match() {
         return new FrameLayout.LayoutParams(-1, -1);
     }
@@ -808,6 +828,11 @@ public final class CommunityDetailActivity extends Activity {
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
         int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
         return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
+    }
+
+    protected int getNavigationBarHeight() {
+        int resourceId = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
     }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
@@ -921,8 +946,12 @@ public final class CommunityDetailActivity extends Activity {
 
         TextView meta = text("", 14, Theme.FAINT, Typeface.NORMAL);
         meta.setText(communityMetaText(post));
-        meta.setPadding(0, dp(9), 0, dp(24));
+        meta.setPadding(0, dp(9), 0, dp(14));
         content.addView(meta);
+
+        final LinearLayout replyToSection = new LinearLayout(this);
+        replyToSection.setOrientation(LinearLayout.VERTICAL);
+        content.addView(replyToSection);
 
         if (doc != null && !doc.articles.isEmpty()) {
             for (MinedArticle article : doc.articles) {
@@ -954,6 +983,13 @@ public final class CommunityDetailActivity extends Activity {
                 List<CommunityStore.Post> replies = community.replies(shareId);
                 main.post(() -> renderReplies(repliesSection, replies, post));
             } catch (Exception ignored) {}
+
+            if (post.replyTo != null && !post.replyTo.isEmpty()) {
+                try {
+                    CommunityStore.Post original = community.get(post.replyTo);
+                    if (original != null) main.post(() -> renderReplyToChip(replyToSection, original));
+                } catch (Exception ignored) {}
+            }
         });
 
         // Recording bar at the bottom (visible while recording a reply)
@@ -978,7 +1014,7 @@ public final class CommunityDetailActivity extends Activity {
         try {
             recorder.start();
             showCommunityRecordingBar(post);
-            main.postDelayed(communityTimerTick, 500);
+            main.postDelayed(communityTimerTick, 120);
         } catch (Exception e) {
             toast("无法开始录音：" + e.getMessage());
             replyToShareId = null;
@@ -1000,7 +1036,7 @@ public final class CommunityDetailActivity extends Activity {
         bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, () -> {
-            stopCommunityReplyRecording();
+            cancelCommunityReplyRecording();
             showCommunityPost(post, null);
         });
         bar.addView(text("回复: " + (post.title == null ? "社区文章" : post.title), 16, Theme.INK, Typeface.BOLD),
@@ -1018,44 +1054,71 @@ public final class CommunityDetailActivity extends Activity {
         String authorName = post.author == null || post.author.isEmpty() ? "匿名作者" : post.author;
         content.addView(text(authorName, 13, Theme.SECONDARY, Typeface.NORMAL));
 
-        // Recording bar at bottom
+        View topBorder = new View(this);
+        topBorder.setBackgroundColor(0xffe8decf);
+        page.addView(topBorder, new LinearLayout.LayoutParams(-1, dp(1)));
+
+        // Recording bar at bottom, matching the iOS community response dock.
         LinearLayout recBar = new LinearLayout(this);
         recBar.setOrientation(LinearLayout.HORIZONTAL);
-        recBar.setGravity(Gravity.CENTER);
-        recBar.setPadding(dp(16), dp(12), dp(16), dp(12));
-        recBar.setBackground(round(Theme.CARD, 16));
+        recBar.setGravity(Gravity.CENTER_VERTICAL);
+        recBar.setMinimumHeight(dp(112));
+        recBar.setPadding(dp(20), dp(16), dp(20), dp(20) + getNavigationBarHeight());
+        recBar.setBackgroundColor(Theme.CARD);
         LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(-1, -2);
-        barLp.setMargins(dp(14), 0, dp(14), dp(16));
         page.addView(recBar, barLp);
 
         // Red dot + timer
-        TextView dot = text("●", 10, Theme.RED, Typeface.BOLD);
-        recBar.addView(dot);
-        final TextView timerText = text("00:00", 18, Theme.INK, Typeface.NORMAL);
-        timerText.setPadding(dp(10), 0, dp(10), 0);
+        View dot = new View(this);
+        dot.setBackground(round(0xffffb8b8, 4));
+        recBar.addView(dot, new LinearLayout.LayoutParams(dp(8), dp(8)));
+        final TextView timerText = text("00:00", 18, Theme.INK, Typeface.BOLD);
+        timerText.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
+        timerText.setPadding(dp(10), 0, 0, 0);
         recBar.addView(timerText);
 
         // Waveform
-        TextView wave = text("▂▅▇▄█▆▃", 22, Theme.RED, Typeface.NORMAL);
-        recBar.addView(wave, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout wave = new LinearLayout(this);
+        wave.setGravity(Gravity.CENTER);
+        wave.setOrientation(LinearLayout.HORIZONTAL);
+        int[] bars = new int[]{3, 4, 3, 5, 4, 3, 4, 3};
+        List<View> waveBars = new ArrayList<>();
+        for (int i = 0; i < bars.length; i++) {
+            int h = bars[i];
+            View b = new View(this);
+            b.setBackground(round(0xffefaaa7, 2));
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(dp(3), dp(h));
+            blp.setMargins(dp(2), 0, dp(2), 0);
+            wave.addView(b, blp);
+            waveBars.add(b);
+        }
+        wave.setGravity(Gravity.CENTER);
+        recBar.addView(wave, new LinearLayout.LayoutParams(0, dp(34), 1));
 
         // Stop button
-        TextView stopBtn = text("■", 16, 0xffffffff, Typeface.NORMAL);
-        stopBtn.setGravity(Gravity.CENTER);
-        stopBtn.setBackground(round(Theme.RED, 18));
-        stopBtn.setMinWidth(dp(36));
-        stopBtn.setMinHeight(dp(36));
-        stopBtn.setPadding(dp(8), dp(6), dp(8), dp(6));
-        recBar.addView(stopBtn);
+        FrameLayout stopHalo = new FrameLayout(this);
+        stopHalo.setBackground(round(0x18e5392e, 34));
+        FrameLayout stopBtn = new FrameLayout(this);
+        stopBtn.setClickable(true);
+        stopBtn.setBackground(roundStroke(Theme.CARD, 28, 0xffe8decf, 1));
+        View stopSquare = new View(this);
+        stopSquare.setBackground(round(Theme.RED, 7));
+        stopBtn.addView(stopSquare, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        stopHalo.addView(stopBtn, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
+        LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(dp(68), dp(68));
+        stopLp.setMargins(dp(14), 0, 0, 0);
+        recBar.addView(stopHalo, stopLp);
         stopBtn.setOnClickListener(v -> stopCommunityReplyRecording());
 
         // Store timer reference for updates
-        recBar.setTag(timerText);
+        recBar.setTag(new CommunityRecordingUi(timerText, waveBars));
     }
 
     protected void updateCommunityRecordingTimer() {
         // Find the timer TextView from the current view
-        FrameLayout rootPage = (FrameLayout) root.getChildAt(0);
+        ViewGroup rootPage = root.getChildCount() == 0 || !(root.getChildAt(0) instanceof ViewGroup)
+                ? null
+                : (ViewGroup) root.getChildAt(0);
         if (rootPage == null) return;
         // Find the recording bar (last child of page)
         for (int i = rootPage.getChildCount() - 1; i >= 0; i--) {
@@ -1064,14 +1127,48 @@ public final class CommunityDetailActivity extends Activity {
                 LinearLayout ll = (LinearLayout) child;
                 // Check if this looks like the recording bar (has a tagged timer)
                 Object tag = ll.getTag();
-                if (tag instanceof TextView) {
-                    TextView timerText = (TextView) tag;
+                if (tag instanceof CommunityRecordingUi) {
+                    CommunityRecordingUi ui = (CommunityRecordingUi) tag;
+                    TextView timerText = ui.timer;
                     long elapsed = recorder.elapsedSeconds();
                     timerText.setText(String.format("%02d:%02d", elapsed / 60, elapsed % 60));
+                    updateCommunityWaveform(ui);
                     return;
                 }
             }
         }
+    }
+
+    protected void updateCommunityWaveform(CommunityRecordingUi ui) {
+        int amp = recorder == null ? 0 : recorder.sampleCurrentAmplitude();
+        double level = amp < 500 ? 0.0 : Math.min(1.0, amp / 9000.0);
+        int[] quiet = new int[]{3, 4, 3, 5, 4, 3, 4, 3};
+        double[] pattern = new double[]{0.32, 0.76, 0.48, 1.0, 0.58, 0.86, 0.42, 0.68};
+        if (level > 0.0) ui.phase++;
+        for (int i = 0; i < ui.waveBars.size(); i++) {
+            View bar = ui.waveBars.get(i);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) bar.getLayoutParams();
+            int height;
+            if (level == 0.0) {
+                height = dp(quiet[i % quiet.length]);
+            } else {
+                double wave = pattern[(i + ui.phase) % pattern.length];
+                height = dp(5) + (int) (dp(28) * Math.min(1.0, level * wave));
+            }
+            if (lp.height != height) {
+                lp.height = height;
+                bar.setLayoutParams(lp);
+            }
+        }
+    }
+
+    protected void cancelCommunityReplyRecording() {
+        communityRecording = false;
+        main.removeCallbacks(communityTimerTick);
+        if (recorder != null && recorder.isRecording()) recorder.cancel();
+        capturedPhotos.clear();
+        replyToShareId = null;
+        recordingStart = null;
     }
 
     protected void stopCommunityReplyRecording() {
@@ -1085,28 +1182,16 @@ public final class CommunityDetailActivity extends Activity {
         recordingStart = null;
 
         if (take != null) {
+            if (replyId != null) pendingReplies.put(take.file.getName(), replyId);
             io.execute(() -> {
-                // Upload photos first
                 uploadCapturedPhotos(photos);
-                // Upload audio
-                uploader.upload(take.file);
-                // Share as reply
-                try {
-                    recordings = library.load(uploader.pendingNames());
-                    Recording rec = recordings.isEmpty() ? null : recordings.get(0);
-                    if (rec != null && replyId != null) {
-                        String shareId = community.share(rec, replyId);
-                        main.post(() -> {
-                            if (shareId != null) toast("已作为回复发布到社区");
-                            else toast("上传成功，社区分享失败");
-                            refreshAndDrain();
-                        });
-                    } else {
-                        main.post(() -> toast("回复已保存，社区分享失败"));
-                    }
-                } catch (Exception e) {
-                    main.post(() -> toast("回复保存失败：" + e.getMessage()));
-                }
+                boolean uploaded = uploader.upload(take.file);
+                main.post(() -> {
+                    SimpleToast.show(this, uploaded
+                            ? "回应已保存，成文后自动发布"
+                            : "回应已保存，网络恢复后继续上传");
+                    finishDetailActivity();
+                });
             });
         }
     }
@@ -1118,38 +1203,87 @@ public final class CommunityDetailActivity extends Activity {
         // Divider
         View divider = new View(this);
         divider.setBackgroundColor(0xffe0d8cc);
-        section.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
-
-        TextView label = text("回应 (" + replies.size() + ")", 13, Theme.FAINT, Typeface.BOLD);
-        label.setLetterSpacing(0.08f);
-        label.setPadding(dp(4), dp(14), 0, dp(10));
-        section.addView(label);
+        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(-1, dp(1));
+        dividerLp.setMargins(0, dp(32), 0, 0);
+        section.addView(divider, dividerLp);
 
         for (CommunityStore.Post reply : replies) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(10), 0, dp(10));
-            row.setBackground(round(Theme.CARD, 10));
+            row.setPadding(0, dp(13), 0, dp(13));
 
             LinearLayout texts = new LinearLayout(this);
-            texts.setOrientation(LinearLayout.VERTICAL);
+            texts.setOrientation(LinearLayout.HORIZONTAL);
+            texts.setGravity(Gravity.CENTER_VERTICAL);
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
 
             String replyAuthor = reply.author == null || reply.author.isEmpty() ? "匿名" : reply.author;
-            texts.addView(text(replyAuthor, 14, Theme.SECONDARY, Typeface.BOLD));
-            String replyTitle = reply.title == null ? "" : " · " + reply.title;
-            TextView timeText = text(formatCommunityDate(reply.firstSharedAt) + replyTitle, 12, Theme.FAINT, Typeface.NORMAL);
-            timeText.setPadding(0, dp(2), 0, 0);
+            TextView author = text(replyAuthor, 13, Theme.RED, Typeface.BOLD);
+            author.setSingleLine(true);
+            texts.addView(author);
+            TextView timeText = text("  " + formatCommunityDate(reply.firstSharedAt), 13, Theme.FAINT, Typeface.NORMAL);
+            timeText.setSingleLine(true);
             texts.addView(timeText);
+            if (reply.title != null && !reply.title.isEmpty()) {
+                TextView title = text(" · " + reply.title, 13, 0xff4f4942, Typeface.NORMAL);
+                title.setSingleLine(true);
+                title.setEllipsize(TextUtils.TruncateAt.END);
+                texts.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+            }
 
-            row.addView(text("›", 22, 0xffcfc6b6, Typeface.NORMAL));
+            ImageView chevron = new ImageView(this);
+            chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+            chevron.setColorFilter(0xffc9c0b3);
+            row.addView(chevron, new LinearLayout.LayoutParams(dp(18), dp(18)));
 
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(0, 0, 0, dp(6));
             section.addView(row, lp);
+            View rowDivider = new View(this);
+            rowDivider.setBackgroundColor(0xffece3d5);
+            section.addView(rowDivider, new LinearLayout.LayoutParams(-1, 1));
             row.setOnClickListener(v -> openCommunityPost(reply));
         }
+    }
+
+    protected void renderReplyToChip(LinearLayout section, CommunityStore.Post original) {
+        section.removeAllViews();
+        LinearLayout chip = new LinearLayout(this);
+        chip.setOrientation(LinearLayout.HORIZONTAL);
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setPadding(dp(10), dp(6), dp(8), dp(6));
+        chip.setBackground(round(0xfffff1ed, 18));
+        chip.setClickable(true);
+
+        ImageView replyIcon = new ImageView(this);
+        replyIcon.setImageResource(R.drawable.ic_reply_turn_flat);
+        replyIcon.setColorFilter(Theme.RED);
+        chip.addView(replyIcon, new LinearLayout.LayoutParams(dp(16), dp(16)));
+
+        TextView prefix = text("回应", 13, Theme.RED, Typeface.BOLD);
+        prefix.setPadding(dp(5), 0, dp(6), 0);
+        chip.addView(prefix);
+
+        String title = original.title == null || original.title.isEmpty()
+                ? "原文"
+                : original.title;
+        TextView titleText = text(title, 13, Theme.RED, Typeface.NORMAL);
+        titleText.setSingleLine(true);
+        titleText.setEllipsize(TextUtils.TruncateAt.END);
+        titleText.setMaxWidth(getResources().getDisplayMetrics().widthPixels - dp(134));
+        chip.addView(titleText, new LinearLayout.LayoutParams(-2, -2));
+
+        ImageView chevron = new ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+        chevron.setColorFilter(Theme.RED);
+        LinearLayout.LayoutParams chevronLp = new LinearLayout.LayoutParams(dp(14), dp(14));
+        chevronLp.setMargins(dp(6), 0, 0, 0);
+        chip.addView(chevron, chevronLp);
+
+        chip.setOnClickListener(v -> openCommunityPost(original));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.setMargins(0, 0, 0, dp(14));
+        section.addView(chip, lp);
     }
 
     protected String formatCommunityDate(double ms) {
@@ -1322,6 +1456,7 @@ public final class CommunityDetailActivity extends Activity {
                 if (key != null) {
                     ProgressBar spinner = new ProgressBar(this);
                     spinner.setIndeterminate(true);
+                    tintLoadingSpinner(spinner);
                     spinner.setTag("photo_loading");
                     photo.addView(spinner, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
                 }
@@ -1437,6 +1572,15 @@ public final class CommunityDetailActivity extends Activity {
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+    }
+
+    protected void tintLoadingSpinner(ProgressBar spinner) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Theme.RED));
+        } else {
+            spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
+                    android.graphics.PorterDuff.Mode.SRC_IN);
+        }
     }
 
 }

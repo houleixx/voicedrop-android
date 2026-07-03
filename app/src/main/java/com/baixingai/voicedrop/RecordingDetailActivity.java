@@ -1775,7 +1775,7 @@ public final class RecordingDetailActivity extends Activity {
 
         LinearLayout transcriptBubble = new LinearLayout(this);
         transcriptBubble.setOrientation(LinearLayout.VERTICAL);
-        transcriptBubble.setVisibility(View.INVISIBLE);
+        transcriptBubble.setVisibility(View.GONE);
         transcriptBubble.setAlpha(0f);
 
         TextView transcriptText = text("在听…", 16, 0xfffbf6ee, Typeface.NORMAL);
@@ -1822,22 +1822,28 @@ public final class RecordingDetailActivity extends Activity {
 
         panel.addView(editContainer);
         attachArticleEditHoldGesture(editContainer, rec);
+        attachArticleEditHoldGesture(micIcon, editContainer, rec);
+        attachArticleEditHoldGesture(speak, editContainer, rec);
         holdEditMicIcon = micIcon;
         FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         page.addView(panel, panelLp);
     }
 
     protected void attachArticleEditHoldGesture(View speak, Recording rec) {
+        attachArticleEditHoldGesture(speak, speak, rec);
+    }
+
+    protected void attachArticleEditHoldGesture(View touchTarget, View buttonContainer, Recording rec) {
         final float[] startY = {0};
-        speak.setOnTouchListener((v, event) -> {
+        touchTarget.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     startY[0] = event.getRawY();
                     v.getParent().requestDisallowInterceptTouchEvent(true);
-                    startHoldArticleEdit(rec, speak);
+                    startHoldArticleEdit(rec, buttonContainer);
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    updateHoldArticleEditCancelState(speak,
+                    updateHoldArticleEditCancelState(buttonContainer,
                             HoldToTalkGesture.shouldCancel(startY[0], event.getRawY(), dp(64)));
                     return true;
                 case MotionEvent.ACTION_UP:
@@ -1980,7 +1986,7 @@ public final class RecordingDetailActivity extends Activity {
         }
         if (holdEditTranscriptBubble != null) {
             holdEditTranscriptBubble.setAlpha(0f);
-            holdEditTranscriptBubble.setVisibility(View.INVISIBLE);
+            holdEditTranscriptBubble.setVisibility(View.GONE);
         }
         holdEditButton = null;
         holdEditMicIcon = null;
@@ -2023,6 +2029,7 @@ public final class RecordingDetailActivity extends Activity {
                 if (key != null) {
                     ProgressBar spinner = new ProgressBar(this);
                     spinner.setIndeterminate(true);
+                    tintLoadingSpinner(spinner);
                     spinner.setTag("photo_loading");
                     FrameLayout.LayoutParams spinnerLp = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER);
                     photo.addView(spinner, spinnerLp);
@@ -2139,6 +2146,15 @@ public final class RecordingDetailActivity extends Activity {
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+    }
+
+    protected void tintLoadingSpinner(ProgressBar spinner) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Theme.RED));
+        } else {
+            spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
+                    android.graphics.PorterDuff.Mode.SRC_IN);
+        }
     }
 
 }

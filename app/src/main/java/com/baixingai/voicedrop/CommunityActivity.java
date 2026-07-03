@@ -1015,7 +1015,7 @@ public final class CommunityActivity extends Activity {
                         android.graphics.PorterDuff.Mode.SRC_IN);
             }
             loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
-            TextView empty = text("正在加载 VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
+            TextView empty = text("正在加载VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, dp(14), 0, 0);
             loadingLayout.addView(empty);

@@ -69,8 +69,11 @@ import com.baixingai.voicedrop.ui.AudioPlaybackState;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PlaybackProgressButton;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.RoundedImageView;
+import com.baixingai.voicedrop.ui.SoftRoundedShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -169,6 +172,7 @@ public final class RecordingDetailActivity extends Activity {
     protected ImageView holdEditMicIcon;
     protected View holdEditTranscriptBubble;
     protected TextView holdEditTranscriptText;
+    protected String holdEditPromptText;
     protected boolean articleLocatorsVisible;
     protected final List<View> articleLocatorViews = new ArrayList<>();
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
@@ -178,6 +182,7 @@ public final class RecordingDetailActivity extends Activity {
     protected ImageView articleRedoIcon;
     protected int articleHistoryHead = -1;
     protected int articleHistoryCount = 0;
+    protected boolean activityDestroyed;
     protected JSONArray articleHistoryVersions = new JSONArray();
     protected ZonedDateTime recordingStart;
     protected Recording insertPhotoTarget;
@@ -297,6 +302,7 @@ public final class RecordingDetailActivity extends Activity {
     }
     @Override
     protected void onDestroy() {
+        activityDestroyed = true;
         super.onDestroy();
         main.removeCallbacks(timerTick);
         main.removeCallbacks(communityTimerTick);
@@ -495,6 +501,7 @@ public final class RecordingDetailActivity extends Activity {
         holdEditMicIcon = null;
         holdEditTranscriptBubble = null;
         holdEditTranscriptText = null;
+        holdEditPromptText = null;
         holdEditCanceled = false;
         holdEditFinishing = false;
         setArticleLocatorsVisible(false);
@@ -726,6 +733,11 @@ public final class RecordingDetailActivity extends Activity {
         drawable.setCornerRadius(dp(radiusDp));
         return drawable;
     }
+    protected GradientDrawable roundStroke(int color, int radiusDp, int strokeColor, int strokeDp) {
+        GradientDrawable drawable = round(color, radiusDp);
+        drawable.setStroke(dp(strokeDp), strokeColor);
+        return drawable;
+    }
     protected FrameLayout.LayoutParams match() {
         return new FrameLayout.LayoutParams(-1, -1);
     }
@@ -750,6 +762,18 @@ public final class RecordingDetailActivity extends Activity {
     }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
+    }
+    protected boolean isActivityActive() {
+        if (activityDestroyed || isFinishing()) return false;
+        return android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.JELLY_BEAN_MR1
+                || !isDestroyed();
+    }
+    protected void runIoIfActive(Runnable task) {
+        if (!isActivityActive()) return;
+        try {
+            io.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+        }
     }
     protected static final class CapturedPhoto {
         final String key;
@@ -777,10 +801,13 @@ public final class RecordingDetailActivity extends Activity {
             finish();
             return;
         }
+        showDetailLoading();
         Recording rec = new Recording(audioName, "", true, false);
-        io.execute(() -> {
+        runIoIfActive(() -> {
             ArticleDoc doc = library.fetchDoc(rec);
-            main.post(() -> showArticle(rec, doc, false));
+            main.post(() -> {
+                if (isActivityActive()) showArticle(rec, doc, false);
+            });
         });
     }
     protected void refreshAndDrain() {
@@ -796,8 +823,10 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showArticle(Recording rec, ArticleDoc doc, boolean animateOpen, boolean refreshHistory) {
+        if (!isActivityActive()) return;
         if (doc == null || doc.articles.isEmpty()) {
             toast("文章暂不可读");
+            finish();
             return;
         }
         if (!rec.stem().equals(currentArticleStem)) {
@@ -955,9 +984,11 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void refreshCommunityShareState(Recording rec) {
-        io.execute(() -> {
+        runIoIfActive(() -> {
             try {
+                if (!isActivityActive()) return;
                 String shareId = community.sharedShareId(rec);
+                if (!isActivityActive()) return;
                 sharedToCommunity = shareId != null && !shareId.isEmpty();
                 communityShareId = sharedToCommunity ? shareId : null;
             } catch (Exception ignored) {
@@ -1679,6 +1710,7 @@ public final class RecordingDetailActivity extends Activity {
         editSession = new ArticleEditSession(this, auth, rec.stem(), new ArticleEditSession.Listener() {
             @Override public void onUpdated(ArticleDoc doc) {
                 main.post(() -> {
+                    if (!isActivityActive()) return;
                     currentArticleDoc = doc;
                     renderArticleOrDefer(rec, doc);
                 });
@@ -1686,6 +1718,7 @@ public final class RecordingDetailActivity extends Activity {
 
             @Override public void onQueueChanged(List<ArticleEditSession.EditRequest> queue) {
                 main.post(() -> {
+                    if (!isActivityActive()) return;
                     editQueue = new ArrayList<>(queue);
                     if (currentArticleDoc != null && rec.stem().equals(currentArticleStem)) {
                         renderArticleOrDefer(rec, currentArticleDoc);
@@ -1695,6 +1728,7 @@ public final class RecordingDetailActivity extends Activity {
 
             @Override public void onReply(String text, boolean ok) {
                 main.post(() -> {
+                    if (!isActivityActive()) return;
                     editReply = text;
                     editReplyOk = ok;
                     if (currentArticleDoc != null && rec.stem().equals(currentArticleStem)) {
@@ -1715,6 +1749,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void renderArticleOrDefer(Recording rec, ArticleDoc doc) {
+        if (!isActivityActive()) return;
         if (isHoldArticleEditActiveFor(rec)) {
             deferredArticleRenderRecording = rec;
             deferredArticleRenderDoc = doc;
@@ -1799,19 +1834,18 @@ public final class RecordingDetailActivity extends Activity {
         holdEditTranscriptText = transcriptText;
 
         // Hold-to-talk button (iOS style: mic icon + text)
+        FrameLayout editShadow = new SoftRoundedShadowFrameLayout(this);
         LinearLayout editContainer = new LinearLayout(this);
         editContainer.setOrientation(LinearLayout.HORIZONTAL);
         editContainer.setGravity(Gravity.CENTER);
         editContainer.setPadding(dp(16), 0, dp(16), 0);
-        editContainer.setBackground(round(Theme.CARD, 12));
-        editContainer.setElevation(0);
-        editContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(52)));
+        editContainer.setBackground(roundStroke(0xfffffbf7, 16, 0xffe8ded0, 1));
 
         ImageView micIcon = new ImageView(this);
         AliIconFont.apply(micIcon, AliIconFont.MIC, Theme.INK);
         micIcon.setScaleType(ImageView.ScaleType.CENTER);
-        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(20), dp(20));
-        micLp.setMargins(0, 0, dp(8), 0);
+        LinearLayout.LayoutParams micLp = new LinearLayout.LayoutParams(dp(22), dp(22));
+        micLp.setMargins(0, 0, dp(9), 0);
         editContainer.addView(micIcon, micLp);
 
         TextView speak = text(editQueue.isEmpty() ? "按住 说话 修改" : "正在改…按住继续说", 17, Theme.INK, Typeface.BOLD);
@@ -1820,7 +1854,9 @@ public final class RecordingDetailActivity extends Activity {
         speak.setEllipsize(TextUtils.TruncateAt.END);
         editContainer.addView(speak);
 
-        panel.addView(editContainer);
+        editShadow.addView(editContainer, new FrameLayout.LayoutParams(-1, dp(56), Gravity.CENTER));
+        panel.addView(editShadow, new LinearLayout.LayoutParams(-1, dp(72)));
+        attachArticleEditHoldGesture(editShadow, editContainer, rec);
         attachArticleEditHoldGesture(editContainer, rec);
         attachArticleEditHoldGesture(micIcon, editContainer, rec);
         attachArticleEditHoldGesture(speak, editContainer, rec);
@@ -1870,18 +1906,28 @@ public final class RecordingDetailActivity extends Activity {
         holdEditTranscript.clear();
         holdEditCanceled = false;
         holdEditFinishing = false;
+        holdEditPromptText = "正在连接…";
         holdEditButton = button;
-        if (holdEditMicIcon != null) holdEditMicIcon.setColorFilter(Theme.AMBER);
+        if (holdEditMicIcon != null) holdEditMicIcon.setColorFilter(Theme.INK);
         setArticleLocatorsVisible(true);
         updateHoldArticleEditTranscriptBubble();
-        updateHoldArticleEditButton(button, "松开 发送 · 上滑取消", Theme.CARD, Theme.AMBER);
+        updateHoldArticleEditButton(button, "松开 发送 · 上滑取消", 0xfffffbf7, Theme.INK);
         // start() opens the WebSocket and starts the mic, blocking until recording is active.
         dictationSession = new AsrDictationSession(auth, new AsrDictationSession.Listener() {
             @Override public void onText(String text, boolean isFinal) {
                 holdEditTranscript.accept(text, isFinal);
                 main.post(() -> updateHoldArticleEditLiveText());
             }
-            @Override public void onState(String state) {}
+            @Override public void onState(String state) {
+                if ("正在听写…".equals(state)) {
+                    main.post(() -> {
+                        if (!holdEditFinishing) {
+                            holdEditPromptText = null;
+                            updateHoldArticleEditTranscriptBubble();
+                        }
+                    });
+                }
+            }
             @Override public void onError(String message) {
                 main.post(() -> {
                     if (!holdEditFinishing) {
@@ -1910,12 +1956,12 @@ public final class RecordingDetailActivity extends Activity {
         if (holdEditCanceled == canceled) return;
         holdEditCanceled = canceled;
         if (holdEditMicIcon != null) {
-            holdEditMicIcon.setColorFilter(canceled ? Theme.RED : Theme.AMBER);
+            holdEditMicIcon.setColorFilter(canceled ? Theme.RED : Theme.INK);
         }
         if (canceled) {
             updateHoldArticleEditButton(button, "上滑取消 · 松开放弃", 0xffffe5e5, Theme.RED);
         } else {
-            updateHoldArticleEditButton(button, "松开 发送 · 上滑取消", Theme.CARD, Theme.AMBER);
+            updateHoldArticleEditButton(button, "松开 发送 · 上滑取消", 0xfffffbf7, Theme.INK);
         }
     }
 
@@ -1928,7 +1974,12 @@ public final class RecordingDetailActivity extends Activity {
         if (holdEditTranscriptBubble == null || holdEditTranscriptText == null) return;
         holdEditTranscriptBubble.setVisibility(View.VISIBLE);
         holdEditTranscriptBubble.setAlpha(1f);
-        holdEditTranscriptText.setText(highlightHoldArticleEditTranscript(holdEditTranscript.bubbleText()));
+        String text = holdEditTranscript.bubbleText();
+        if (holdEditPromptText != null && !holdEditPromptText.isEmpty()
+                && holdEditTranscript.bestText().isEmpty()) {
+            text = holdEditPromptText;
+        }
+        holdEditTranscriptText.setText(highlightHoldArticleEditTranscript(text));
     }
 
     protected SpannableString highlightHoldArticleEditTranscript(String text) {
@@ -1978,7 +2029,7 @@ public final class RecordingDetailActivity extends Activity {
         if (holdEditButton != null) {
             updateHoldArticleEditButton(holdEditButton,
                     editQueue.isEmpty() ? "按住 说话 修改" : "正在改…按住继续说",
-                    Theme.CARD, Theme.INK);
+                    0xfffffbf7, Theme.INK);
         }
         setArticleLocatorsVisible(false);
         if (holdEditMicIcon != null) {
@@ -1992,6 +2043,7 @@ public final class RecordingDetailActivity extends Activity {
         holdEditMicIcon = null;
         holdEditTranscriptBubble = null;
         holdEditTranscriptText = null;
+        holdEditPromptText = null;
         holdEditCanceled = false;
         holdEditFinishing = false;
         applyDeferredArticleRenderIfIdle();
@@ -1999,7 +2051,7 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void updateHoldArticleEditButton(View container, String label, int bgColor, int textColor) {
         if (container == null) return;
-        container.setBackground(round(bgColor, 12));
+        container.setBackground(roundStroke(bgColor, 16, holdEditButtonStrokeColor(textColor), 1));
         // Find the TextView child to update text/color
         if (container instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) container;
@@ -2013,6 +2065,12 @@ public final class RecordingDetailActivity extends Activity {
                 }
             }
         }
+    }
+
+    protected int holdEditButtonStrokeColor(int textColor) {
+        if (textColor == Theme.RED) return 0xffe8ded0;
+        if (textColor == Theme.AMBER) return 0x66c98a2e;
+        return 0xffe0d8cc;
     }
 
     protected void renderArticleBody(LinearLayout content, String bodyText, ArticleDoc doc) {
@@ -2142,10 +2200,34 @@ public final class RecordingDetailActivity extends Activity {
                 frame.removeViewAt(i);
             }
         }
-        ImageView image = new ImageView(this);
+        ImageView image = new RoundedImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+    }
+
+    protected void showDetailLoading() {
+        root.removeAllViews();
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Theme.BG);
+        root.addView(page, match());
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        addNavBackButton(bar, this::finishDetailActivity);
+
+        Space toolbarSpace = new Space(this);
+        bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        FrameLayout content = new FrameLayout(this);
+        page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
+        loadingLp.topMargin = dp(50);
+        content.addView(new LoadingStateView(this), loadingLp);
     }
 
     protected void tintLoadingSpinner(ProgressBar spinner) {

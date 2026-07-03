@@ -33,7 +33,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
-import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
@@ -70,6 +69,7 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.SoftCircleShadowFrameLayout;
@@ -336,24 +336,7 @@ public final class RecordingsActivity extends Activity {
     }
     protected void renderCommunityList(LinearLayout list) {
         if (communityLoading && posts.isEmpty()) {
-            LinearLayout loadingLayout = new LinearLayout(this);
-            loadingLayout.setOrientation(LinearLayout.VERTICAL);
-            loadingLayout.setGravity(Gravity.CENTER);
-            ProgressBar spinner = new ProgressBar(this);
-            spinner.setIndeterminate(true);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                spinner.setIndeterminateTintList(
-                        android.content.res.ColorStateList.valueOf(Theme.RED));
-            } else {
-                spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
-                        android.graphics.PorterDuff.Mode.SRC_IN);
-            }
-            loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
-            TextView empty = text("正在加载VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, dp(14), 0, 0);
-            loadingLayout.addView(empty);
-            list.addView(loadingLayout, new LinearLayout.LayoutParams(-1, dp(180)));
+            list.addView(new LoadingStateView(this), new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (posts.isEmpty()) {
             TextView empty = text("社区暂无文章", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
@@ -1072,24 +1055,7 @@ public final class RecordingsActivity extends Activity {
         contentArea.addView(refresher, match());
 
         if (loading && recordings.isEmpty() && !communityTab) {
-            LinearLayout loadingLayout = new LinearLayout(this);
-            loadingLayout.setOrientation(LinearLayout.VERTICAL);
-            loadingLayout.setGravity(Gravity.CENTER);
-            ProgressBar spinner = new ProgressBar(this);
-            spinner.setIndeterminate(true);
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                spinner.setIndeterminateTintList(
-                        android.content.res.ColorStateList.valueOf(Theme.RED));
-            } else {
-                spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
-                        android.graphics.PorterDuff.Mode.SRC_IN);
-            }
-            loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
-            TextView empty = text("正在加载…", 16, Theme.SECONDARY, Typeface.NORMAL);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, dp(14), 0, 0);
-            loadingLayout.addView(empty);
-            list.addView(loadingLayout, new LinearLayout.LayoutParams(-1, dp(180)));
+            list.addView(new LoadingStateView(this), new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (recordings.isEmpty()) {
             TextView empty = text("轻点下方按钮开始第一条录音", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
@@ -1727,9 +1693,7 @@ public final class RecordingsActivity extends Activity {
         contentArea.addView(scroll, match());
 
         // Show loading placeholder while we build the list off-thread
-        TextView loadingView = text("正在加载…", 16, Theme.SECONDARY, Typeface.NORMAL);
-        loadingView.setGravity(Gravity.CENTER);
-        list.addView(loadingView, new LinearLayout.LayoutParams(-1, dp(180)));
+        list.addView(new LoadingStateView(this), new LinearLayout.LayoutParams(-1, dp(180)));
 
         // Defer heavy list building to the next frame
         main.post(() -> {

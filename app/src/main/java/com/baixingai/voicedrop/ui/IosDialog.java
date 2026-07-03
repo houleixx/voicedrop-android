@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop.ui;
 
 import android.app.Dialog;
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -28,8 +29,20 @@ public final class IosDialog extends Dialog {
 
     @Override
     public void show() {
-        super.show();
-        applyFullscreenWindow();
+        if (!isContextAlive(getContext())) return;
+        try {
+            super.show();
+            applyFullscreenWindow();
+        } catch (RuntimeException ignored) {
+            try { dismiss(); } catch (Exception ignoredDismiss) {}
+        }
+    }
+
+    private static boolean isContextAlive(Context context) {
+        if (!(context instanceof Activity)) return context != null;
+        Activity activity = (Activity) context;
+        if (activity.isFinishing()) return false;
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 || !activity.isDestroyed();
     }
 
     /** Simple message dialog */

@@ -66,7 +66,9 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.Theme;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -862,6 +864,7 @@ public final class CommunityDetailActivity extends Activity {
             finish();
             return;
         }
+        showDetailLoading();
         io.execute(() -> {
             try {
                 CommunityStore.Post post = community.get(shareId);
@@ -1568,10 +1571,34 @@ public final class CommunityDetailActivity extends Activity {
                 frame.removeViewAt(i);
             }
         }
-        ImageView image = new ImageView(this);
+        ImageView image = new RoundedImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+    }
+
+    protected void showDetailLoading() {
+        root.removeAllViews();
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Theme.BG);
+        root.addView(page, match());
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        addNavBackButton(bar, this::finishDetailActivity);
+
+        Space toolbarSpace = new Space(this);
+        bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        FrameLayout content = new FrameLayout(this);
+        page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
+        loadingLp.topMargin = dp(50);
+        content.addView(new LoadingStateView(this), loadingLp);
     }
 
     protected void tintLoadingSpinner(ProgressBar spinner) {

@@ -25,6 +25,13 @@ public final class SimpleToast {
 
     public static void show(Activity activity, String message) {
         if (activity == null || activity.isFinishing()) return;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1
+                && activity.isDestroyed()) {
+            return;
+        }
+
+        View root = activity.getWindow() == null ? null : activity.getWindow().getDecorView();
+        if (root == null || root.getWindowToken() == null || !root.isAttachedToWindow()) return;
 
         // Dismiss any toast that is still visible.
         if (current != null) {
@@ -50,11 +57,15 @@ public final class SimpleToast {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         pw.setClippingEnabled(true);
-        current = pw;
 
-        View root = activity.getWindow().getDecorView();
         int yOffset = root.getHeight() / 4;
-        pw.showAtLocation(root, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, yOffset);
+        try {
+            pw.showAtLocation(root, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, yOffset);
+            current = pw;
+        } catch (RuntimeException ignored) {
+            try { pw.dismiss(); } catch (Exception ignoredDismiss) {}
+            return;
+        }
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             AlphaAnimation fade = new AlphaAnimation(1f, 0f);

@@ -21,8 +21,8 @@ android {
         applicationId "com.baixingai.voicedrop"
         minSdk 23
         targetSdk 36
-        versionCode 3
-        versionName "0.3.0"
+        versionCode 4
+        versionName "0.3.1"
     }
 
     compileOptions {
@@ -64,4 +64,5 @@ dependencies {
     implementation "com.kongzue.dialogx:DialogX:0.0.49"
     implementation "com.kongzue.dialogx.style:DialogXIOSStyle:0.0.49"
     testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
 }

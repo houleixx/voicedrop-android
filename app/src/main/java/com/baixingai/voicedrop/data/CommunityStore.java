@@ -127,14 +127,17 @@ public final class CommunityStore {
         public final double firstSharedAt;
         public final String title;
         public final String replyTo;
+        public final ArticleDoc doc;
 
-        Post(String shareId, String author, String articleKey, double firstSharedAt, String title, String replyTo) {
+        Post(String shareId, String author, String articleKey, double firstSharedAt, String title, String replyTo,
+             ArticleDoc doc) {
             this.shareId = shareId;
             this.author = author;
             this.articleKey = articleKey;
             this.firstSharedAt = firstSharedAt;
             this.title = title;
             this.replyTo = replyTo;
+            this.doc = doc;
         }
 
         static Post from(JSONObject obj) {
@@ -142,7 +145,17 @@ public final class CommunityStore {
                     trim(obj.optString("author", obj.optString("authorName"))),
                     trim(obj.optString("articleKey")), obj.optDouble("firstSharedAt", obj.optDouble("sharedAt")),
                     trim(obj.optString("title")),
-                    trim(obj.optString("replyTo")));
+                    trim(obj.optString("replyTo")),
+                    docFrom(obj));
+        }
+
+        private static ArticleDoc docFrom(JSONObject obj) {
+            if (!obj.has("articles") && !obj.has("body")) return null;
+            try {
+                return ArticleDoc.fromJson(obj.toString());
+            } catch (Exception e) {
+                return null;
+            }
         }
 
         private static String trim(String value) {

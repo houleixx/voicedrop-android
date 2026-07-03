@@ -873,7 +873,7 @@ public final class CommunityDetailActivity extends Activity {
                     finish();
                     return;
                 }
-                ArticleDoc doc = library.fetchDocByArticleKey(post.articleKey);
+                ArticleDoc doc = post.doc != null ? post.doc : library.fetchDocByArticleKey(post.articleKey);
                 main.post(() -> showCommunityPost(post, doc, false));
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
@@ -1478,7 +1478,7 @@ public final class CommunityDetailActivity extends Activity {
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(90));
                 p.setMargins(0, dp(12), 0, dp(12));
                 content.addView(photo, p);
-                if (key != null) loadPhotoInto(photo, key);
+                if (key != null) loadPhotoInto(photo, key, doc.ownerScope);
             } else {
                 String[] lines = segment.value.split("\\n");
                 for (String raw : lines) {
@@ -1543,24 +1543,35 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void loadPhotoInto(FrameLayout frame, String relKey) {
-        Bitmap cached = articlePhotoCache.get(relKey);
-        if (cached != null) {
-            showLoadedPhoto(frame, cached);
-            return;
-        }
+        loadPhotoInto(frame, relKey, null);
+    }
+
+    protected void loadPhotoInto(FrameLayout frame, String relKey, String preferredScope) {
         io.execute(() -> {
             try {
-                String scope = library.ownerScope();
+                String scope = normalizePhotoScope(
+                        preferredScope == null || preferredScope.isEmpty() ? library.ownerScope() : preferredScope);
                 if (scope == null) return;
+                String cacheKey = scope + relKey;
+                Bitmap cached = articlePhotoCache.get(cacheKey);
+                if (cached != null) {
+                    main.post(() -> showLoadedPhoto(frame, cached));
+                    return;
+                }
                 byte[] data = library.photoData(scope + relKey);
                 if (data == null) return;
                 Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
                 if (bitmap == null) return;
-                articlePhotoCache.put(relKey, bitmap);
+                articlePhotoCache.put(cacheKey, bitmap);
                 main.post(() -> showLoadedPhoto(frame, bitmap));
             } catch (Exception ignored) {
             }
         });
+    }
+
+    protected String normalizePhotoScope(String scope) {
+        if (scope == null || scope.isEmpty()) return null;
+        return scope.endsWith("/") ? scope : scope + "/";
     }
 
     protected void showLoadedPhoto(FrameLayout frame, Bitmap bitmap) {

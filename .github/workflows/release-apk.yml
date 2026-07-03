@@ -96,7 +96,11 @@ jobs:
           TAG="${RELEASE_TAG:-$REF_NAME}"
 
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes "Release $TAG" --prerelease
+            PRERELEASE_FLAG=""
+            case "$TAG" in
+              *-ci-*|*-beta*|*-rc*) PRERELEASE_FLAG="--prerelease" ;;
+            esac
+            gh release create "$TAG" --title "$TAG" --notes "Release $TAG" $PRERELEASE_FLAG
           fi
 
           gh release upload "$TAG" "$APK_NAME" --clobber

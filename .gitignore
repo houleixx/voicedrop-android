@@ -5,6 +5,8 @@
 /.idea/
 *.iml
 .DS_Store
+/.claude/
 /doc
 /docs
 /signing/
+/META-INF/

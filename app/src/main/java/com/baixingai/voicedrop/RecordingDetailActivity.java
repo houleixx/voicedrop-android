@@ -871,14 +871,55 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void publishWechat(Recording rec) {
+        toast("正在发布到公众号…");
         io.execute(() -> {
             try {
-                boolean ok = library.publishWechat(rec);
-                toast(ok ? "公众号草稿已发布/更新" : "公众号发布失败，请检查配置");
+                JSONObject cfg = settingsStore.loadWechat();
+                if (cfg.optString("appid", "").trim().isEmpty()
+                        || cfg.optString("secret", "").trim().isEmpty()) {
+                    main.post(() -> openWechatSettings("请先配置公众号"));
+                    return;
+                }
+                LibraryStore.PublishResult result = library.publishWechat(rec);
+                if (result.notConfigured) {
+                    main.post(() -> openWechatSettings("请先配置公众号"));
+                    return;
+                }
+                if (result.ok) {
+                    ArticleDoc updated = library.fetchDoc(rec);
+                    main.post(() -> {
+                        if (updated != null && !updated.articles.isEmpty()) {
+                            showArticle(rec, updated, false);
+                        }
+                        toast(result.created == 0 && result.updated > 0 ? "已更新草稿" : "已到草稿箱");
+                    });
+                    return;
+                }
+                if (result.isConfigError()) {
+                    main.post(() -> openWechatSettings(result.message == null ? "公众号配置有误" : result.message));
+                } else {
+                    toast(result.message == null ? "推送失败，请稍后再试" : result.message);
+                }
             } catch (Exception e) {
                 toast("公众号发布失败：" + e.getMessage());
             }
         });
+    }
+
+    private void openWechatSettings(String message) {
+        toast(message);
+        Intent intent = new Intent(this, SettingsActivity.class);
+        intent.putExtra(SettingsActivity.EXTRA_SHOW_WECHAT, true);
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    protected boolean hasWechatDraft() {
+        if (currentArticleDoc == null || currentArticleDoc.articles == null) return false;
+        for (MinedArticle article : currentArticleDoc.articles) {
+            if (article.wechatMediaId != null && !article.wechatMediaId.trim().isEmpty()) return true;
+        }
+        return false;
     }
 
     protected void shareCommunity(Recording rec, String replyTo) {
@@ -1252,7 +1293,7 @@ public final class RecordingDetailActivity extends Activity {
         menu.setElevation(dp(8));
         final PopupWindow[] popupRef = {null};
 
-        LinearLayout pubRow = menuRow("发布公众号草稿", AliIconFont.PAPERPLANE, Theme.RED);
+        LinearLayout pubRow = menuRow(hasWechatDraft() ? "更新公众号草稿" : "发布公众号草稿", AliIconFont.PAPERPLANE, Theme.RED);
         pubRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
             publishWechat(rec);

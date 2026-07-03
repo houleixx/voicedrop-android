@@ -57,7 +57,7 @@ public final class IosDialog extends Dialog {
                             String neutralText, Runnable onNeutral) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, 200), positiveText, onPositive,
-                neutralText, onNeutral, false, false);
+                neutralText, onNeutral, false, false, true);
         dialog.show();
     }
 
@@ -81,9 +81,19 @@ public final class IosDialog extends Dialog {
                                             String positiveText, Runnable onPositive,
                                             String neutralText, Runnable onNeutral,
                                             boolean showCloseButton) {
+        return showBottomSheet(ctx, title, customView, contentHeightDp, positiveText, onPositive,
+                neutralText, onNeutral, showCloseButton, true);
+    }
+
+    public static IosDialog showBottomSheet(Context ctx, String title, View customView,
+                                            int contentHeightDp,
+                                            String positiveText, Runnable onPositive,
+                                            String neutralText, Runnable onNeutral,
+                                            boolean showCloseButton,
+                                            boolean dismissOnOutside) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp), positiveText, onPositive,
-                neutralText, onNeutral, showCloseButton, true);
+                neutralText, onNeutral, showCloseButton, true, dismissOnOutside);
         dialog.show();
         return dialog;
     }
@@ -97,7 +107,7 @@ public final class IosDialog extends Dialog {
                             String positiveText, Runnable onPositive, boolean showCloseButton) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp),
-                positiveText, onPositive, null, null, showCloseButton, false);
+                positiveText, onPositive, null, null, showCloseButton, false, true);
         dialog.show();
     }
 
@@ -111,7 +121,7 @@ public final class IosDialog extends Dialog {
         messageView.setLineSpacing(dp(ctx, 4), 1.0f);
         messageView.setPadding(dp(ctx, 20), dp(ctx, 14), dp(ctx, 20), dp(ctx, 18));
         buildWithView(ctx, title, messageView, dp(ctx, 200), positiveText, onPositive,
-                neutralText, onNeutral, false, false);
+                neutralText, onNeutral, false, false, true);
     }
 
     private void buildWithView(Context ctx, String title, View contentView,
@@ -119,7 +129,8 @@ public final class IosDialog extends Dialog {
                                String positiveText, Runnable onPositive,
                                String neutralText, Runnable onNeutral,
                                boolean showCloseButton,
-                               boolean bottomSheet) {
+                               boolean bottomSheet,
+                               boolean dismissOnOutside) {
         Window window = getWindow();
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
@@ -154,18 +165,31 @@ public final class IosDialog extends Dialog {
             lp.height = WindowManager.LayoutParams.MATCH_PARENT;
             lp.dimAmount = 0f;
             window.setAttributes(lp);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED);
         }
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(bottomSheet ? Gravity.BOTTOM : Gravity.CENTER);
+        int rootTopPadding = bottomSheet ? dp(ctx, 40) : dp(ctx, 40);
+        int rootHorizontalPadding = bottomSheet ? 0 : dp(ctx, 24);
         if (bottomSheet) {
-            root.setPadding(0, dp(ctx, 40), 0, 0);
+            root.setPadding(0, rootTopPadding, 0, 0);
         } else {
-            root.setPadding(dp(ctx, 24), dp(ctx, 40), dp(ctx, 24), dp(ctx, 40));
+            root.setPadding(rootHorizontalPadding, rootTopPadding, rootHorizontalPadding, dp(ctx, 40));
         }
         root.setBackgroundColor(0x66000000);
-        root.setOnClickListener(v -> dismiss());
+        if (dismissOnOutside) {
+            root.setOnClickListener(v -> dismiss());
+        }
+        if (bottomSheet && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            root.setOnApplyWindowInsetsListener((view, insets) -> {
+                int imeBottom = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+                view.setPadding(0, rootTopPadding, 0, imeBottom);
+                return insets;
+            });
+        }
 
         // Card
         LinearLayout card = new LinearLayout(ctx);
@@ -213,6 +237,7 @@ public final class IosDialog extends Dialog {
 
         // Content (scrollable if tall)
         ScrollView scroll = new ScrollView(ctx);
+        scroll.setFillViewport(true);
         scroll.addView(contentView);
         int resolvedContentHeight = bottomSheet
                 ? Math.min(contentHeight, ctx.getResources().getDisplayMetrics().heightPixels - dp(ctx, 96))

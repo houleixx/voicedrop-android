@@ -9,7 +9,6 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -24,8 +23,6 @@ import androidx.core.content.FileProvider;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BlockStore;
 import com.baixingai.voicedrop.data.CommunityTerms;
-import com.baixingai.voicedrop.data.DeviceLinkCrypto;
-import com.baixingai.voicedrop.data.DeviceLinkStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.Prefs;
@@ -47,13 +44,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SettingsActivity extends Activity {
+    public static final String EXTRA_SHOW_WECHAT = "showWechat";
+
     private AuthStore auth;
     private Prefs prefs;
     private HttpClient http;
     private LibraryStore library;
     private SettingsStore settingsStore;
     private UsageStore usageStore;
-    private DeviceLinkStore deviceLinkStore;
     private ExportManager exportManager;
     private BlockStore blockStore;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -67,7 +65,6 @@ public class SettingsActivity extends Activity {
         library = new LibraryStore(auth, http);
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
-        deviceLinkStore = new DeviceLinkStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
         blockStore = new BlockStore(this);
 
@@ -117,7 +114,6 @@ public class SettingsActivity extends Activity {
 
         addSection(content, "账户");
         addSettingRow(content, "匿名身份", auth.anonId(), () -> showTokenImport());
-        addSettingRow(content, "设备登录", "token 导入、X25519 加密迁移", this::showDeviceLogin);
         addSettingRow(content, "重置匿名身份", "会切到新的云端空间", () -> {
             auth.resetAnonymous();
             toast("已重置匿名身份");
@@ -132,9 +128,6 @@ public class SettingsActivity extends Activity {
         addSection(content, "同步与社区");
         addSettingRow(content, "自动分享到 VD社区", "CONFIG.json", () -> toggleAutoShare());
         addSettingRow(content, "社区公约", "举报、投诉、UGC 规则", () -> showTextDialog("社区公约", CommunityTerms.BODY));
-        addSettingRow(content, "系统权限", "麦克风、相机、通知", () ->
-                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName()))));
 
         // TODO: 恢复"本地" section
         // addSection(content, "本地");
@@ -150,6 +143,10 @@ public class SettingsActivity extends Activity {
         // addSection(content, "其他");
         // addSettingRow(content, "关于", "隐私、公约、屏蔽、联系", this::showAbout);
         // addSettingRow(content, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
+
+        if (getIntent().getBooleanExtra(EXTRA_SHOW_WECHAT, false)) {
+            root.post(this::showWechatSettings);
+        }
     }
 
     @Override
@@ -174,7 +171,6 @@ public class SettingsActivity extends Activity {
     private void rebuildSettings(LinearLayout content) {
         addSection(content, "账户");
         addSettingRow(content, "匿名身份", auth.anonId(), () -> showTokenImport());
-        addSettingRow(content, "设备登录", "token 导入、X25519 加密迁移", this::showDeviceLogin);
         addSettingRow(content, "重置匿名身份", "会切到新的云端空间", () -> {
             auth.resetAnonymous();
             toast("已重置匿名身份");
@@ -189,9 +185,6 @@ public class SettingsActivity extends Activity {
         addSection(content, "同步与社区");
         addSettingRow(content, "自动分享到 VD社区", "CONFIG.json", () -> toggleAutoShare());
         addSettingRow(content, "社区公约", "举报、投诉、UGC 规则", () -> showTextDialog("社区公约", CommunityTerms.BODY));
-        addSettingRow(content, "系统权限", "麦克风、相机、通知", () ->
-                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:" + getPackageName()))));
 
         addSection(content, "本地");
         addSettingRow(content, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
@@ -258,93 +251,17 @@ public class SettingsActivity extends Activity {
                 });
     }
 
-    private void showDeviceLogin() {
-        String[] items = {"自动登录已有账号", "导入 anon token", "生成本机接收公钥", "解密 sealed token", "给另一台设备加密当前账号"};
-        LinearLayout menu = new LinearLayout(this);
-        menu.setOrientation(LinearLayout.VERTICAL);
-        for (String item : items) {
-            TextView row = text(item, 17, Theme.INK, Typeface.NORMAL);
-            row.setPadding(dp(20), dp(16), dp(20), dp(16));
-            row.setGravity(Gravity.CENTER);
-            menu.addView(row);
-            final String action = item;
-            row.setOnClickListener(v -> {
-                if (action.equals("自动登录已有账号")) showAutomaticDeviceLink();
-                else if (action.equals("导入 anon token")) showTokenImport();
-                else if (action.equals("生成本机接收公钥")) showDeviceReceiverKey();
-                else if (action.equals("解密 sealed token")) showDecryptDeviceToken();
-                else if (action.equals("给另一台设备加密当前账号")) showEncryptDeviceToken();
-            });
-        }
-        IosDialog.show(this, "设备登录", menu, "关闭", () -> {});
-    }
-
-    private void showAutomaticDeviceLink() {
-        final android.widget.EditText prefix = field("输入旧设备显示的 6 位账号前缀");
-        prefix.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
-        IosDialog.show(this, "登录已有账号", prefix,
-                "下一步", () -> toast("正在发起设备配对…"));
-    }
-
-    private void showDeviceReceiverKey() {
-        DeviceLinkCrypto.Keypair keypair = DeviceLinkCrypto.newKeypair();
-        showTextDialog("本机接收公钥",
-                "publicKey:\n" + keypair.publicKeyB64
-                        + "\n\nprivateKey:\n" + keypair.privateKeyB64
-                        + "\n\n请保存 privateKey，用它解密另一台设备返回的 epk/sealed。");
-    }
-
-    private void showDecryptDeviceToken() {
-        LinearLayout form = form();
-        android.widget.EditText priv = field("privateKey");
-        android.widget.EditText epk = field("epk");
-        android.widget.EditText sealed = field("sealed");
-        form.addView(priv);
-        form.addView(epk);
-        form.addView(sealed);
-        IosDialog.show(this, "解密 sealed token", form,
-                "解密并登录", () -> {
-                    try {
-                        String token = DeviceLinkCrypto.decrypt(
-                                epk.getText().toString().trim(),
-                                sealed.getText().toString().trim(),
-                                priv.getText().toString().trim());
-                        if (auth.adoptToken(token)) {
-                            toast("已切换到迁移账号");
-                            finishWithPageTransition();
-                        } else {
-                            toast("解密成功，但 token 格式不对");
-                        }
-                    } catch (Exception e) {
-                        toast("解密失败：" + e.getMessage());
-                    }
-                });
-    }
-
-    private void showEncryptDeviceToken() {
-        final android.widget.EditText pub = field("新设备 publicKey");
-        IosDialog.show(this, "加密当前账号", pub,
-                "生成", () -> {
-                    try {
-                        DeviceLinkCrypto.Blob blob = DeviceLinkCrypto.encrypt(auth.bearer(), pub.getText().toString().trim());
-                        showTextDialog("迁移密文", "epk:\n" + blob.epkB64 + "\n\nsealed:\n" + blob.sealedB64);
-                    } catch (Exception e) {
-                        toast("加密失败：" + e.getMessage());
-                    }
-                });
-    }
-
     private void showWritingStyle() {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(18), dp(12), dp(18), dp(14));
+        form.setPadding(dp(18), dp(10), dp(18), dp(10));
 
         TextView hint = text("描述你希望文章呈现的口吻、节奏和结构。保存后会同步到云端文风配置。", 13, Theme.SECONDARY, Typeface.NORMAL);
         hint.setLineSpacing(dp(3), 1.0f);
         form.addView(hint, new LinearLayout.LayoutParams(-1, -2));
 
         final android.widget.EditText input = new android.widget.EditText(this);
-        input.setMinLines(10);
+        input.setMinLines(12);
         input.setGravity(Gravity.TOP);
         input.setTextSize(16);
         input.setTextColor(Theme.INK);
@@ -369,7 +286,7 @@ public class SettingsActivity extends Activity {
                     } catch (Exception e) {
                         toast("文风保存失败：" + e.getMessage());
                     }
-                }), null, null, true);
+                }), null, null, true, false);
     }
 
     private void showWechatSettings() {
@@ -449,6 +366,12 @@ public class SettingsActivity extends Activity {
         noteLp.setMargins(0, dp(2), 0, dp(6));
         sheet.addView(note, noteLp);
 
+        TextView error = text("", 13, 0xffc66a35, Typeface.NORMAL);
+        error.setVisibility(View.GONE);
+        LinearLayout.LayoutParams errorLp = new LinearLayout.LayoutParams(-1, -2);
+        errorLp.setMargins(0, 0, 0, dp(8));
+        sheet.addView(error, errorLp);
+
         TextView help = text("⊘ 去哪里找 AppID / AppSecret?  ↗", 15, 0xffd8614c, Typeface.BOLD);
         help.setOnClickListener(v -> {
             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://mp.weixin.qq.com/"));
@@ -503,16 +426,26 @@ public class SettingsActivity extends Activity {
         save.setBackground(round(0xffeba092, 10));
         LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(-1, dp(56));
         sheet.addView(save, saveLp);
+        final boolean[] savingWechat = {false};
+        final boolean[] savedWechat = {false};
+        Runnable clearSaveMessage = () -> {
+            savedWechat[0] = false;
+            error.setVisibility(View.GONE);
+            error.setText("");
+        };
         Runnable updateSaveState = () -> {
             boolean canSave = appid.getText().toString().trim().length() > 0
-                    && secret.getText().toString().trim().length() > 0;
+                    && secret.getText().toString().trim().length() > 0
+                    && !savingWechat[0];
             save.setEnabled(canSave);
-            save.setTextColor(canSave ? android.graphics.Color.WHITE : 0x55ffffff);
-            save.setBackground(round(canSave ? 0xffdf5d49 : 0xffeba092, 10));
+            save.setText(savingWechat[0] ? "保存中…" : (savedWechat[0] ? "已保存" : "保存"));
+            save.setTextColor(canSave || savingWechat[0] || savedWechat[0] ? android.graphics.Color.WHITE : 0x55ffffff);
+            save.setBackground(round(canSave || savingWechat[0] || savedWechat[0] ? 0xffdf5d49 : 0xffeba092, 10));
         };
         android.text.TextWatcher saveWatcher = new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                clearSaveMessage.run();
                 updateSaveState.run();
             }
             @Override public void afterTextChanged(android.text.Editable s) {}
@@ -531,24 +464,46 @@ public class SettingsActivity extends Activity {
                 });
             } catch (Exception ignored) {}
         });
-        save.setOnClickListener(v -> io.execute(() -> {
+        save.setOnClickListener(v -> {
+            String cleanAppid = appid.getText().toString().trim();
+            String cleanSecret = secret.getText().toString().trim();
+            boolean enabled = autoDraft.isChecked();
+            savingWechat[0] = true;
+            savedWechat[0] = false;
+            error.setVisibility(View.GONE);
+            error.setText("");
+            updateSaveState.run();
+            io.execute(() -> {
             try {
-                String validation = settingsStore.validateWechatCreds(appid.getText().toString(), secret.getText().toString());
+                String validation = settingsStore.validateWechatCreds(cleanAppid, cleanSecret);
                 if (validation != null) {
-                    toast(validation);
+                    runOnUiThread(() -> {
+                        savingWechat[0] = false;
+                        error.setText(validation);
+                        error.setVisibility(View.VISIBLE);
+                        updateSaveState.run();
+                    });
                     return;
                 }
-                settingsStore.saveWechat(appid.getText().toString(), secret.getText().toString(), autoDraft.isChecked());
-                toast("公众号配置已保存");
+                settingsStore.saveWechat(cleanAppid, cleanSecret, enabled);
                 runOnUiThread(() -> {
-                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                    savingWechat[0] = false;
+                    savedWechat[0] = true;
+                    updateSaveState.run();
+                    toast("公众号配置已保存");
                 });
             } catch (Exception e) {
-                toast("公众号配置失败：" + e.getMessage());
+                runOnUiThread(() -> {
+                    savingWechat[0] = false;
+                    error.setText("公众号配置失败：" + e.getMessage());
+                    error.setVisibility(View.VISIBLE);
+                    updateSaveState.run();
+                });
             }
-        }));
+            });
+        });
 
-        dialogRef[0] = IosDialog.showBottomSheet(this, null, sheet, 720, null, null, null, null);
+        dialogRef[0] = IosDialog.showBottomSheet(this, null, sheet, 720, null, null, null, null, false);
     }
 
     private void showUsage() {

@@ -113,9 +113,80 @@ public final class LibraryStore {
         return url.isEmpty() ? null : url + "?s=" + section;
     }
 
-    public boolean publishWechat(Recording rec) throws Exception {
+    public PublishResult publishWechat(Recording rec) throws Exception {
         HttpClient.Response response = http.postJson(Api.filesBase() + "/wechat/" + Api.path(rec.articleKey()), auth.bearer(), new byte[0]);
-        return response.ok();
+        if (response.code == 409) return PublishResult.notConfigured();
+        if (response.ok()) return PublishResult.ok(response.text());
+        JSONObject error = parseObject(response.text());
+        return PublishResult.failed(
+                wechatMessage(error.has("errcode") ? error.optInt("errcode") : null, error.optString("errmsg", null)),
+                error.has("errcode") ? error.optInt("errcode") : null);
+    }
+
+    public static String wechatMessage(Integer errcode, String errmsg) {
+        if (errcode == null && (errmsg == null || errmsg.isEmpty())) return null;
+        if (errcode != null) {
+            switch (errcode) {
+                case 45004:
+                    return "摘要太短，正文写长一点再发";
+                case 40007:
+                    return "草稿已失效，已重建一份";
+                case 45009:
+                case 45011:
+                case 45110:
+                    return "今天发布次数到上限了，明天再试";
+                case 40164:
+                case 40125:
+                case 40013:
+                    return "公众号配置有误，检查 AppID/Secret 或 IP 白名单";
+                default:
+                    break;
+            }
+        }
+        return errmsg == null || errmsg.isEmpty() ? "发布失败" : "发布失败：" + errmsg;
+    }
+
+    private static JSONObject parseObject(String text) {
+        try {
+            return text == null || text.isEmpty() ? new JSONObject() : new JSONObject(text);
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    public static final class PublishResult {
+        public final boolean ok;
+        public final boolean notConfigured;
+        public final int created;
+        public final int updated;
+        public final Integer errcode;
+        public final String message;
+
+        private PublishResult(boolean ok, boolean notConfigured, int created, int updated, Integer errcode, String message) {
+            this.ok = ok;
+            this.notConfigured = notConfigured;
+            this.created = created;
+            this.updated = updated;
+            this.errcode = errcode;
+            this.message = message;
+        }
+
+        public static PublishResult ok(String json) {
+            JSONObject obj = parseObject(json);
+            return new PublishResult(true, false, obj.optInt("created", 0), obj.optInt("updated", 0), null, null);
+        }
+
+        public static PublishResult notConfigured() {
+            return new PublishResult(false, true, 0, 0, null, "请先配置公众号");
+        }
+
+        public static PublishResult failed(String message, Integer errcode) {
+            return new PublishResult(false, false, 0, 0, errcode, message);
+        }
+
+        public boolean isConfigError() {
+            return notConfigured || (errcode != null && (errcode == 40164 || errcode == 40125 || errcode == 40013));
+        }
     }
 
     public boolean deleteArticle(Recording rec) {

@@ -31,6 +31,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
@@ -143,6 +144,7 @@ public final class CommunityDetailActivity extends Activity {
     protected TextView holdEditTranscriptText;
     protected boolean articleLocatorsVisible;
     protected final List<View> articleLocatorViews = new ArrayList<>();
+    protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
     protected ZonedDateTime recordingStart;
     protected Recording insertPhotoTarget;
     protected FrameLayout root;
@@ -1317,10 +1319,12 @@ public final class CommunityDetailActivity extends Activity {
                 imageNo[0]++;
                 FrameLayout photo = new FrameLayout(this);
                 photo.setBackground(round(0xfff1e7db, 10));
-                TextView loading = text("图片 · " + (key == null ? segment.value : key), 13, Theme.SECONDARY, Typeface.NORMAL);
-                loading.setGravity(Gravity.CENTER);
-                loading.setTag("photo_loading");
-                photo.addView(loading, match());
+                if (key != null) {
+                    ProgressBar spinner = new ProgressBar(this);
+                    spinner.setIndeterminate(true);
+                    spinner.setTag("photo_loading");
+                    photo.addView(spinner, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+                }
                 TextView line = articleLocator(String.valueOf(lineNo[0]));
                 FrameLayout.LayoutParams lineLp = new FrameLayout.LayoutParams(dp(20), -2, Gravity.LEFT | Gravity.TOP);
                 lineLp.setMargins(-dp(24), dp(11), 0, 0);
@@ -1401,6 +1405,11 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void loadPhotoInto(FrameLayout frame, String relKey) {
+        Bitmap cached = articlePhotoCache.get(relKey);
+        if (cached != null) {
+            showLoadedPhoto(frame, cached);
+            return;
+        }
         io.execute(() -> {
             try {
                 String scope = library.ownerScope();
@@ -1409,22 +1418,25 @@ public final class CommunityDetailActivity extends Activity {
                 if (data == null) return;
                 Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
                 if (bitmap == null) return;
-                main.post(() -> {
-                    for (int i = frame.getChildCount() - 1; i >= 0; i--) {
-                        View child = frame.getChildAt(i);
-                        Object tag = child.getTag();
-                        if ("photo_loading".equals(tag)) {
-                            frame.removeViewAt(i);
-                        }
-                    }
-                    ImageView image = new ImageView(this);
-                    image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    image.setImageBitmap(bitmap);
-                    frame.addView(image, 0, match());
-                });
+                articlePhotoCache.put(relKey, bitmap);
+                main.post(() -> showLoadedPhoto(frame, bitmap));
             } catch (Exception ignored) {
             }
         });
+    }
+
+    protected void showLoadedPhoto(FrameLayout frame, Bitmap bitmap) {
+        for (int i = frame.getChildCount() - 1; i >= 0; i--) {
+            View child = frame.getChildAt(i);
+            Object tag = child.getTag();
+            if ("photo_loading".equals(tag)) {
+                frame.removeViewAt(i);
+            }
+        }
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setImageBitmap(bitmap);
+        frame.addView(image, 0, match());
     }
 
 }

@@ -34,7 +34,7 @@ public final class UsageStore {
         if (arr != null) {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject e = arr.getJSONObject(i);
-                out.add(new Entry(e.optInt("ts"), e.optString("kind"), e.optString("reason"),
+                out.add(new Entry(e.optLong("ts"), e.optString("kind"), e.optString("reason"),
                         e.optDouble("suanli"), e.optDouble("balance_suanli")));
             }
         }
@@ -55,12 +55,12 @@ public final class UsageStore {
     }
 
     public static final class Entry {
-        public final int ts;
+        public final long ts;
         public final String kind;
         public final String reason;
         public final double suanli;
         public final double balanceSuanli;
-        Entry(int ts, String kind, String reason, double suanli, double balanceSuanli) {
+        Entry(long ts, String kind, String reason, double suanli, double balanceSuanli) {
             this.ts = ts;
             this.kind = kind;
             this.reason = reason;

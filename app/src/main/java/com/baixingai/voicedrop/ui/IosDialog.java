@@ -2,7 +2,6 @@ package com.baixingai.voicedrop.ui;
 
 import android.app.Dialog;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -21,9 +20,16 @@ import android.widget.TextView;
  * iOS-style alert dialog: rounded card, centered, with styled buttons.
  */
 public final class IosDialog extends Dialog {
+    private static final int SCRIM_COLOR = 0x66000000;
 
     public IosDialog(Context context) {
         super(context, android.R.style.Theme_Translucent_NoTitleBar);
+    }
+
+    @Override
+    public void show() {
+        super.show();
+        applyFullscreenWindow();
     }
 
     /** Simple message dialog */
@@ -57,7 +63,7 @@ public final class IosDialog extends Dialog {
                             String neutralText, Runnable onNeutral) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, 200), positiveText, onPositive,
-                neutralText, onNeutral, false, false, true);
+                neutralText, onNeutral, false, false, true, true);
         dialog.show();
     }
 
@@ -93,7 +99,7 @@ public final class IosDialog extends Dialog {
                                             boolean dismissOnOutside) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp), positiveText, onPositive,
-                neutralText, onNeutral, showCloseButton, true, dismissOnOutside);
+                neutralText, onNeutral, showCloseButton, true, dismissOnOutside, true);
         dialog.show();
         return dialog;
     }
@@ -107,8 +113,29 @@ public final class IosDialog extends Dialog {
                             String positiveText, Runnable onPositive, boolean showCloseButton) {
         IosDialog dialog = new IosDialog(ctx);
         dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp),
-                positiveText, onPositive, null, null, showCloseButton, false, true);
+                positiveText, onPositive, null, null, showCloseButton, false, true, true);
         dialog.show();
+    }
+
+    public static IosDialog showProgress(Context ctx, String title, View customView, int contentHeightDp) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.setCancelable(false);
+        dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp),
+                null, null, null, null, true, false, false, true);
+        dialog.show();
+        return dialog;
+    }
+
+    public static IosDialog showProgressActions(Context ctx, String title, View customView,
+                                                int contentHeightDp,
+                                                String negativeText, Runnable onNegative,
+                                                String positiveText, Runnable onPositive) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.setCancelable(false);
+        dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp),
+                positiveText, onPositive, negativeText, onNegative, false, false, false, false);
+        dialog.show();
+        return dialog;
     }
 
     private void build(Context ctx, String title, String message,
@@ -121,7 +148,7 @@ public final class IosDialog extends Dialog {
         messageView.setLineSpacing(dp(ctx, 4), 1.0f);
         messageView.setPadding(dp(ctx, 20), dp(ctx, 14), dp(ctx, 20), dp(ctx, 18));
         buildWithView(ctx, title, messageView, dp(ctx, 200), positiveText, onPositive,
-                neutralText, onNeutral, false, false, true);
+                neutralText, onNeutral, false, false, true, true);
     }
 
     private void buildWithView(Context ctx, String title, View contentView,
@@ -130,7 +157,8 @@ public final class IosDialog extends Dialog {
                                String neutralText, Runnable onNeutral,
                                boolean showCloseButton,
                                boolean bottomSheet,
-                               boolean dismissOnOutside) {
+                               boolean dismissOnOutside,
+                               boolean includeDefaultCancelButton) {
         Window window = getWindow();
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
@@ -140,31 +168,25 @@ public final class IosDialog extends Dialog {
                         | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
                 window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
             }
-            window.setStatusBarColor(Color.TRANSPARENT);
-            window.setNavigationBarColor(Color.TRANSPARENT);
+            window.setStatusBarColor(SCRIM_COLOR);
+            window.setNavigationBarColor(bottomSheet ? Theme.CARD : SCRIM_COLOR);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                window.setDecorFitsSystemWindows(false);
+                window.setDecorFitsSystemWindows(true);
                 window.setStatusBarContrastEnforced(false);
                 window.setNavigationBarContrastEnforced(false);
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 window.setStatusBarContrastEnforced(false);
                 window.setNavigationBarContrastEnforced(false);
             }
-            int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+            int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (bottomSheet && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             }
             window.getDecorView().setSystemUiVisibility(flags);
-            WindowManager.LayoutParams lp = window.getAttributes();
-            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
-            lp.height = WindowManager.LayoutParams.MATCH_PARENT;
-            lp.dimAmount = 0f;
-            window.setAttributes(lp);
+            applyFullscreenWindow();
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                     | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED);
         }
@@ -179,7 +201,7 @@ public final class IosDialog extends Dialog {
         } else {
             root.setPadding(rootHorizontalPadding, rootTopPadding, rootHorizontalPadding, dp(ctx, 40));
         }
-        root.setBackgroundColor(0x66000000);
+        root.setBackgroundColor(SCRIM_COLOR);
         if (dismissOnOutside) {
             root.setOnClickListener(v -> dismiss());
         }
@@ -195,7 +217,7 @@ public final class IosDialog extends Dialog {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(bottomSheet ? bottomSheetCard(ctx) : roundCard(ctx));
-        card.setPadding(0, 0, 0, bottomSheet ? dp(ctx, 20) + navigationBarHeight(ctx) : 0);
+        card.setPadding(0, 0, 0, bottomSheet ? dp(ctx, 20) : 0);
         card.setClickable(true);
         if (bottomSheet) {
             card.setTranslationY(ctx.getResources().getDisplayMetrics().heightPixels);
@@ -262,17 +284,20 @@ public final class IosDialog extends Dialog {
                 dismiss();
                 if (onNeutral != null) onNeutral.run();
             }), new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
-            // Divider
+
             View midDiv = new View(ctx);
             midDiv.setBackgroundColor(0x1a000000);
             btnRow.addView(midDiv, new LinearLayout.LayoutParams(dp(ctx, 1), -1));
-            // Cancel button (middle)
-            btnRow.addView(makeButton(ctx, "取消", Theme.RED, v -> dismiss()),
-                    new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
-            // Divider
-            View midDiv2 = new View(ctx);
-            midDiv2.setBackgroundColor(0x1a000000);
-            btnRow.addView(midDiv2, new LinearLayout.LayoutParams(dp(ctx, 1), -1));
+
+            if (includeDefaultCancelButton) {
+                // Cancel button (middle)
+                btnRow.addView(makeButton(ctx, "取消", Theme.RED, v -> dismiss()),
+                        new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
+                // Divider
+                View midDiv2 = new View(ctx);
+                midDiv2.setBackgroundColor(0x1a000000);
+                btnRow.addView(midDiv2, new LinearLayout.LayoutParams(dp(ctx, 1), -1));
+            }
             // Positive button (right)
             btnRow.addView(makeButton(ctx, positiveText, Theme.RED, v -> {
                 dismiss();
@@ -291,7 +316,9 @@ public final class IosDialog extends Dialog {
                 ? ViewGroup.LayoutParams.MATCH_PARENT
                 : (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.82);
         root.addView(card, new LinearLayout.LayoutParams(cardWidth, -2));
-        setContentView(root);
+        setContentView(root, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         if (bottomSheet) {
             card.post(() -> {
@@ -339,8 +366,13 @@ public final class IosDialog extends Dialog {
         return Math.round(value * ctx.getResources().getDisplayMetrics().density);
     }
 
-    private static int navigationBarHeight(Context ctx) {
-        int id = ctx.getResources().getIdentifier("navigation_bar_height", "dimen", "android");
-        return id > 0 ? ctx.getResources().getDimensionPixelSize(id) : 0;
+    private void applyFullscreenWindow() {
+        Window window = getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams lp = window.getAttributes();
+        lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+        lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+        lp.dimAmount = 0f;
+        window.setAttributes(lp);
     }
 }

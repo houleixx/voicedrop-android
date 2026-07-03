@@ -23,4 +23,10 @@ public class WechatPublishResultTest {
         assertTrue(LibraryStore.PublishResult.failed("bad config", 40013).isConfigError());
         assertFalse(LibraryStore.PublishResult.failed("too often", 45009).isConfigError());
     }
+
+    @Test
+    public void recordingDeleteOnlyRequiresAudioDeletionLikeIos() {
+        assertTrue(LibraryStore.recordingDeleteSucceeded(true, false, false, false));
+        assertFalse(LibraryStore.recordingDeleteSucceeded(false, true, true, true));
+    }
 }

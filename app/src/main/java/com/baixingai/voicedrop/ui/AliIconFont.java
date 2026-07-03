@@ -13,6 +13,7 @@ public final class AliIconFont {
     public static final int HEART = R.drawable.ic_heart;
     public static final int HEART_FILLED = R.drawable.ic_heart_filled;
     public static final int IMAGE = R.drawable.ic_image;
+    public static final int IMAGE_UPLOAD_FLAT = R.drawable.ic_image_upload_flat;
     public static final int MIC = R.drawable.ic_mic;
     public static final int MORE = R.drawable.ic_more;
     public static final int PAPERPLANE = R.drawable.ic_paperplane;

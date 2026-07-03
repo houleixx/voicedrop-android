@@ -2,6 +2,7 @@ package com.baixingai.voicedrop;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -21,6 +22,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -31,6 +33,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
@@ -67,7 +70,10 @@ import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.PullRefreshLayout;
+import com.baixingai.voicedrop.ui.SoftCircleShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.update.AppUpdateManager;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -85,22 +91,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.baixingai.voicedrop.audio.AudioRecorder;
-import com.baixingai.voicedrop.audio.RecordingQuality;
-import com.baixingai.voicedrop.data.Recording;
-import com.kongzue.dialogx.dialogs.MessageDialog;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import com.baixingai.voicedrop.ui.AliIconFont;
-import com.baixingai.voicedrop.ui.IosDialog;
-import com.baixingai.voicedrop.ui.Theme;
-import com.baixingai.voicedrop.core.RecordingName;
-import com.baixingai.voicedrop.net.HttpClient;
 
 public final class RecordingsActivity extends Activity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
@@ -343,9 +333,24 @@ public final class RecordingsActivity extends Activity {
     }
     protected void renderCommunityList(LinearLayout list) {
         if (communityLoading && posts.isEmpty()) {
+            LinearLayout loadingLayout = new LinearLayout(this);
+            loadingLayout.setOrientation(LinearLayout.VERTICAL);
+            loadingLayout.setGravity(Gravity.CENTER);
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminate(true);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                spinner.setIndeterminateTintList(
+                        android.content.res.ColorStateList.valueOf(Theme.RED));
+            } else {
+                spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
+                        android.graphics.PorterDuff.Mode.SRC_IN);
+            }
+            loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
             TextView empty = text("正在加载 VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
-            list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
+            empty.setPadding(0, dp(14), 0, 0);
+            loadingLayout.addView(empty);
+            list.addView(loadingLayout, new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (posts.isEmpty()) {
             TextView empty = text("社区暂无文章", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
@@ -836,6 +841,7 @@ public final class RecordingsActivity extends Activity {
         showHome();
         refreshAndDrain();
         statusSession.connect();
+        root.postDelayed(() -> AppUpdateManager.checkOnStartup(this), 1200);
     }
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -884,6 +890,40 @@ public final class RecordingsActivity extends Activity {
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
+        });
+    }
+
+    protected void refreshRecordingsFromPull(PullRefreshLayout refresher) {
+        recordingsLoadAttempted = true;
+        closeOpenSwipes();
+        io.execute(() -> {
+            uploader.drainPending();
+            try {
+                recordings = library.load(uploader.pendingNames());
+            } catch (Exception e) {
+                toast("加载失败：" + e.getMessage());
+            }
+            main.post(() -> {
+                refresher.setRefreshing(false);
+                refreshHomePages();
+            });
+        });
+    }
+
+    protected void refreshCommunityFromPull(PullRefreshLayout refresher) {
+        communityLoadAttempted = true;
+        io.execute(() -> {
+            uploader.drainPending();
+            try {
+                posts = loadRankedCommunityPosts();
+            } catch (Exception e) {
+                toast("加载失败：" + e.getMessage());
+            }
+            communityLoading = false;
+            main.post(() -> {
+                refresher.setRefreshing(false);
+                refreshHomePages();
+            });
         });
     }
     protected void showHome() {
@@ -956,7 +996,7 @@ public final class RecordingsActivity extends Activity {
         spacer.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(10)));
         page.addView(spacer);
 
-        homePager = new ViewPager(this);
+        homePager = new LockedViewPager(this);
         homePager.setId(View.generateViewId());
         homePager.setOffscreenPageLimit(2);
         homePagerAdapter = new HomePagerAdapter();
@@ -1002,6 +1042,7 @@ public final class RecordingsActivity extends Activity {
     protected View buildRecordingsTabPage() {
         FrameLayout contentArea = new FrameLayout(this);
 
+        PullRefreshLayout refresher = pullRefreshContainer();
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -1009,12 +1050,29 @@ public final class RecordingsActivity extends Activity {
         scroll.addView(list);
         scroll.setPadding(0, 0, 0, dp(130));
         scroll.setClipToPadding(false);
-        contentArea.addView(scroll, match());
+        refresher.addView(scroll, match());
+        refresher.setOnRefreshListener(() -> refreshRecordingsFromPull(refresher));
+        contentArea.addView(refresher, match());
 
         if (loading && recordings.isEmpty() && !communityTab) {
+            LinearLayout loadingLayout = new LinearLayout(this);
+            loadingLayout.setOrientation(LinearLayout.VERTICAL);
+            loadingLayout.setGravity(Gravity.CENTER);
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminate(true);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                spinner.setIndeterminateTintList(
+                        android.content.res.ColorStateList.valueOf(Theme.RED));
+            } else {
+                spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
+                        android.graphics.PorterDuff.Mode.SRC_IN);
+            }
+            loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
             TextView empty = text("正在加载…", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
-            list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
+            empty.setPadding(0, dp(14), 0, 0);
+            loadingLayout.addView(empty);
+            list.addView(loadingLayout, new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (recordings.isEmpty()) {
             TextView empty = text("轻点下方按钮开始第一条录音", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
@@ -1028,13 +1086,23 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected View buildCommunityTabPage() {
+        PullRefreshLayout refresher = pullRefreshContainer();
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(14), dp(6), dp(14), dp(16));
         scroll.addView(list);
+        refresher.addView(scroll, match());
+        refresher.setOnRefreshListener(() -> refreshCommunityFromPull(refresher));
         renderCommunityList(list);
-        return scroll;
+        return refresher;
+    }
+
+    protected PullRefreshLayout pullRefreshContainer() {
+        PullRefreshLayout refresher = new PullRefreshLayout(this);
+        refresher.setColorSchemeColors(Theme.RED);
+        refresher.setProgressBackgroundColorSchemeColor(Theme.CARD);
+        return refresher;
     }
 
     protected void addRecordFab(FrameLayout contentArea) {
@@ -1046,23 +1114,26 @@ public final class RecordingsActivity extends Activity {
         fabColLp.bottomMargin = dp(22);
         contentArea.addView(fabCol, fabColLp);
 
-        TextView fab = new TextView(this);
-        fab.setGravity(Gravity.CENTER);
-        fab.setElevation(dp(6));
+        FrameLayout fabRing = new SoftCircleShadowFrameLayout(this);
+
+        FrameLayout fab = new FrameLayout(this);
         GradientDrawable fabBg = new GradientDrawable();
         fabBg.setColor(Theme.RED);
-        fabBg.setCornerRadius(dp(36));
-        fabBg.setStroke(dp(5), 0xffffffff);
+        fabBg.setCornerRadius(dp(34));
         fab.setBackground(fabBg);
-        fab.setPadding(0, dp(8), 0, 0);
-        fabCol.addView(fab, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        ImageView micIcon = new ImageView(this);
+        AliIconFont.apply(micIcon, AliIconFont.MIC, 0xffffffff);
+        micIcon.setScaleType(ImageView.ScaleType.CENTER);
+        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
+        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
+        fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(92), dp(92)));
 
         TextView label = text("轻点录音", 12, Theme.SECONDARY, Typeface.NORMAL);
         label.setLetterSpacing(0.08f);
         label.setPadding(0, dp(8), 0, 0);
         label.setGravity(Gravity.CENTER);
         fabCol.addView(label);
-        fab.setOnClickListener(v -> startRecordingFlow());
+        fabRing.setOnClickListener(v -> startRecordingFlow());
     }
 
     protected View communityRow(CommunityStore.Post post) {
@@ -1088,8 +1159,11 @@ public final class RecordingsActivity extends Activity {
         meta.setOrientation(LinearLayout.VERTICAL);
         meta.setPadding(dp(14), 0, dp(8), 0);
         row.addView(meta, new LinearLayout.LayoutParams(0, -2, 1));
-        meta.addView(text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
-                16, Theme.INK, Typeface.BOLD));
+        TextView title = text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
+                16, Theme.INK, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        meta.addView(title);
         String dateStr = formatCommunityDate(post.firstSharedAt);
         TextView sub = text((post.author == null || post.author.isEmpty() ? "匿名作者" : post.author)
                 + (dateStr.isEmpty() ? "" : " · " + dateStr), 13, Theme.FAINT, Typeface.NORMAL);
@@ -1123,6 +1197,24 @@ public final class RecordingsActivity extends Activity {
 
         @Override public int getItemPosition(Object object) {
             return POSITION_NONE;
+        }
+    }
+
+    protected static final class LockedViewPager extends ViewPager {
+        public LockedViewPager(Context context) {
+            super(context);
+        }
+
+        public LockedViewPager(Context context, AttributeSet attrs) {
+            super(context, attrs);
+        }
+
+        @Override public boolean onInterceptTouchEvent(MotionEvent ev) {
+            return false;
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent ev) {
+            return false;
         }
     }
 
@@ -1176,7 +1268,10 @@ public final class RecordingsActivity extends Activity {
         meta.setOrientation(LinearLayout.VERTICAL);
         meta.setPadding(dp(14), 0, dp(8), 0);
         row.addView(meta, new LinearLayout.LayoutParams(0, -2, 1));
-        meta.addView(text(rec.rowTitle(), 16, Theme.INK, Typeface.BOLD));
+        TextView title = text(rec.rowTitle(), 16, Theme.INK, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        meta.addView(title);
 
         LinearLayout sub = new LinearLayout(this);
         sub.setOrientation(LinearLayout.HORIZONTAL);
@@ -1194,7 +1289,7 @@ public final class RecordingsActivity extends Activity {
 
         if (rec.hasArticles) {
             chip.setOnLongClickListener(v -> {
-                IosDialog.show(this, "重新生成文章？", "会用相同的文风重新挖这篇文章，原文不变。",
+                IosDialog.show(this, "重新生成文章？", "会用相同的写作风格重新挖这篇文章，原文不变。",
                         "重新生成", () -> io.execute(() -> {
                             try {
                                 boolean ok = library.restyle(rec, -1);
@@ -1331,14 +1426,13 @@ public final class RecordingsActivity extends Activity {
         stopBg.setColor(Theme.CARD);
         stopBg.setCornerRadius(dp(33));
         stopBg.setStroke(dp(1), 0xffe8dece);
-        FrameLayout stopBtn = new FrameLayout(this);
+        FrameLayout stopBtn = new SoftCircleShadowFrameLayout(this);
         stopBtn.setBackground(stopBg);
-        stopBtn.setElevation(dp(7));
         View stopIcon = new View(this);
         stopIcon.setBackground(round(Theme.RED, 6));
         FrameLayout.LayoutParams iconLp = new FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER);
         stopBtn.addView(stopIcon, iconLp);
-        LinearLayout.LayoutParams stopBtnLp = new LinearLayout.LayoutParams(dp(66), dp(66));
+        LinearLayout.LayoutParams stopBtnLp = new LinearLayout.LayoutParams(dp(82), dp(82));
         stopBtnLp.gravity = Gravity.CENTER_HORIZONTAL;
         stopCol.addView(stopBtn, stopBtnLp);
 
@@ -1613,26 +1707,26 @@ public final class RecordingsActivity extends Activity {
             fabColLp.bottomMargin = dp(22);
             contentArea.addView(fabCol, fabColLp);
 
-            TextView fab = new TextView(RecordingsActivity.this);
-            fab.setText("");
-            fab.setTextSize(30);
-            fab.setTextColor(0xffffffff);
-            fab.setGravity(Gravity.CENTER);
-            fab.setElevation(dp(6));
-            GradientDrawable fabBg = new GradientDrawable();
-            fabBg.setColor(Theme.RED);
-            fabBg.setCornerRadius(dp(36));
-            fabBg.setStroke(dp(5), 0xffffffff);
-            fab.setBackground(fabBg);
-            fab.setPadding(0, dp(8), 0, 0);
-            fab.setLayoutParams(new LinearLayout.LayoutParams(dp(72), dp(72)));
-            fabCol.addView(fab);
+        FrameLayout fabRing = new SoftCircleShadowFrameLayout(RecordingsActivity.this);
+
+        FrameLayout fab = new FrameLayout(RecordingsActivity.this);
+        GradientDrawable fabBg = new GradientDrawable();
+        fabBg.setColor(Theme.RED);
+        fabBg.setCornerRadius(dp(34));
+        fab.setBackground(fabBg);
+        ImageView micIcon = new ImageView(RecordingsActivity.this);
+        AliIconFont.apply(micIcon, AliIconFont.MIC, 0xffffffff);
+        micIcon.setScaleType(ImageView.ScaleType.CENTER);
+        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER));
+        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(68), dp(68), Gravity.CENTER));
+        fabRing.setLayoutParams(new LinearLayout.LayoutParams(dp(92), dp(92)));
+        fabCol.addView(fabRing);
 
             TextView label = text("按住说话", 13, Theme.SECONDARY, Typeface.NORMAL);
             label.setGravity(Gravity.CENTER);
             label.setPadding(0, dp(8), 0, 0);
             fabCol.addView(label);
-            fab.setOnClickListener(v -> startRecordingFlow());
+            fabRing.setOnClickListener(v -> startRecordingFlow());
         });
 
         // Handle the stopped recording — do NOT defer, upload immediately

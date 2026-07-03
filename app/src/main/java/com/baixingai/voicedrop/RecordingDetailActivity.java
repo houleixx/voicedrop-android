@@ -31,6 +31,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
@@ -42,6 +43,7 @@ import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.ArticleSharePayload;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -62,9 +64,12 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.ArticleVersionNavigation;
+import com.baixingai.voicedrop.ui.AudioPlaybackState;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.PlaybackProgressButton;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.Theme;
 import com.kongzue.dialogx.dialogs.MessageDialog;
@@ -146,6 +151,9 @@ public final class RecordingDetailActivity extends Activity {
     protected ArticleEditSession editSession;
     protected AsrDictationSession dictationSession;
     protected MediaPlayer mediaPlayer;
+    protected final AudioPlaybackState playbackState = new AudioPlaybackState();
+    protected PlaybackProgressButton playbackButton;
+    protected final Runnable playbackProgressTick = this::updatePlaybackProgress;
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
     protected Recording deferredArticleRenderRecording;
@@ -155,12 +163,22 @@ public final class RecordingDetailActivity extends Activity {
     protected boolean editReplyOk = true;
     protected boolean holdEditCanceled;
     protected boolean holdEditFinishing;
+    protected Boolean sharedToCommunity;
+    protected String communityShareId;
     protected View holdEditButton;
     protected ImageView holdEditMicIcon;
     protected View holdEditTranscriptBubble;
     protected TextView holdEditTranscriptText;
     protected boolean articleLocatorsVisible;
     protected final List<View> articleLocatorViews = new ArrayList<>();
+    protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
+    protected FrameLayout articleUndoButton;
+    protected FrameLayout articleRedoButton;
+    protected ImageView articleUndoIcon;
+    protected ImageView articleRedoIcon;
+    protected int articleHistoryHead = -1;
+    protected int articleHistoryCount = 0;
+    protected JSONArray articleHistoryVersions = new JSONArray();
     protected ZonedDateTime recordingStart;
     protected Recording insertPhotoTarget;
     protected FrameLayout root;
@@ -774,6 +792,10 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showArticle(Recording rec, ArticleDoc doc, boolean animateOpen) {
+        showArticle(rec, doc, animateOpen, true);
+    }
+
+    protected void showArticle(Recording rec, ArticleDoc doc, boolean animateOpen, boolean refreshHistory) {
         if (doc == null || doc.articles.isEmpty()) {
             toast("文章暂不可读");
             return;
@@ -790,6 +812,7 @@ public final class RecordingDetailActivity extends Activity {
         currentArticleStem = rec.stem();
         currentArticleDoc = doc;
         ensureArticleEditSession(rec);
+        refreshCommunityShareState(rec);
 
         FrameLayout articleFrame = new FrameLayout(this);
         articleFrame.setBackgroundColor(Theme.BG);
@@ -806,52 +829,19 @@ public final class RecordingDetailActivity extends Activity {
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
 
-        TextView title = text("录音详情", 20, Theme.INK, Typeface.BOLD);
-        title.setSingleLine(true);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        bar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Space titleSpacer = new Space(this);
+        bar.addView(titleSpacer, new LinearLayout.LayoutParams(0, 1, 1));
 
         LinearLayout iconRow = new LinearLayout(this);
         iconRow.setOrientation(LinearLayout.HORIZONTAL);
         iconRow.setGravity(Gravity.CENTER_VERTICAL);
         bar.addView(iconRow, new LinearLayout.LayoutParams(-2, dp(48)));
 
-        toolbarIconButton(iconRow, Theme.RED, 17, AliIconFont.PLAY, 0xffffffff, dp(15), dp(34), dp(2), true, () -> playRecordingAudio(rec));
-        toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.IMAGE, Theme.INK, dp(22), dp(40), dp(2), true, () -> pickArticlePhoto(rec));
+        addPlaybackButton(iconRow, rec);
+        toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.IMAGE_UPLOAD_FLAT, Theme.INK, dp(25), dp(40), dp(2), true, () -> pickArticlePhoto(rec));
 
-        FrameLayout undoTouch = new FrameLayout(this);
-        undoTouch.setClickable(true);
-        FrameLayout undoRedoBtn = new FrameLayout(this);
-        undoRedoBtn.setBackground(cardBg());
-        undoRedoBtn.setElevation(dp(2));
-
-        LinearLayout undoRedoInner = new LinearLayout(this);
-        undoRedoInner.setOrientation(LinearLayout.HORIZONTAL);
-        undoRedoInner.setGravity(Gravity.CENTER);
-        undoRedoInner.setPadding(dp(10), 0, dp(10), 0);
-        undoRedoBtn.addView(undoRedoInner, new FrameLayout.LayoutParams(-2, dp(40), Gravity.CENTER));
-
-        ImageView undoIcon = iconImageView(AliIconFont.UNDO, dp(17));
-        undoRedoInner.addView(undoIcon);
-
-        View vDivider = new View(this);
-        vDivider.setBackgroundColor(0xffe0d8cc);
-        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(dp(1), dp(20));
-        dividerLp.setMargins(dp(10), 0, dp(10), 0);
-        undoRedoInner.addView(vDivider, dividerLp);
-
-        ImageView redoIcon = iconImageView(AliIconFont.REDO, dp(17));
-        redoIcon.setAlpha(0.32f);
-        undoRedoInner.addView(redoIcon);
-
-        undoTouch.addView(undoRedoBtn, new FrameLayout.LayoutParams(-2, dp(40), Gravity.CENTER));
-        LinearLayout.LayoutParams undoLp = new LinearLayout.LayoutParams(-2, dp(48));
-        undoLp.setMargins(dp(2), 0, 0, 0);
-        iconRow.addView(undoTouch, undoLp);
-        undoTouch.setOnClickListener(v -> {
-            if (editQueue.isEmpty()) shiftArticleHead(rec, -1);
-            else shiftArticleHead(rec, 1);
-        });
+        addArticleHistoryControls(iconRow, rec);
+        if (refreshHistory) refreshArticleHistoryState(rec);
 
         toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY, dp(18), dp(38), dp(2), true, v -> showMoreMenu(rec, v));
 
@@ -908,9 +898,7 @@ public final class RecordingDetailActivity extends Activity {
 
     private void openWechatSettings(String message) {
         toast(message);
-        Intent intent = new Intent(this, SettingsActivity.class);
-        intent.putExtra(SettingsActivity.EXTRA_SHOW_WECHAT, true);
-        startActivity(intent);
+        startActivity(new Intent(this, WechatSettingsActivity.class));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
@@ -934,9 +922,45 @@ public final class RecordingDetailActivity extends Activity {
         io.execute(() -> {
             try {
                 String shareId = community.share(rec, replyTo);
-                toast(shareId == null || shareId.isEmpty() ? "社区分享失败，可能需要 Apple 会话" : "已分享到社区");
+                if (shareId == null || shareId.isEmpty()) {
+                    toast("社区分享失败，可能需要 Apple 会话");
+                } else {
+                    communityShareId = shareId;
+                    sharedToCommunity = true;
+                    toast("已在 VD 社区可见");
+                }
             } catch (Exception e) {
                 toast("社区分享失败：" + e.getMessage());
+            }
+        });
+    }
+
+    protected void toggleCommunityVisibility(Recording rec) {
+        if (Boolean.TRUE.equals(sharedToCommunity) && communityShareId != null && !communityShareId.isEmpty()) {
+            io.execute(() -> {
+                try {
+                    boolean ok = community.unshare(communityShareId);
+                    if (ok) {
+                        sharedToCommunity = false;
+                        communityShareId = null;
+                    }
+                    toast(ok ? "已从 VD 社区隐藏" : "操作失败，请稍后再试");
+                } catch (Exception e) {
+                    toast("操作失败：" + e.getMessage());
+                }
+            });
+        } else {
+            shareCommunity(rec, null);
+        }
+    }
+
+    protected void refreshCommunityShareState(Recording rec) {
+        io.execute(() -> {
+            try {
+                String shareId = community.sharedShareId(rec);
+                sharedToCommunity = shareId != null && !shareId.isEmpty();
+                communityShareId = sharedToCommunity ? shareId : null;
+            } catch (Exception ignored) {
             }
         });
     }
@@ -952,40 +976,73 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void playRecordingAudio(Recording rec) {
+        if (playbackState.mode() == AudioPlaybackState.Mode.PLAYING) {
+            stopPlayback();
+            return;
+        }
+        if (!playbackState.requestPlay()) return;
+        updatePlaybackButton();
         io.execute(() -> {
             try {
-                if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                    main.post(this::stopPlayback);
-                    return;
+                File file = playbackCacheFile(rec);
+                if (!file.exists() || file.length() == 0) {
+                    byte[] audio = library.download(rec.audioName);
+                    if (audio == null || audio.length == 0) throw new IllegalStateException("无法下载录音");
+                    try (FileOutputStream out = new FileOutputStream(file)) {
+                        out.write(audio);
+                    }
                 }
-                byte[] audio = library.download(rec.audioName);
-                if (audio == null || audio.length == 0) throw new IllegalStateException("无法下载录音");
-                File file = new File(getCacheDir(), rec.stem().replaceAll("[^A-Za-z0-9._-]+", "_") + ".m4a");
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    out.write(audio);
-                }
-                main.post(() -> startPlayback(file));
+                main.post(() -> {
+                    if (playbackState.mode() == AudioPlaybackState.Mode.LOADING) {
+                        startPlayback(file);
+                    }
+                });
             } catch (Exception e) {
-                toast("播放失败：" + e.getMessage());
+                main.post(() -> {
+                    playbackState.failed();
+                    updatePlaybackButton();
+                    toast("播放失败：" + e.getMessage());
+                });
             }
         });
     }
 
     protected void startPlayback(File file) {
         try {
-            stopPlayback();
+            releaseMediaPlayer();
             mediaPlayer = new MediaPlayer();
             mediaPlayer.setDataSource(file.getAbsolutePath());
-            mediaPlayer.setOnCompletionListener(mp -> stopPlayback());
+            mediaPlayer.setOnCompletionListener(mp -> main.post(() -> {
+                main.removeCallbacks(playbackProgressTick);
+                playbackState.progress(1, 1);
+                updatePlaybackButton();
+                main.postDelayed(this::stopPlayback, 220);
+            }));
             mediaPlayer.prepare();
             mediaPlayer.start();
+            playbackState.started();
+            updatePlaybackButton();
+            schedulePlaybackProgress();
             toast("正在播放录音");
         } catch (Exception e) {
+            playbackState.failed();
+            updatePlaybackButton();
             toast("播放失败：" + e.getMessage());
         }
     }
 
     protected void stopPlayback() {
+        main.removeCallbacks(playbackProgressTick);
+        releaseMediaPlayer();
+        playbackState.requestStop();
+        updatePlaybackButton();
+    }
+
+    private File playbackCacheFile(Recording rec) {
+        return new File(getCacheDir(), rec.stem().replaceAll("[^A-Za-z0-9._-]+", "_") + ".m4a");
+    }
+
+    private void releaseMediaPlayer() {
         if (mediaPlayer == null) return;
         try {
             mediaPlayer.stop();
@@ -993,6 +1050,38 @@ public final class RecordingDetailActivity extends Activity {
         }
         mediaPlayer.release();
         mediaPlayer = null;
+    }
+
+    private void addPlaybackButton(LinearLayout parent, Recording rec) {
+        PlaybackProgressButton button = new PlaybackProgressButton(this);
+        playbackButton = button;
+        button.setState(playbackState.mode(), playbackState.progress());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(48), dp(48));
+        lp.setMargins(dp(2), 0, 0, 0);
+        parent.addView(button, lp);
+        button.setOnClickListener(v -> playRecordingAudio(rec));
+    }
+
+    private void schedulePlaybackProgress() {
+        main.removeCallbacks(playbackProgressTick);
+        main.postDelayed(playbackProgressTick, 200);
+    }
+
+    private void updatePlaybackProgress() {
+        if (mediaPlayer == null || playbackState.mode() != AudioPlaybackState.Mode.PLAYING) return;
+        try {
+            playbackState.progress(mediaPlayer.getCurrentPosition(), mediaPlayer.getDuration());
+            updatePlaybackButton();
+            if (playbackState.progress() < 1f) schedulePlaybackProgress();
+        } catch (Exception ignored) {
+            stopPlayback();
+        }
+    }
+
+    private void updatePlaybackButton() {
+        if (playbackButton != null) {
+            playbackButton.setState(playbackState.mode(), playbackState.progress());
+        }
     }
 
     protected void showVoiceEdit(Recording rec) {
@@ -1066,7 +1155,7 @@ public final class RecordingDetailActivity extends Activity {
         if (versions == null) versions = new JSONArray();
         TextView info = text("当前 head: " + history.optInt("head", 0) + "\n版本数: " + versions.length(), 14, Theme.SECONDARY, Typeface.NORMAL);
         android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint("输入文风版本号重挖，例如 8");
+        input.setHint("输入写作风格版本号重挖，例如 8");
         input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         android.widget.EditText headInput = new android.widget.EditText(this);
         headInput.setHint("或输入已有文章版本 head");
@@ -1086,14 +1175,14 @@ public final class RecordingDetailActivity extends Activity {
         }
         form.addView(input);
         form.addView(headInput);
-        IosDialog.show(this, "文风 / 版本", form,
-                "重挖文风", () -> io.execute(() -> {
+        IosDialog.show(this, "写作风格 / 版本", form,
+                "重挖写作风格", () -> io.execute(() -> {
                     try {
                         int version = Integer.parseInt(input.getText().toString());
                         boolean ok = library.restyle(rec, version);
-                        toast(ok ? "已请求生成该文风版本" : "文风版本请求失败");
+                        toast(ok ? "已请求生成该写作风格版本" : "写作风格版本请求失败");
                     } catch (Exception e) {
-                        toast("文风版本请求失败：" + e.getMessage());
+                        toast("写作风格版本请求失败：" + e.getMessage());
                     }
                 }),
                 "切换 head", () -> io.execute(() -> {
@@ -1142,24 +1231,166 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void shiftArticleHead(Recording rec, int delta) {
+        if (!editQueue.isEmpty()) {
+            toast("文章正在修改，完成后再切换版本");
+            return;
+        }
         io.execute(() -> {
             try {
                 JSONObject history = library.versionHistory(rec);
                 JSONArray versions = history.optJSONArray("versions");
-                int count = versions == null ? 0 : versions.length();
-                int current = history.optInt("head", Math.max(0, count - 1));
-                int next = current + delta;
-                if (next < 0 || next >= count) {
+                if (versions == null) versions = new JSONArray();
+                int current = history.optInt("head", latestVersionHead(versions));
+                ArticleVersionNavigation nav = new ArticleVersionNavigation(current, articleVersionHeads(versions), false);
+                Integer target = delta < 0 ? nav.undoHead() : nav.redoHead();
+                if (target == null) {
                     toast(delta < 0 ? "没有更早的版本" : "没有更新的版本");
                     return;
                 }
-                boolean ok = library.patchHead(rec, next);
-                toast(ok ? "已切换到版本 " + next : "切换失败");
-                if (ok) refreshAndDrain();
+                JSONObject version = findArticleVersion(versions, target);
+                ArticleDoc nextDoc = version == null ? null : articleDocFromVersion(rec, version);
+                final JSONArray nextVersions = versions;
+                main.post(() -> {
+                    if (!rec.stem().equals(currentArticleStem)) return;
+                    articleHistoryHead = target;
+                    articleHistoryCount = nextVersions.length();
+                    articleHistoryVersions = nextVersions;
+                    if (nextDoc != null) {
+                        articleIndex = Math.min(articleIndex, Math.max(0, nextDoc.articles.size() - 1));
+                        showArticle(rec, nextDoc, false, false);
+                    } else {
+                        updateArticleHistoryControls();
+                    }
+                });
+                boolean ok = library.patchHead(rec, target);
+                if (!ok) toast("切换失败");
             } catch (Exception e) {
                 toast("切换失败：" + e.getMessage());
             }
         });
+    }
+
+    protected void refreshArticleHistoryState(Recording rec) {
+        articleHistoryHead = -1;
+        articleHistoryCount = 0;
+        articleHistoryVersions = new JSONArray();
+        updateArticleHistoryControls();
+        io.execute(() -> {
+            try {
+                JSONObject history = library.versionHistory(rec);
+                JSONArray versions = history.optJSONArray("versions");
+                if (versions == null) versions = new JSONArray();
+                int count = versions == null ? 0 : versions.length();
+                int head = history.optInt("head", latestVersionHead(versions));
+                JSONArray finalVersions = versions;
+                main.post(() -> {
+                    if (!rec.stem().equals(currentArticleStem)) return;
+                    articleHistoryHead = head;
+                    articleHistoryCount = count;
+                    articleHistoryVersions = finalVersions;
+                    updateArticleHistoryControls();
+                });
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    protected void addArticleHistoryControls(LinearLayout parent, Recording rec) {
+        FrameLayout touch = new FrameLayout(this);
+        FrameLayout shell = new FrameLayout(this);
+        shell.setBackground(cardBg());
+        shell.setElevation(dp(2));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        shell.addView(row, new FrameLayout.LayoutParams(-2, dp(38), Gravity.CENTER));
+
+        articleUndoButton = new FrameLayout(this);
+        articleUndoButton.setClickable(true);
+        articleUndoIcon = iconImageView(AliIconFont.UNDO, dp(17));
+        articleUndoButton.addView(articleUndoIcon, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+        row.addView(articleUndoButton, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        articleUndoButton.setOnClickListener(v -> {
+            if (articleUndoButton.isEnabled()) shiftArticleHead(rec, -1);
+        });
+
+        View divider = new View(this);
+        divider.setBackgroundColor(0xffe0d8cc);
+        row.addView(divider, new LinearLayout.LayoutParams(dp(1), dp(20)));
+
+        articleRedoButton = new FrameLayout(this);
+        articleRedoButton.setClickable(true);
+        articleRedoIcon = iconImageView(AliIconFont.REDO, dp(17));
+        articleRedoButton.addView(articleRedoIcon, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+        row.addView(articleRedoButton, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        articleRedoButton.setOnClickListener(v -> {
+            if (articleRedoButton.isEnabled()) shiftArticleHead(rec, 1);
+        });
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(86), dp(48));
+        lp.setMargins(dp(2), 0, 0, 0);
+        touch.addView(shell, new FrameLayout.LayoutParams(dp(78), dp(38), Gravity.CENTER));
+        parent.addView(touch, lp);
+        updateArticleHistoryControls();
+    }
+
+    protected void updateArticleHistoryControls() {
+        if (articleUndoButton == null || articleRedoButton == null) return;
+        ArticleVersionNavigation nav = new ArticleVersionNavigation(
+                articleHistoryHead,
+                articleVersionHeads(articleHistoryVersions),
+                !editQueue.isEmpty());
+        setHistoryButtonEnabled(articleUndoButton, articleUndoIcon, nav.canUndo());
+        setHistoryButtonEnabled(articleRedoButton, articleRedoIcon, nav.canRedo());
+    }
+
+    protected int[] articleVersionHeads(JSONArray versions) {
+        if (versions == null || versions.length() == 0) return new int[0];
+        int[] heads = new int[versions.length()];
+        for (int i = 0; i < versions.length(); i++) {
+            JSONObject item = versions.optJSONObject(i);
+            heads[i] = item == null ? i : item.optInt("v", i);
+        }
+        return heads;
+    }
+
+    protected int latestVersionHead(JSONArray versions) {
+        if (versions == null || versions.length() == 0) return 0;
+        JSONObject last = versions.optJSONObject(versions.length() - 1);
+        return last == null ? versions.length() - 1 : last.optInt("v", versions.length() - 1);
+    }
+
+    protected JSONObject findArticleVersion(JSONArray versions, int head) {
+        if (versions == null) return null;
+        for (int i = 0; i < versions.length(); i++) {
+            JSONObject item = versions.optJSONObject(i);
+            if (item != null && item.optInt("v", i) == head) return item;
+        }
+        return null;
+    }
+
+    protected ArticleDoc articleDocFromVersion(Recording rec, JSONObject version) {
+        List<MinedArticle> articles = new ArrayList<>();
+        JSONArray arr = version.optJSONArray("articles");
+        if (arr != null) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject a = arr.optJSONObject(i);
+                if (a == null) continue;
+                articles.add(new MinedArticle(
+                        a.optString("title", "(无题)"),
+                        a.optString("body", ""),
+                        a.optString("wechatMediaId", null)));
+            }
+        }
+        List<String> photos = currentArticleDoc == null ? new ArrayList<>() : currentArticleDoc.photos;
+        String transcript = currentArticleDoc == null ? null : currentArticleDoc.transcript;
+        return new ArticleDoc(rec.stem(), transcript, articles, photos);
+    }
+
+    private void setHistoryButtonEnabled(FrameLayout button, ImageView icon, boolean enabled) {
+        button.setEnabled(enabled);
+        icon.setAlpha(enabled ? 1f : 0.28f);
     }
 
     protected void exportArticle(Recording rec, ArticleDoc doc) {
@@ -1183,14 +1414,34 @@ public final class RecordingDetailActivity extends Activity {
             try {
                 String url = library.shareUrl(rec, section);
                 if (url == null) throw new IllegalStateException("无法生成链接");
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_TEXT, url);
+                ArticleDoc doc = currentArticleDoc;
+                String articleText = doc == null ? "" : ArticleBody.shareText(articleBodyArticles(doc));
+                Intent intent = buildShareIntent(articleText, url, null);
                 main.post(() -> startActivity(Intent.createChooser(intent, "分享 VoiceDrop")));
             } catch (Exception e) {
                 toast("分享失败：" + e.getMessage());
             }
         });
+    }
+
+    protected Intent buildShareIntent(String articleText, String url, String packageName) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        if (packageName != null) intent.setPackage(packageName);
+        intent.putExtra(Intent.EXTRA_SUBJECT,
+                currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
+                        ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
+                        : "VoiceDrop");
+        intent.putExtra(Intent.EXTRA_TEXT, ArticleSharePayload.textForTarget(articleText, url, packageName));
+        return intent;
+    }
+
+    protected List<ArticleBody.Article> articleBodyArticles(ArticleDoc doc) {
+        List<ArticleBody.Article> articles = new ArrayList<>();
+        for (MinedArticle article : doc.articles) {
+            articles.add(new ArticleBody.Article(article.title, article.body));
+        }
+        return articles;
     }
 
     protected void deleteRecording(Recording rec) {
@@ -1286,6 +1537,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showMoreMenu(Recording rec, View anchor) {
+        if (sharedToCommunity == null) refreshCommunityShareState(rec);
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(0, dp(3), 0, dp(3));
@@ -1301,10 +1553,11 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(pubRow);
         menu.addView(divider());
 
-        LinearLayout commRow = menuRow("VD 社区可见", AliIconFont.PEOPLE, Theme.RED);
+        LinearLayout commRow = menuRow(Boolean.TRUE.equals(sharedToCommunity) ? "从 VD 社区隐藏" : "VD 社区可见",
+                AliIconFont.PEOPLE, Theme.RED);
         commRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
-            shareCommunity(rec, null);
+            toggleCommunityVisibility(rec);
         });
         menu.addView(commRow);
         menu.addView(divider());
@@ -1767,10 +2020,13 @@ public final class RecordingDetailActivity extends Activity {
                 imageNo[0]++;
                 FrameLayout photo = new FrameLayout(this);
                 photo.setBackground(round(0xfff1e7db, 10));
-                TextView loading = text("图片 · " + (key == null ? segment.value : key), 13, Theme.SECONDARY, Typeface.NORMAL);
-                loading.setGravity(Gravity.CENTER);
-                loading.setTag("photo_loading");
-                photo.addView(loading, match());
+                if (key != null) {
+                    ProgressBar spinner = new ProgressBar(this);
+                    spinner.setIndeterminate(true);
+                    spinner.setTag("photo_loading");
+                    FrameLayout.LayoutParams spinnerLp = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER);
+                    photo.addView(spinner, spinnerLp);
+                }
                 TextView line = articleLocator(String.valueOf(lineNo[0]));
                 FrameLayout.LayoutParams lineLp = new FrameLayout.LayoutParams(dp(20), -2, Gravity.LEFT | Gravity.TOP);
                 lineLp.setMargins(-dp(24), dp(11), 0, 0);
@@ -1851,6 +2107,11 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void loadPhotoInto(FrameLayout frame, String relKey) {
+        Bitmap cached = articlePhotoCache.get(relKey);
+        if (cached != null) {
+            showLoadedPhoto(frame, cached);
+            return;
+        }
         io.execute(() -> {
             try {
                 String scope = library.ownerScope();
@@ -1859,22 +2120,25 @@ public final class RecordingDetailActivity extends Activity {
                 if (data == null) return;
                 Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
                 if (bitmap == null) return;
-                main.post(() -> {
-                    for (int i = frame.getChildCount() - 1; i >= 0; i--) {
-                        View child = frame.getChildAt(i);
-                        Object tag = child.getTag();
-                        if ("photo_loading".equals(tag)) {
-                            frame.removeViewAt(i);
-                        }
-                    }
-                    ImageView image = new ImageView(this);
-                    image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    image.setImageBitmap(bitmap);
-                    frame.addView(image, 0, match());
-                });
+                articlePhotoCache.put(relKey, bitmap);
+                main.post(() -> showLoadedPhoto(frame, bitmap));
             } catch (Exception ignored) {
             }
         });
+    }
+
+    protected void showLoadedPhoto(FrameLayout frame, Bitmap bitmap) {
+        for (int i = frame.getChildCount() - 1; i >= 0; i--) {
+            View child = frame.getChildAt(i);
+            Object tag = child.getTag();
+            if ("photo_loading".equals(tag)) {
+                frame.removeViewAt(i);
+            }
+        }
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setImageBitmap(bitmap);
+        frame.addView(image, 0, match());
     }
 
 }

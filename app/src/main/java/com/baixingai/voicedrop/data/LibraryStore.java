@@ -100,10 +100,15 @@ public final class LibraryStore {
     }
 
     public boolean delete(Recording rec) {
-        return deleteKey(rec.audioName)
-                && deleteKey(rec.articleKey())
-                && deleteKey(rec.srtKey())
-                && deleteKey(rec.emptyKey());
+        boolean audioDeleted = deleteKey(rec.audioName);
+        boolean articleDeleted = deleteKey(rec.articleKey());
+        boolean srtDeleted = deleteKey(rec.srtKey());
+        boolean emptyDeleted = deleteKey(rec.emptyKey());
+        return recordingDeleteSucceeded(audioDeleted, articleDeleted, srtDeleted, emptyDeleted);
+    }
+
+    public static boolean recordingDeleteSucceeded(boolean audioDeleted, boolean articleDeleted, boolean srtDeleted, boolean emptyDeleted) {
+        return audioDeleted;
     }
 
     public String shareUrl(Recording rec, int section) throws Exception {

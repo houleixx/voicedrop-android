@@ -96,6 +96,12 @@ public final class SettingsStore {
         if (!response.ok()) throw new IllegalStateException("config HTTP " + response.code);
     }
 
+    public String articlesPageUrl() throws Exception {
+        HttpClient.Response response = http.get(Api.filesBase() + "/token/articles", auth.bearer());
+        if (!response.ok()) throw new IllegalStateException("articles token HTTP " + response.code);
+        return new JSONObject(response.text()).optString("url", "");
+    }
+
     public static final class Style {
         public final String style;
         public final List<Integer> selectedStyles;

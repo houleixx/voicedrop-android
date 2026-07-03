@@ -31,6 +31,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
@@ -65,6 +66,7 @@ import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.Theme;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -83,10 +85,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.baixingai.voicedrop.data.CommunityStore;
-import com.baixingai.voicedrop.ui.AliIconFont;
-import com.baixingai.voicedrop.ui.Theme;
 
 public final class CommunityActivity extends Activity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
@@ -894,6 +892,23 @@ public final class CommunityActivity extends Activity {
             }
         });
     }
+
+    protected void refreshCommunityFromPull(PullRefreshLayout refresher) {
+        io.execute(() -> {
+            uploader.drainPending();
+            try {
+                posts = loadRankedCommunityPosts();
+            } catch (Exception e) {
+                toast("加载失败：" + e.getMessage());
+            }
+            loading = false;
+            main.post(() -> {
+                refresher.setRefreshing(false);
+                showHome();
+            });
+        });
+    }
+
     protected void showHome() {
         topLevelUiRendered = true;
         root.removeAllViews();
@@ -966,20 +981,45 @@ public final class CommunityActivity extends Activity {
         FrameLayout contentArea = new FrameLayout(this);
         page.addView(contentArea, new LinearLayout.LayoutParams(-1, 0, 1));
 
+        PullRefreshLayout refresher = pullRefreshContainer();
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(dp(14), dp(6), dp(14), dp(16));
         scroll.addView(list);
-        contentArea.addView(scroll, match());
+        refresher.addView(scroll, match());
+        refresher.setOnRefreshListener(() -> refreshCommunityFromPull(refresher));
+        contentArea.addView(refresher, match());
 
         renderCommunityList(list);
     }
+
+    protected PullRefreshLayout pullRefreshContainer() {
+        PullRefreshLayout refresher = new PullRefreshLayout(this);
+        refresher.setColorSchemeColors(Theme.RED);
+        refresher.setProgressBackgroundColorSchemeColor(Theme.CARD);
+        return refresher;
+    }
     protected void renderCommunityList(LinearLayout list) {
         if (loading && posts.isEmpty()) {
+            LinearLayout loadingLayout = new LinearLayout(this);
+            loadingLayout.setOrientation(LinearLayout.VERTICAL);
+            loadingLayout.setGravity(Gravity.CENTER);
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminate(true);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                spinner.setIndeterminateTintList(
+                        android.content.res.ColorStateList.valueOf(Theme.RED));
+            } else {
+                spinner.getIndeterminateDrawable().setColorFilter(Theme.RED,
+                        android.graphics.PorterDuff.Mode.SRC_IN);
+            }
+            loadingLayout.addView(spinner, new LinearLayout.LayoutParams(dp(40), dp(40)));
             TextView empty = text("正在加载 VD社区…", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
-            list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
+            empty.setPadding(0, dp(14), 0, 0);
+            loadingLayout.addView(empty);
+            list.addView(loadingLayout, new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (posts.isEmpty()) {
             TextView empty = text("社区暂无文章", 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);

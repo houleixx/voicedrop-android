@@ -1,9 +1,6 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -21,12 +18,9 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import androidx.core.content.FileProvider;
-
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
-import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -35,10 +29,11 @@ import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.update.AppUpdateManager;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +41,7 @@ import java.util.concurrent.Executors;
 
 public class SettingsActivity extends Activity {
     public static final String EXTRA_SHOW_WECHAT = "showWechat";
+    private static final int REQ_CREATE_EXPORT_ZIP = 301;
     static final int[] SETTING_ROW_ICON_RES_IDS = {
             R.drawable.ic_settings_account,
             R.drawable.ic_settings_pen,
@@ -55,24 +51,20 @@ public class SettingsActivity extends Activity {
             R.drawable.ic_settings_info,
             R.drawable.ic_settings_update,
             R.drawable.ic_settings_version,
-            R.drawable.ic_settings_export,
-            R.drawable.ic_settings_trash
+            R.drawable.ic_settings_export
     };
 
-    private AuthStore auth;
-    private Prefs prefs;
-    private HttpClient http;
     private LibraryStore library;
     private SettingsStore settingsStore;
     private ExportManager exportManager;
+    private File pendingExportZip;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        auth = new AuthStore(this);
-        prefs = new Prefs(this);
-        http = new HttpClient();
+        AuthStore auth = new AuthStore(this);
+        HttpClient http = new HttpClient();
         library = new LibraryStore(auth, http);
         settingsStore = new SettingsStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
@@ -122,18 +114,6 @@ public class SettingsActivity extends Activity {
 
         rebuildPrimarySettings(content);
 
-        // TODO: 恢复"本地" section
-        // addSection(content, "本地");
-        // addSettingRow(content, R.drawable.ic_settings_export, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
-        // addSettingRow(content, R.drawable.ic_settings_trash, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
-        //     prefs.setDeleteLocalAfterUpload(!prefs.deleteLocalAfterUpload());
-        //     // Refresh this view
-        //     content.removeAllViews();
-        //     rebuildSettings(content);
-        // });
-
-        // addSettingRow(content, R.drawable.ic_settings_info, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
-
         if (getIntent().getBooleanExtra(EXTRA_SHOW_WECHAT, false)) {
             root.post(this::openWechatSettings);
         }
@@ -158,20 +138,6 @@ public class SettingsActivity extends Activity {
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
     }
 
-    private void rebuildSettings(LinearLayout content) {
-        rebuildPrimarySettings(content);
-
-        addSection(content, "本地");
-        addSettingRow(content, R.drawable.ic_settings_export, "导出全部数据", "打包文章、音频、字幕和索引", this::exportAllData);
-        addSettingRow(content, R.drawable.ic_settings_trash, "上传后删除本地", prefs.deleteLocalAfterUpload() ? "开" : "关", () -> {
-            prefs.setDeleteLocalAfterUpload(!prefs.deleteLocalAfterUpload());
-            content.removeAllViews();
-            rebuildSettings(content);
-        });
-
-        // addSettingRow(content, R.drawable.ic_settings_info, "关于 VoiceDrop", "Android parity build", () -> showTextDialog("关于", "VoiceDrop Android\n以 iOS 功能和接口为标准迁移。"));
-    }
-
     private void rebuildPrimarySettings(LinearLayout content) {
         addSection(content, "账户");
         addSettingRow(content, R.drawable.ic_settings_account, "账户", "匿名身份、数据与转移", this::openAccount);
@@ -183,6 +149,9 @@ public class SettingsActivity extends Activity {
 
         addSection(content, "同步与社区");
         addAutoShareSwitchRow(content, R.drawable.ic_settings_community);
+
+        addSection(content, "存储");
+        addSettingRow(content, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
 
         addSection(content, "关于");
         addSettingRow(content, R.drawable.ic_settings_info, "关于", null, this::openAbout);
@@ -361,20 +330,6 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    private void showTokenImport() {
-        final android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint("anon_...");
-        IosDialog.show(this, "导入账号 token", input,
-                "导入", () -> {
-                    if (auth.adoptToken(input.getText().toString().trim())) {
-                        toast("已导入账号");
-                        finishWithPageTransition();
-                    } else {
-                        toast("token 格式不对");
-                    }
-                });
-    }
-
     private void showWritingStyle() {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
@@ -414,24 +369,56 @@ public class SettingsActivity extends Activity {
     }
 
     private void exportAllData() {
-        toast("正在打包导出…");
+        LinearLayout box = form();
+        TextView status = text("正在准备导出…", 14, Theme.SECONDARY, Typeface.NORMAL);
+        status.setGravity(Gravity.CENTER);
+        box.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        IosDialog progress = IosDialog.showProgress(this, "正在导出数据", box, 118);
         io.execute(() -> {
             try {
-                File zip = exportManager.exportAll(new ArrayList<>());
-                Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", zip);
-                Intent intent = new Intent(Intent.ACTION_SEND);
+                List<Recording> recordings = library.load(new ArrayList<>());
+                if (recordings.isEmpty()) throw new IllegalArgumentException("没有录音可以导出");
+                runOnUiThread(() -> status.setText("正在打包 " + recordings.size() + " 条录音…"));
+                File zip = exportManager.exportAll(recordings);
+                pendingExportZip = zip;
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.setType("application/zip");
-                intent.putExtra(Intent.EXTRA_STREAM, uri);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                runOnUiThread(() -> startActivity(Intent.createChooser(intent, "导出 VoiceDrop 数据")));
+                intent.putExtra(Intent.EXTRA_TITLE, zip.getName());
+                runOnUiThread(() -> {
+                    progress.dismiss();
+                    startActivityForResult(intent, REQ_CREATE_EXPORT_ZIP);
+                });
             } catch (Exception e) {
+                runOnUiThread(() -> progress.dismiss());
                 toast("导出失败：" + e.getMessage());
             }
         });
     }
 
-    private void showTextDialog(String title, String message) {
-        IosDialog.show(this, title, message);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_CREATE_EXPORT_ZIP) return;
+        Uri uri = data == null ? null : data.getData();
+        File zip = pendingExportZip;
+        pendingExportZip = null;
+        if (resultCode != RESULT_OK || uri == null || zip == null) {
+            toast("已取消保存");
+            return;
+        }
+        io.execute(() -> {
+            try (FileInputStream in = new FileInputStream(zip);
+                 OutputStream out = getContentResolver().openOutputStream(uri)) {
+                if (out == null) throw new IllegalStateException("无法打开保存位置");
+                byte[] buffer = new byte[8192];
+                int n;
+                while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                toast("导出文件已保存");
+            } catch (Exception e) {
+                toast("保存失败：" + e.getMessage());
+            }
+        });
     }
 
     private TextView text(String value, int sp, int color, int style) {
@@ -443,37 +430,10 @@ public class SettingsActivity extends Activity {
         return view;
     }
 
-    private android.widget.EditText wechatInput(String hint, boolean password) {
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint(hint);
-        input.setTextSize(17);
-        input.setTextColor(Theme.INK);
-        input.setHintTextColor(0xffc9c6c1);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(strokedRound(Theme.CARD, 7, 0xffe5ded2));
-        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | (password ? android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                : android.text.InputType.TYPE_TEXT_VARIATION_NORMAL));
-        return input;
-    }
-
-    private LinearLayout.LayoutParams inputLp(int top, int bottom) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(54));
-        lp.setMargins(0, top, 0, bottom);
-        return lp;
-    }
-
     private GradientDrawable round(int color, int radiusDp) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
-        return drawable;
-    }
-
-    private GradientDrawable strokedRound(int color, int radiusDp, int strokeColor) {
-        GradientDrawable drawable = round(color, radiusDp);
-        drawable.setStroke(dp(1), strokeColor);
         return drawable;
     }
 
@@ -497,14 +457,5 @@ public class SettingsActivity extends Activity {
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), dp(8), dp(18), 0);
         return form;
-    }
-
-    private android.widget.EditText field(String hint) {
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint(hint);
-        input.setSingleLine(false);
-        input.setMinLines(1);
-        input.setPadding(0, dp(6), 0, dp(6));
-        return input;
     }
 }

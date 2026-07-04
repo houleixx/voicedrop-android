@@ -9,13 +9,13 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
@@ -74,7 +74,7 @@ public final class UsageActivity extends Activity {
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
         top.addView(text("算力", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(10), dp(16), dp(40));

@@ -31,4 +31,11 @@ public class ArticlePhotoInsertTest {
         assertEquals(0, ArticlePhotoInsert.offsetSeconds("2026-06-24-131500",
                 ZonedDateTime.of(2026, 6, 24, 13, 14, 59, 0, ZoneId.of("Asia/Shanghai"))));
     }
+
+    @Test
+    public void sampleSizeDownscalesLargeCameraImagesBeforeDecode() {
+        assertEquals(8, ArticlePhotoInsert.sampleSizeForBounds(8064, 6048, 1200));
+        assertEquals(1, ArticlePhotoInsert.sampleSizeForBounds(900, 600, 1200));
+        assertEquals(1, ArticlePhotoInsert.sampleSizeForBounds(0, 6048, 1200));
+    }
 }

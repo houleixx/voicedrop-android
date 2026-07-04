@@ -50,11 +50,44 @@ public final class ArticlePhotoInsert {
 
     public static String thumbnailBase64(byte[] jpegBytes, int sidePx) {
         if (jpegBytes == null || jpegBytes.length == 0) return null;
-        Bitmap bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
+        Bitmap bitmap = decodeSampledBitmap(jpegBytes, sidePx);
         if (bitmap == null) return null;
         Bitmap thumb = Bitmap.createScaledBitmap(bitmap, sidePx, sidePx, true);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         thumb.compress(Bitmap.CompressFormat.JPEG, 70, out);
         return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP);
+    }
+
+    public static Bitmap decodeSampledBitmap(byte[] bytes, int maxPixel) {
+        if (bytes == null || bytes.length == 0) return null;
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = sampleSizeForBounds(bounds.outWidth, bounds.outHeight, maxPixel);
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
+    }
+
+    public static byte[] squareJpeg(Bitmap bitmap, int maxSide, int quality) {
+        if (bitmap == null) return null;
+        int side = Math.min(bitmap.getWidth(), bitmap.getHeight());
+        if (side <= 0) return null;
+        int left = Math.max(0, (bitmap.getWidth() - side) / 2);
+        int top = Math.max(0, (bitmap.getHeight() - side) / 2);
+        Bitmap square = Bitmap.createBitmap(bitmap, left, top, side, side);
+        int outSide = Math.min(Math.max(1, maxSide), side);
+        Bitmap scaled = Bitmap.createScaledBitmap(square, outSide, outSide, true);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out);
+        return out.toByteArray();
+    }
+
+    public static int sampleSizeForBounds(int width, int height, int maxPixel) {
+        if (width <= 0 || height <= 0 || maxPixel <= 0) return 1;
+        int sample = 1;
+        while ((width / sample) > maxPixel || (height / sample) > maxPixel) {
+            sample *= 2;
+        }
+        return sample;
     }
 }

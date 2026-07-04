@@ -14,14 +14,14 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.Theme;
 
 import org.json.JSONObject;
@@ -77,7 +77,7 @@ public class WechatSettingsActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         top.addView(title, new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER));
 
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -121,7 +121,7 @@ public class WechatSettingsActivity extends Activity {
         autoSub.setPadding(0, dp(3), 0, 0);
         autoTexts.addView(autoSub);
         autoRow.addView(autoTexts, new LinearLayout.LayoutParams(0, -2, 1));
-        Switch autoDraft = new Switch(this);
+        IosSwitch autoDraft = new IosSwitch(this);
         autoRow.addView(autoDraft, new LinearLayout.LayoutParams(-2, -2));
         LinearLayout.LayoutParams autoLp = new LinearLayout.LayoutParams(-1, dp(70));
         autoLp.setMargins(0, 0, 0, dp(24));
@@ -162,9 +162,25 @@ public class WechatSettingsActivity extends Activity {
         errorLp.setMargins(0, 0, 0, dp(8));
         content.addView(error, errorLp);
 
-        TextView help = text("⊘ 去哪里找 AppID / AppSecret?  ↗", 15, 0xffd8614c, Typeface.BOLD);
+        LinearLayout help = new LinearLayout(this);
+        help.setGravity(Gravity.CENTER_VERTICAL);
+        help.setClickable(true);
+        ImageView helpIcon = new ImageView(this);
+        helpIcon.setImageResource(R.drawable.ic_wechat_help_compass);
+        helpIcon.setColorFilter(Theme.ACCENT);
+        help.addView(helpIcon, new LinearLayout.LayoutParams(dp(18), dp(18)));
+        TextView helpText = text("去哪里找 AppID / AppSecret？", 15, Theme.ACCENT, Typeface.BOLD);
+        LinearLayout.LayoutParams helpTextLp = new LinearLayout.LayoutParams(-2, -2);
+        helpTextLp.setMargins(dp(6), 0, 0, 0);
+        help.addView(helpText, helpTextLp);
+        ImageView helpArrow = new ImageView(this);
+        helpArrow.setImageResource(R.drawable.ic_arrow_up_right_flat);
+        helpArrow.setColorFilter(Theme.ACCENT);
+        LinearLayout.LayoutParams helpArrowLp = new LinearLayout.LayoutParams(dp(14), dp(14));
+        helpArrowLp.setMargins(dp(5), 0, 0, 0);
+        help.addView(helpArrow, helpArrowLp);
         help.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://mp.weixin.qq.com/"));
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://developers.weixin.qq.com/doc/offiaccount/Basic_Information/Get_access_token.html"));
             try { startActivity(intent); } catch (Exception e) { toast("无法打开浏览器"); }
         });
         LinearLayout.LayoutParams helpLp = new LinearLayout.LayoutParams(-1, -2);

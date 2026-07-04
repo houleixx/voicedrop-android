@@ -60,8 +60,34 @@ public final class IosDialog extends Dialog {
     public static void show(Context ctx, String title, String message,
                             String positiveText, Runnable onPositive,
                             String neutralText, Runnable onNeutral) {
+        show(ctx, title, message, 200, positiveText, onPositive, neutralText, onNeutral);
+    }
+
+    public static void show(Context ctx, String title, String message,
+                            int contentHeightDp,
+                            String positiveText, Runnable onPositive,
+                            String neutralText, Runnable onNeutral) {
         IosDialog dialog = new IosDialog(ctx);
-        dialog.build(ctx, title, message, positiveText, onPositive, neutralText, onNeutral);
+        dialog.build(ctx, title, message, dp(ctx, contentHeightDp),
+                positiveText, onPositive, neutralText, onNeutral);
+        dialog.show();
+    }
+
+    public static void showAutoHeight(Context ctx, String title, String message,
+                                      String positiveText, Runnable onPositive,
+                                      String neutralText, Runnable onNeutral) {
+        showAutoHeight(ctx, title, message, positiveText, onPositive, neutralText, onNeutral,
+                false, true);
+    }
+
+    public static void showAutoHeight(Context ctx, String title, String message,
+                                      String positiveText, Runnable onPositive,
+                                      String neutralText, Runnable onNeutral,
+                                      boolean showCloseButton, boolean includeDefaultCancelButton) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.build(ctx, title, message, ViewGroup.LayoutParams.WRAP_CONTENT,
+                positiveText, onPositive, neutralText, onNeutral,
+                showCloseButton, false, true, includeDefaultCancelButton);
         dialog.show();
     }
 
@@ -151,17 +177,29 @@ public final class IosDialog extends Dialog {
         return dialog;
     }
 
-    private void build(Context ctx, String title, String message,
+    private void build(Context ctx, String title, String message, int contentHeight,
                        String positiveText, Runnable onPositive,
                        String neutralText, Runnable onNeutral) {
+        build(ctx, title, message, contentHeight, positiveText, onPositive, neutralText, onNeutral,
+                false, false, true, true);
+    }
+
+    private void build(Context ctx, String title, String message, int contentHeight,
+                       String positiveText, Runnable onPositive,
+                       String neutralText, Runnable onNeutral,
+                       boolean showCloseButton,
+                       boolean bottomSheet,
+                       boolean dismissOnOutside,
+                       boolean includeDefaultCancelButton) {
         TextView messageView = new TextView(ctx);
         messageView.setText(message);
         messageView.setTextSize(15);
         messageView.setTextColor(Theme.INK);
         messageView.setLineSpacing(dp(ctx, 4), 1.0f);
         messageView.setPadding(dp(ctx, 20), dp(ctx, 14), dp(ctx, 20), dp(ctx, 18));
-        buildWithView(ctx, title, messageView, dp(ctx, 200), positiveText, onPositive,
-                neutralText, onNeutral, false, false, true, true);
+        buildWithView(ctx, title, messageView, contentHeight, positiveText, onPositive,
+                neutralText, onNeutral, showCloseButton, bottomSheet, dismissOnOutside,
+                includeDefaultCancelButton);
     }
 
     private void buildWithView(Context ctx, String title, View contentView,
@@ -282,16 +320,34 @@ public final class IosDialog extends Dialog {
         boolean hasButtons = (neutralText != null && !neutralText.isEmpty()) || positiveText != null;
         LinearLayout btnRow = null;
         if (hasButtons) {
-            View btnDivider = new View(ctx);
-            btnDivider.setBackgroundColor(0x1a000000);
-            card.addView(btnDivider, new LinearLayout.LayoutParams(-1, dp(ctx, 1)));
+            if (!bottomSheet) {
+                View btnDivider = new View(ctx);
+                btnDivider.setBackgroundColor(0x1a000000);
+                card.addView(btnDivider, new LinearLayout.LayoutParams(-1, dp(ctx, 1)));
+            }
 
             btnRow = new LinearLayout(ctx);
-            btnRow.setOrientation(LinearLayout.HORIZONTAL);
-            btnRow.setPadding(0, 0, 0, 0);
+            btnRow.setOrientation(bottomSheet ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+            btnRow.setPadding(bottomSheet ? dp(ctx, 14) : 0, bottomSheet ? dp(ctx, 8) : 0,
+                    bottomSheet ? dp(ctx, 14) : 0, 0);
         }
 
         if (neutralText != null && !neutralText.isEmpty()) {
+            if (bottomSheet) {
+                btnRow.addView(makeBottomSheetButton(ctx, neutralText, 0xfff6f1ec, Theme.INK, v -> {
+                    dismiss();
+                    if (onNeutral != null) onNeutral.run();
+                }), new LinearLayout.LayoutParams(-1, dp(ctx, 56)));
+
+                if (positiveText != null) {
+                    LinearLayout.LayoutParams positiveLp = new LinearLayout.LayoutParams(-1, dp(ctx, 56));
+                    positiveLp.setMargins(0, dp(ctx, 10), 0, 0);
+                    btnRow.addView(makeBottomSheetButton(ctx, positiveText, Theme.ACCENT, 0xffffffff, v -> {
+                        dismiss();
+                        if (onPositive != null) onPositive.run();
+                    }), positiveLp);
+                }
+            } else {
             // Neutral button (left)
             btnRow.addView(makeButton(ctx, neutralText, Theme.SECONDARY, v -> {
                 dismiss();
@@ -316,12 +372,17 @@ public final class IosDialog extends Dialog {
                 dismiss();
                 if (onPositive != null) onPositive.run();
             }), new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
+            }
         } else if (positiveText != null) {
-            // Single positive button
-            btnRow.addView(makeButton(ctx, positiveText, Theme.RED, v -> {
+            btnRow.addView((bottomSheet
+                    ? makeBottomSheetButton(ctx, positiveText, Theme.ACCENT, 0xffffffff, v -> {
                 dismiss();
                 if (onPositive != null) onPositive.run();
-            }), new LinearLayout.LayoutParams(-1, dp(ctx, 50)));
+            })
+                    : makeButton(ctx, positiveText, Theme.RED, v -> {
+                dismiss();
+                if (onPositive != null) onPositive.run();
+            })), new LinearLayout.LayoutParams(-1, dp(ctx, bottomSheet ? 56 : 50)));
         }
 
         if (btnRow != null) card.addView(btnRow);
@@ -353,6 +414,21 @@ public final class IosDialog extends Dialog {
         btn.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         btn.setOnClickListener(onClick);
         return btn;
+    }
+
+    private static TextView makeBottomSheetButton(Context ctx, String label, int bgColor, int textColor,
+                                                  View.OnClickListener onClick) {
+        TextView btn = makeButton(ctx, label, textColor, onClick);
+        btn.setTextSize(16);
+        btn.setBackground(roundedButtonBg(ctx, bgColor));
+        return btn;
+    }
+
+    private static GradientDrawable roundedButtonBg(Context ctx, int color) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(dp(ctx, 12));
+        return d;
     }
 
     private static GradientDrawable roundCard(Context ctx) {

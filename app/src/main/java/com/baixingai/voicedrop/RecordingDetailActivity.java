@@ -2,6 +2,9 @@ package com.baixingai.voicedrop;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -32,7 +35,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
-import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
 import com.baixingai.voicedrop.ui.SimpleToast;
@@ -59,6 +61,7 @@ import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
+import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
@@ -66,6 +69,7 @@ import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.ArticleVersionNavigation;
 import com.baixingai.voicedrop.ui.AudioPlaybackState;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -143,6 +147,7 @@ public final class RecordingDetailActivity extends Activity {
     protected CommunityTerms communityTerms;
     protected SettingsStore settingsStore;
     protected UsageStore usageStore;
+    protected UIConfigStore uiConfigStore;
     protected DeviceLinkStore deviceLinkStore;
     protected ExportManager exportManager;
     protected DeviceLinkSession deviceLinkSession;
@@ -226,6 +231,7 @@ public final class RecordingDetailActivity extends Activity {
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
+        uiConfigStore = new UIConfigStore(this, auth, http);
         deviceLinkStore = new DeviceLinkStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
         uploader = new Uploader(this, auth, prefs, http);
@@ -255,6 +261,9 @@ public final class RecordingDetailActivity extends Activity {
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
+        io.execute(() -> {
+            if (uiConfigStore != null) uiConfigStore.refresh();
+        });
         // Edge-to-edge: content extends behind status bar and navigation bar
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(false);
@@ -874,7 +883,7 @@ public final class RecordingDetailActivity extends Activity {
 
         toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY, dp(18), dp(38), dp(2), true, v -> showMoreMenu(rec, v));
 
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         scroll.setClipChildren(false);
         scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
@@ -950,7 +959,12 @@ public final class RecordingDetailActivity extends Activity {
     protected void doShareCommunity(Recording rec, String replyTo) {
         io.execute(() -> {
             try {
-                String shareId = community.share(rec, replyTo);
+                CommunityStore.ShareResult result = community.shareResult(rec, replyTo);
+                if (result.needsWechatSignin()) {
+                    toast("请先微信登录后再分享到社区");
+                    return;
+                }
+                String shareId = result.shareId;
                 if (shareId == null || shareId.isEmpty()) {
                     toast("社区分享失败，可能需要 Apple 会话");
                 } else {
@@ -1168,64 +1182,248 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showStyleVersions(Recording rec) {
+        showStyleVersions(rec, null);
+    }
+
+    protected void showStyleVersions(Recording rec, Integer currentStyleVersion) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(14), dp(10), dp(14), dp(18));
+        form.addView(new LoadingStateView(this, "正在加载写作风格..."), new LinearLayout.LayoutParams(-1, dp(180)));
+        final int[] selectedStyleVersion = {currentStyleVersion == null ? -1 : currentStyleVersion};
+        final IosDialog[] dialogRef = {null};
+        dialogRef[0] = IosDialog.showBottomSheet(this, "换个风格重写", form, 520,
+                null, null, null, null, true, true);
         io.execute(() -> {
             try {
-                JSONObject history = library.versionHistory(rec);
-                main.post(() -> showStyleVersionDialog(rec, history));
+                JSONObject styleHistory = settingsStore.loadStyleHistory();
+                JSONObject articleHistory = library.versionHistory(rec);
+                main.post(() -> renderStyleRewriteChoices(form, rec, styleHistory, generatedStyleVersions(articleHistory),
+                        currentStyleVersion, selectedStyleVersion, dialogRef[0]));
             } catch (Exception e) {
-                toast("版本历史加载失败：" + e.getMessage());
+                main.post(() -> {
+                    form.removeAllViews();
+                    TextView failed = text("写作风格加载失败，请稍后重试。", 14, Theme.SECONDARY, Typeface.NORMAL);
+                    failed.setGravity(Gravity.CENTER);
+                    form.addView(failed, new LinearLayout.LayoutParams(-1, dp(180)));
+                    toast("写作风格加载失败：" + e.getMessage());
+                });
             }
         });
     }
 
-    protected void showStyleVersionDialog(Recording rec, JSONObject history) {
-        LinearLayout form = new LinearLayout(this);
-        form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(8), 0, dp(8), 0);
+    protected void renderStyleRewriteChoices(LinearLayout form, Recording rec, JSONObject history,
+                                             Map<Integer, JSONObject> generatedVersions, Integer currentStyleVersion,
+                                             int[] selectedStyleVersion, IosDialog dialog) {
+        form.removeAllViews();
+        TextView title = text("选一个范文版本，把本文重写一遍，原文不变，可随时换回。", 14, Theme.SECONDARY, Typeface.NORMAL);
+        title.setPadding(0, 0, 0, dp(12));
+        form.addView(title);
+
         JSONArray versions = history.optJSONArray("versions");
-        if (versions == null) versions = new JSONArray();
-        TextView info = text("当前 head: " + history.optInt("head", 0) + "\n版本数: " + versions.length(), 14, Theme.SECONDARY, Typeface.NORMAL);
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint("输入写作风格版本号重挖，例如 8");
-        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        android.widget.EditText headInput = new android.widget.EditText(this);
-        headInput.setHint("或输入已有文章版本 head");
-        headInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        form.addView(info);
+        if (versions == null || versions.length() == 0) {
+            TextView empty = text("暂无可用写作风格版本。", 14, Theme.FAINT, Typeface.NORMAL);
+            empty.setGravity(Gravity.CENTER);
+            form.addView(empty, new LinearLayout.LayoutParams(-1, dp(160)));
+            return;
+        }
+
         for (int i = versions.length() - 1; i >= 0; i--) {
             JSONObject item = versions.optJSONObject(i);
             if (item == null) continue;
-            TextView row = text(versionPreview(item, i), 14, Theme.INK, Typeface.NORMAL);
-            row.setPadding(dp(12), dp(10), dp(12), dp(10));
-            row.setBackground(round(i == history.optInt("head", 0) ? Theme.GREEN_BG : Theme.CARD, 10));
-            final int head = i;
-            row.setOnClickListener(v -> switchArticleHead(rec, head));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.setMargins(0, dp(8), 0, 0);
+            int version = item.optInt("v", i);
+            boolean selected = selectedStyleVersion[0] == version;
+            boolean current = currentStyleVersion != null && currentStyleVersion == version;
+            LinearLayout row = styleRewriteRow(item, version, selected, current);
+            row.setOnClickListener(v -> {
+                selectedStyleVersion[0] = version;
+                renderStyleRewriteChoices(form, rec, history, generatedVersions, currentStyleVersion, selectedStyleVersion, dialog);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(76));
+            lp.setMargins(0, i == versions.length() - 1 ? 0 : dp(8), 0, 0);
             form.addView(row, lp);
         }
-        form.addView(input);
-        form.addView(headInput);
-        IosDialog.show(this, "写作风格 / 版本", form,
-                "重挖写作风格", () -> io.execute(() -> {
-                    try {
-                        int version = Integer.parseInt(input.getText().toString());
-                        boolean ok = library.restyle(rec, version);
-                        toast(ok ? "已请求生成该写作风格版本" : "写作风格版本请求失败");
-                    } catch (Exception e) {
-                        toast("写作风格版本请求失败：" + e.getMessage());
-                    }
-                }),
-                "切换 head", () -> io.execute(() -> {
-                    try {
-                        int head = Integer.parseInt(headInput.getText().toString());
-                        boolean ok = library.patchHead(rec, head);
-                        toast(ok ? "已切换文章版本" : "切换失败");
-                        if (ok) refreshAndDrain();
-                    } catch (Exception e) {
-                        toast("切换失败：" + e.getMessage());
-                    }
-                }));
+
+        TextView confirm = text(styleRewriteButtonText(selectedStyleVersion[0], generatedVersions), 16, 0xffffffff, Typeface.BOLD);
+        confirm.setGravity(Gravity.CENTER);
+        confirm.setBackground(round(selectedStyleVersion[0] < 0 ? Theme.ACCENT_SOFT : Theme.RED, 12));
+        confirm.setOnClickListener(v -> {
+            if (selectedStyleVersion[0] < 0) {
+                toast("请先选一个版本");
+                return;
+            }
+            requestStyleRewriteOrSwitch(rec, selectedStyleVersion[0], generatedVersions, dialog);
+        });
+        LinearLayout.LayoutParams buttonLp = new LinearLayout.LayoutParams(-1, dp(58));
+        buttonLp.setMargins(0, dp(20), 0, 0);
+        form.addView(confirm, buttonLp);
+    }
+
+    protected LinearLayout styleRewriteRow(JSONObject item, int version, boolean selected, boolean current) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12), 0, dp(12), 0);
+        GradientDrawable bg = round(selected ? Theme.ACCENT_SOFT : Theme.CARD, 12);
+        bg.setStroke(dp(1), 0xffe5ddd2);
+        row.setBackground(bg);
+
+        TextView versionText = text("v" + version, 18, selected ? Theme.RED : Theme.INK, Typeface.BOLD);
+        row.addView(versionText, new LinearLayout.LayoutParams(dp(52), -2));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        String style = item.optString("style", item.optString("source", ""));
+        TextView name = text(styleRewriteName(style), 15, selected ? Theme.RED : Theme.INK, Typeface.BOLD);
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout nameRow = new LinearLayout(this);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        nameRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        if (current) {
+            TextView badge = text("当前", 11, Theme.RED, Typeface.BOLD);
+            badge.setGravity(Gravity.CENTER);
+            badge.setPadding(dp(8), 0, dp(8), 0);
+            badge.setBackground(round(Theme.ACCENT_SOFT, 10));
+            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, dp(22));
+            badgeLp.setMargins(dp(8), 0, 0, 0);
+            nameRow.addView(badge, badgeLp);
+        }
+        copy.addView(nameRow);
+        String date = item.optString("savedAt", item.optString("createdAt", ""));
+        TextView meta = text(style.length() + " 字" + (date.isEmpty() ? "" : " · " + shortStyleDate(date)),
+                13, Theme.FAINT, Typeface.NORMAL);
+        meta.setPadding(0, dp(4), 0, 0);
+        copy.addView(meta);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+
+        ImageView radio = new ImageView(this);
+        radio.setImageResource(selected ? R.drawable.ic_radio_checked_flat : R.drawable.ic_radio_unchecked_flat);
+        row.addView(radio, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        return row;
+    }
+
+    protected String styleRewriteButtonText(int styleVersion, Map<Integer, JSONObject> generatedVersions) {
+        if (styleVersion < 0) return "选一个版本";
+        return generatedVersions.containsKey(styleVersion) ? "切换到 v" + styleVersion + " 风格" : "用 v" + styleVersion + " 重写本文";
+    }
+
+    protected void requestStyleRewriteOrSwitch(Recording rec, int styleVersion, Map<Integer, JSONObject> generatedVersions, IosDialog dialog) {
+        JSONObject version = generatedVersions.get(styleVersion);
+        if (version != null) {
+            requestStyleHeadSwitch(rec, styleVersion, version, dialog);
+        } else {
+            requestStyleRewrite(rec, styleVersion, dialog);
+        }
+    }
+
+    protected void requestStyleHeadSwitch(Recording rec, int styleVersion, JSONObject version, IosDialog dialog) {
+        if (dialog != null) dialog.dismiss();
+        int head = version.optInt("v", 0);
+        android.app.Dialog loading = showBlockingLoading("正在切换到 v" + styleVersion + " 风格...");
+        ArticleDoc nextDoc = articleDocFromVersion(rec, version);
+        articleHistoryHead = head;
+        if (articleHistoryVersions == null || articleHistoryVersions.length() == 0) refreshArticleHistoryState(rec);
+        if (nextDoc != null && nextDoc.articles != null && !nextDoc.articles.isEmpty()) {
+            articleIndex = Math.min(articleIndex, Math.max(0, nextDoc.articles.size() - 1));
+            showArticle(rec, nextDoc, false, false);
+        }
+        io.execute(() -> {
+            try {
+                library.patchHead(rec, head);
+                toast("已切换到 v" + styleVersion + " 风格");
+            } catch (Exception e) {
+                toast("已切换显示，同步失败：" + e.getMessage());
+            } finally {
+                main.post(() -> {
+                    try { loading.dismiss(); } catch (Exception ignored) {}
+                });
+            }
+        });
+    }
+
+    protected void requestStyleRewrite(Recording rec, int styleVersion, IosDialog dialog) {
+        if (dialog != null) dialog.dismiss();
+        android.app.Dialog loading = showBlockingLoading("正在用新风格重写...");
+        io.execute(() -> {
+            try {
+                boolean ok = library.restyle(rec, styleVersion);
+                toast(ok ? "已请求用 v" + styleVersion + " 重写" : "换风格请求失败");
+            } catch (Exception e) {
+                toast("换风格请求失败：" + e.getMessage());
+            } finally {
+                main.post(() -> {
+                    try { loading.dismiss(); } catch (Exception ignored) {}
+                });
+            }
+        });
+    }
+
+    protected android.app.Dialog showBlockingLoading(String message) {
+        android.app.Dialog dialog = new android.app.Dialog(this);
+        dialog.setCancelable(false);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(0x66000000);
+        LoadingStateView loading = new LoadingStateView(this, message);
+        loading.setPadding(dp(22), dp(22), dp(22), dp(22));
+        loading.setBackground(round(0xf8ffffff, 16));
+        root.addView(loading, new FrameLayout.LayoutParams(dp(230), dp(150), Gravity.CENTER));
+        dialog.setContentView(root);
+        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dialog.show();
+        if (dialog.getWindow() != null) dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        return dialog;
+    }
+
+    protected Map<Integer, JSONObject> generatedStyleVersions(JSONObject articleHistory) {
+        Map<Integer, JSONObject> out = new HashMap<>();
+        JSONArray versions = articleHistory == null ? null : articleHistory.optJSONArray("versions");
+        if (versions == null) return out;
+        for (int i = 0; i < versions.length(); i++) {
+            JSONObject version = versions.optJSONObject(i);
+            if (version == null) continue;
+            JSONArray articles = version.optJSONArray("articles");
+            if (articles == null) continue;
+            for (int j = 0; j < articles.length(); j++) {
+                JSONObject article = articles.optJSONObject(j);
+                Integer style = articleStyleVersion(article);
+                if (style != null) {
+                    out.put(style, version);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    protected Integer articleStyleVersion(JSONObject article) {
+        if (article == null) return null;
+        if (article.has("style") && !article.isNull("style")) return article.optInt("style");
+        return ArticleBody.styleVersion(article.optString("body", ""));
+    }
+
+    protected String styleRewriteName(String style) {
+        if (style == null) return "";
+        String first = style.split("\\n")[0].trim();
+        if (first.length() > 16) return first.substring(0, 16) + "…";
+        return first;
+    }
+
+    protected String shortStyleDate(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) return "";
+        try {
+            if (trimmed.matches("\\d{10,13}")) {
+                long epoch = Long.parseLong(trimmed);
+                if (trimmed.length() == 10) epoch *= 1000L;
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("M月d日", java.util.Locale.getDefault());
+                return sdf.format(new java.util.Date(epoch));
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})").matcher(trimmed);
+            if (m.find()) return Integer.parseInt(m.group(2)) + "月" + Integer.parseInt(m.group(3)) + "日";
+            if (trimmed.contains("月") && trimmed.contains("日")) return trimmed;
+        } catch (Exception ignored) {}
+        return trimmed;
     }
 
     protected String versionPreview(JSONObject item, int index) {
@@ -1411,6 +1609,7 @@ public final class RecordingDetailActivity extends Activity {
                 articles.add(new MinedArticle(
                         a.optString("title", "(无题)"),
                         a.optString("body", ""),
+                        articleStyleVersion(a),
                         a.optString("wechatMediaId", null)));
             }
         }
@@ -1682,9 +1881,17 @@ public final class RecordingDetailActivity extends Activity {
         title.setLineSpacing(dp(5), 1.0f);
         content.addView(title);
 
+        LinearLayout metaRow = new LinearLayout(this);
+        metaRow.setGravity(Gravity.CENTER_VERTICAL);
+        metaRow.setPadding(0, dp(8), 0, dp(20));
         TextView subtitle = text(formatArticleSubtitle(rec), 13, Theme.FAINT, Typeface.NORMAL);
-        subtitle.setPadding(0, dp(8), 0, dp(20));
-        content.addView(subtitle);
+        metaRow.addView(subtitle);
+        String styleLabel = article.style == null ? "选风格" : "v" + article.style + " 风格";
+        TextView styleSwitch = text("  ✎  " + styleLabel + "  ›", 13, Theme.FAINT, Typeface.NORMAL);
+        styleSwitch.setPadding(dp(8), 0, dp(8), 0);
+        styleSwitch.setOnClickListener(v -> showStyleVersions(rec, article.style));
+        metaRow.addView(styleSwitch);
+        content.addView(metaRow);
 
         if (doc.articles.size() > 1) {
             HorizontalScrollView chipsScroll = new HorizontalScrollView(this);
@@ -2108,12 +2315,22 @@ public final class RecordingDetailActivity extends Activity {
                 p.setMargins(0, dp(12), 0, dp(12));
                 content.addView(photo, p);
                 if (key != null) loadPhotoInto(photo, key);
+                final String relKey = key;
+                if (relKey != null) {
+                    photo.setOnLongClickListener(v -> {
+                        Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
+                        showConfiguredImageMenu(v, rec, relKey);
+                        return true;
+                    });
+                }
             } else {
                 String[] lines = segment.value.split("\\n");
                 for (String raw : lines) {
                     String paragraph = raw.trim();
                     if (paragraph.isEmpty()) continue;
                     lineNo[0]++;
+                    final int paragraphLine = lineNo[0];
+                    final String paragraphText = paragraph;
                     FrameLayout row = new FrameLayout(this);
                     row.setClipChildren(false);
                     row.setClipToPadding(false);
@@ -2125,9 +2342,155 @@ public final class RecordingDetailActivity extends Activity {
                     body.setLineSpacing(dp(9), 1.0f);
                     body.setPadding(0, 0, 0, dp(22));
                     row.addView(body, new FrameLayout.LayoutParams(-1, -2));
+                    row.setOnLongClickListener(v -> {
+                        Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
+                        showConfiguredTextMenu(v, rec, paragraphLine, paragraphText);
+                        return true;
+                    });
+                    body.setOnLongClickListener(v -> {
+                        Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
+                        showConfiguredTextMenu(row, rec, paragraphLine, paragraphText);
+                        return true;
+                    });
                     content.addView(row, new LinearLayout.LayoutParams(-1, -2));
                 }
             }
+        }
+    }
+
+    protected void showConfiguredTextMenu(View anchor, Recording rec, int line, String paragraph) {
+        if (rec == null || uiConfigStore == null) return;
+        UIConfigStore.MenuConfig menu = uiConfigStore.textMenu("voice-editor");
+        if (menu == null) return;
+        showConfiguredMenu(anchor, menu, instruction ->
+                UIConfigStore.fill(instruction, "LINE", String.valueOf(line), "QUOTE", UIConfigStore.quotePrefix(paragraph)),
+                filled -> enqueueConfiguredInstruction(rec, filled),
+                new LocalMenuRow("拷贝", AliIconFont.DOC, () -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", paragraph));
+                    toast("已拷贝");
+                }));
+    }
+
+    protected void showConfiguredImageMenu(View anchor, Recording rec, String relKey) {
+        if (rec == null || relKey == null || uiConfigStore == null) return;
+        UIConfigStore.MenuConfig menu = uiConfigStore.imageMenu("voice-editor");
+        if (menu == null) return;
+        showConfiguredMenu(anchor, menu,
+                instruction -> UIConfigStore.fill(instruction, "KEY", relKey),
+                filled -> enqueueConfiguredInstruction(rec, filled));
+    }
+
+    protected void enqueueConfiguredInstruction(Recording rec, String instruction) {
+        if (instruction == null || instruction.trim().isEmpty()) return;
+        ensureArticleEditSession(rec);
+        if (editSession != null) {
+            editSession.enqueue(instruction.trim(), articleIndex);
+            toast("已加入修改队列");
+        }
+    }
+
+    protected void showConfiguredMenu(View anchor, UIConfigStore.MenuConfig menu,
+                                      InstructionFiller filler, InstructionConsumer consumer,
+                                      LocalMenuRow... localRows) {
+        PopupWindow[] popup = new PopupWindow[1];
+        Runnable[] showRoot = new Runnable[1];
+        showRoot[0] = () -> {
+            LinearLayout view = configuredMenuView(menu.groups, filler, consumer, popup, showRoot, localRows);
+            popup[0] = showConfiguredPopup(view, anchor);
+        };
+        showRoot[0].run();
+    }
+
+    protected LinearLayout configuredMenuView(List<List<UIConfigStore.MenuNode>> groups,
+                                             InstructionFiller filler, InstructionConsumer consumer,
+                                             PopupWindow[] popup, Runnable[] showRoot,
+                                             LocalMenuRow... localRows) {
+        LinearLayout menu = configuredMenuContainer();
+        boolean needsDivider = false;
+        for (List<UIConfigStore.MenuNode> group : groups) {
+            if (needsDivider) menu.addView(divider());
+            needsDivider = true;
+            for (UIConfigStore.MenuNode node : group) addConfiguredNode(menu, node, filler, consumer, popup, showRoot);
+        }
+        if (localRows != null && localRows.length > 0) {
+            if (needsDivider) menu.addView(divider());
+            for (LocalMenuRow row : localRows) {
+                LinearLayout item = menuRow(row.label, row.icon, Theme.RED, Theme.INK);
+                item.setOnClickListener(v -> {
+                    if (popup[0] != null) popup[0].dismiss();
+                    row.action.run();
+                });
+                menu.addView(item);
+            }
+        }
+        return menu;
+    }
+
+    protected void addConfiguredNode(LinearLayout menu, UIConfigStore.MenuNode node,
+                                     InstructionFiller filler, InstructionConsumer consumer,
+                                     PopupWindow[] popup, Runnable[] showRoot) {
+        if ("submenu".equals(node.type) && !node.children.isEmpty()) {
+            LinearLayout row = menuRow(node.label, AliIconFont.MORE, Theme.RED, Theme.INK);
+            row.setOnClickListener(v -> {
+                LinearLayout sub = configuredMenuContainer();
+                LinearLayout back = menuRow("返回", AliIconFont.BACK, Theme.SECONDARY, Theme.SECONDARY);
+                back.setOnClickListener(backView -> {
+                    if (popup[0] != null) popup[0].dismiss();
+                    showRoot[0].run();
+                });
+                sub.addView(back);
+                sub.addView(divider());
+                for (UIConfigStore.MenuNode child : node.children) addConfiguredNode(sub, child, filler, consumer, popup, showRoot);
+                if (popup[0] != null) popup[0].setContentView(sub);
+            });
+            menu.addView(row);
+            return;
+        }
+        if (node.instruction == null || node.instruction.isEmpty()) return;
+        LinearLayout row = menuRow(node.label, AliIconFont.PAPERPLANE, Theme.RED, Theme.INK);
+        row.setOnClickListener(v -> {
+            if (popup[0] != null) popup[0].dismiss();
+            consumer.accept(filler.fill(node.instruction));
+        });
+        menu.addView(row);
+    }
+
+    protected LinearLayout configuredMenuContainer() {
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(0, dp(3), 0, dp(3));
+        menu.setBackground(round(0xf9ffffff, 16));
+        menu.setElevation(dp(8));
+        return menu;
+    }
+
+    protected PopupWindow showConfiguredPopup(LinearLayout menu, View anchor) {
+        PopupWindow popup = new PopupWindow(menu, dp(260), -2, true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setElevation(dp(10));
+        popup.showAsDropDown(anchor, 0, -Math.max(anchor.getHeight(), dp(48)));
+        return popup;
+    }
+
+    protected interface InstructionFiller {
+        String fill(String instruction);
+    }
+
+    protected interface InstructionConsumer {
+        void accept(String instruction);
+    }
+
+    protected static final class LocalMenuRow {
+        final String label;
+        final int icon;
+        final Runnable action;
+
+        LocalMenuRow(String label, int icon, Runnable action) {
+            this.label = label;
+            this.icon = icon;
+            this.action = action;
         }
     }
 

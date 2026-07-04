@@ -32,7 +32,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
-import android.widget.ScrollView;
 import android.widget.Space;
 import android.widget.TextView;
 import com.baixingai.voicedrop.ui.SimpleToast;
@@ -63,6 +62,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -935,7 +935,7 @@ public final class CommunityDetailActivity extends Activity {
         toolbarIconButton(bar, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY,
                 dp(18), dp(38), dp(2), true, v -> showCommunityPostMenu(post, authorName, v));
 
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(22), dp(12), dp(22), dp(24));
@@ -1046,7 +1046,7 @@ public final class CommunityDetailActivity extends Activity {
                 new LinearLayout.LayoutParams(0, -2, 1));
 
         // Article content (scrollable)
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), dp(14), dp(20), dp(24));

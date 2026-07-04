@@ -7,22 +7,21 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.Recording;
-import com.baixingai.voicedrop.data.SettingsStore;
+import com.baixingai.voicedrop.data.WechatLogin;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
@@ -35,7 +34,6 @@ import java.util.concurrent.Executors;
 public final class AccountActivity extends Activity {
     private AuthStore auth;
     private LibraryStore library;
-    private SettingsStore settingsStore;
     private LinearLayout content;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
@@ -45,7 +43,6 @@ public final class AccountActivity extends Activity {
         auth = new AuthStore(this);
         HttpClient http = new HttpClient();
         library = new LibraryStore(auth, http);
-        settingsStore = new SettingsStore(auth, http);
         configureEdgeToEdge();
 
         FrameLayout root = new FrameLayout(this);
@@ -81,7 +78,7 @@ public final class AccountActivity extends Activity {
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
         top.addView(text("账户", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
-        ScrollView scroll = new ScrollView(this);
+        BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(8), dp(16), dp(40));
@@ -101,6 +98,13 @@ public final class AccountActivity extends Activity {
     @Override
     public void onBackPressed() {
         finishWithPageTransition();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        loadCounts();
     }
 
     private void loadCounts() {
@@ -126,7 +130,6 @@ public final class AccountActivity extends Activity {
         content.addView(dataCard(recordingCount, minedCount, loaded), matchWrap(0, 0, 0, dp(22)));
         addSection(content, "转移与同步");
         content.addView(transferCard(), matchWrap(0, 0, 0, dp(22)));
-        content.addView(resetCard(), matchWrap(0, 0, 0, 0));
     }
 
     private View identityCard() {
@@ -135,10 +138,6 @@ public final class AccountActivity extends Activity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView shield = text("✓", 22, 0xffffffff, Typeface.BOLD);
-        shield.setGravity(Gravity.CENTER);
-        shield.setBackground(round(Theme.INK, 12));
-        header.addView(shield, new LinearLayout.LayoutParams(dp(46), dp(46)));
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.addView(text("账户", 17, Theme.INK, Typeface.BOLD));
@@ -146,19 +145,79 @@ public final class AccountActivity extends Activity {
         desc.setPadding(0, dp(3), 0, 0);
         labels.addView(desc);
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
-        labelsLp.setMargins(dp(14), 0, 0, 0);
         header.addView(labels, labelsLp);
         card.addView(header);
         card.addView(dividerWide(dp(16), dp(16)));
 
         card.addView(keyField("你的 ID", auth.anonId(), false, auth.anonId()));
         card.addView(keyField("访问令牌", maskedToken(), true, auth.bearer()));
-        card.addView(dividerWide(dp(16), dp(16)));
+        card.addView(dividerWide(dp(16), dp(10)));
 
-        TextView importButton = actionText("登录已有账号");
-        importButton.setOnClickListener(v -> showTokenImport());
-        card.addView(importButton, new LinearLayout.LayoutParams(-1, dp(44)));
+        card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, dp(28)));
+        LinearLayout.LayoutParams existingLp = new LinearLayout.LayoutParams(-1, dp(28));
+        existingLp.setMargins(0, dp(3), 0, 0);
+        card.addView(existingAccountRow(), existingLp);
         return card;
+    }
+
+    private View existingAccountRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, 0);
+        row.setMinimumHeight(dp(28));
+        row.setClickable(true);
+        row.setOnClickListener(v -> showTokenImport());
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_login_existing);
+        icon.setColorFilter(Theme.RED);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(18), dp(18)));
+
+        TextView label = text("登录已有账号", 15, Theme.RED, Typeface.BOLD);
+        label.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(0, -1, 1);
+        labelLp.setMargins(dp(10), 0, 0, 0);
+        row.addView(label, labelLp);
+
+        return row;
+    }
+
+    private View wechatAuthRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        if (auth.isWechatAuthenticated()) {
+            row.addView(wechatIcon(Theme.SECONDARY), new LinearLayout.LayoutParams(dp(18), dp(18)));
+            TextView status = text("已用微信登录", 15, Theme.SECONDARY, Typeface.NORMAL);
+            LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(0, -1, 1);
+            statusLp.setMargins(dp(9), 0, 0, 0);
+            row.addView(status, statusLp);
+            TextView signOut = text("退出登录", 15, Theme.RED, Typeface.BOLD);
+            signOut.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+            signOut.setOnClickListener(v -> {
+                auth.signOutWechat();
+                toast("已退出微信登录");
+                loadCounts();
+            });
+            row.addView(signOut, new LinearLayout.LayoutParams(dp(92), -1));
+        } else {
+            row.addView(wechatIcon(Theme.RED), new LinearLayout.LayoutParams(dp(18), dp(18)));
+            TextView login = actionText("用微信登录（同步设备 · 参与社区）");
+            login.setOnClickListener(v -> startWechatLogin());
+            LinearLayout.LayoutParams loginLp = new LinearLayout.LayoutParams(0, -1, 1);
+            loginLp.setMargins(dp(9), 0, 0, 0);
+            row.addView(login, loginLp);
+            row.setOnClickListener(v -> startWechatLogin());
+        }
+        return row;
+    }
+
+    private ImageView wechatIcon(int color) {
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_wechat);
+        icon.setColorFilter(color);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        return icon;
     }
 
     private View keyField(String label, String value, boolean masked, String copyValue) {
@@ -174,6 +233,7 @@ public final class AccountActivity extends Activity {
         row.setBackground(strokedRound(Theme.BG, 9, 0xffe5ded2));
         TextView valueText = text(value, masked ? 14 : 15, masked ? Theme.SECONDARY : Theme.INK, Typeface.NORMAL);
         valueText.setSingleLine(true);
+        valueText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         row.addView(valueText, new LinearLayout.LayoutParams(0, -2, 1));
         TextView copy = text("复制", 13, Theme.RED, Typeface.BOLD);
         copy.setGravity(Gravity.CENTER);
@@ -191,10 +251,6 @@ public final class AccountActivity extends Activity {
         card.addView(dataRow("录音", loaded ? recordingCount + " 条" : "加载中…", false));
         card.addView(divider());
         card.addView(dataRow("成文", loaded ? minedCount + " 篇" : "加载中…", false));
-        card.addView(divider());
-        LinearLayout open = dataRow("查看全部文章", "", true);
-        open.setOnClickListener(v -> openArticlesPage());
-        card.addView(open);
         return card;
     }
 
@@ -226,20 +282,10 @@ public final class AccountActivity extends Activity {
         return wrap;
     }
 
-    private View resetCard() {
-        LinearLayout wrap = new LinearLayout(this);
-        wrap.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout card = card();
-        TextView reset = text("重置身份", 16, Theme.RED, Typeface.BOLD);
-        reset.setPadding(dp(15), dp(14), dp(15), dp(14));
-        reset.setOnClickListener(v -> confirmReset());
-        card.addView(reset);
-        wrap.addView(card);
-        TextView hint = text("会与现有录音和文章解除关联，且无法恢复。", 13, Theme.FAINT, Typeface.NORMAL);
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(dp(4), dp(10), dp(4), 0);
-        wrap.addView(hint);
-        return wrap;
+    private void startWechatLogin() {
+        if (!WechatLogin.start(this)) {
+            toast("无法打开微信，请确认已安装微信");
+        }
     }
 
     private void showTokenImport() {
@@ -271,7 +317,7 @@ public final class AccountActivity extends Activity {
                 | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         form.addView(input, new LinearLayout.LayoutParams(-1, dp(92)));
 
-        TextView note = text("导入成功后，本机之后会读取这个 token 对应的云端空间：录音、文章、写作风格、社区配置都会切过去。原来的本机 token 不会删除，但你需要先保存好才能再切回。", 12, Theme.FAINT, Typeface.NORMAL);
+        TextView note = text("导入成功后，本机会读取这个 token 对应的云端空间：录音、文章、写作风格、社区配置都会切过去。原来的本机 token 不会删除，但你需要先保存好才能再切回。", 12, Theme.FAINT, Typeface.NORMAL);
         note.setLineSpacing(dp(3), 1.0f);
         note.setPadding(0, dp(12), 0, 0);
         form.addView(note);
@@ -285,34 +331,6 @@ public final class AccountActivity extends Activity {
                         toast("请粘贴以 anon_ 开头的访问令牌");
                     }
                 }, null, null, true, true);
-    }
-
-    private void confirmReset() {
-        IosDialog.show(this, "重置身份？", "会生成一个全新的匿名 ID，与现有录音和文章解除关联，且无法恢复。",
-                "重置", () -> {
-                    auth.resetAnonymous();
-                    toast("已重置匿名身份");
-                    loadCounts();
-                });
-    }
-
-    private void openArticlesPage() {
-        toast("正在打开文章列表…");
-        io.execute(() -> {
-            try {
-                String url = settingsStore.articlesPageUrl();
-                if (url == null || url.isEmpty()) throw new IllegalStateException("未返回链接");
-                runOnUiThread(() -> {
-                    try {
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-                    } catch (Exception e) {
-                        toast("无法打开浏览器");
-                    }
-                });
-            } catch (Exception e) {
-                toast("打开文章列表失败：" + e.getMessage());
-            }
-        });
     }
 
     private String maskedToken() {

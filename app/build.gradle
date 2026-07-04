@@ -22,7 +22,7 @@ android {
         minSdk 23
         targetSdk 36
         versionCode 4
-        versionName "0.3.1"
+        versionName "0.3.0"
     }
 
     compileOptions {
@@ -60,6 +60,7 @@ dependencies {
     implementation "androidx.core:core:1.13.1"
     implementation "androidx.viewpager:viewpager:1.0.0"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.tencent.mm.opensdk:wechat-sdk-android:6.8.34"
     implementation "org.bouncycastle:bcprov-jdk18on:1.78.1"
     implementation "com.kongzue.dialogx:DialogX:0.0.49"
     implementation "com.kongzue.dialogx.style:DialogXIOSStyle:0.0.49"

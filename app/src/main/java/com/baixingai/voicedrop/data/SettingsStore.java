@@ -46,11 +46,15 @@ public final class SettingsStore {
     }
 
     public void saveStyleSelection(List<Integer> styles) throws Exception {
-        JSONArray arr = new JSONArray();
-        for (Integer style : styles) arr.put(style);
-        JSONObject body = new JSONObject().put("styles", arr);
+        JSONObject body = styleSelectionBody(styles);
         HttpClient.Response response = http.putBytes(Api.filesBase() + "/style", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("style selection HTTP " + response.code);
+    }
+
+    public static JSONObject styleSelectionBody(List<Integer> styles) throws Exception {
+        JSONArray arr = new JSONArray();
+        if (styles != null) for (Integer style : styles) arr.put(style);
+        return new JSONObject().put("styles", arr);
     }
 
     public JSONObject loadWechat() throws Exception {

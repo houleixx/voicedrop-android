@@ -5,7 +5,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -19,12 +18,12 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -236,9 +235,9 @@ public final class InsertPhotoActivity extends Activity {
                     if (in == null) throw new IllegalStateException("无法读取图片");
                     bytes = HttpClient.readAll(in);
                 }
-                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(bytes, 1200);
                 if (bitmap == null) throw new IllegalStateException("无法解码图片");
-                addPhotoBytes(squareJpeg(bitmap, 86), System.currentTimeMillis());
+                addPhotoBytes(ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86), System.currentTimeMillis());
             } catch (Exception e) {
                 toast("照片读取失败：" + e.getMessage());
             }
@@ -248,7 +247,7 @@ public final class InsertPhotoActivity extends Activity {
     private void addBitmap(Bitmap bitmap) {
         io.execute(() -> {
             try {
-                addPhotoBytes(squareJpeg(bitmap, 86), System.currentTimeMillis());
+                addPhotoBytes(ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86), System.currentTimeMillis());
             } catch (Exception e) {
                 toast("照片保存失败：" + e.getMessage());
             }
@@ -262,25 +261,13 @@ public final class InsertPhotoActivity extends Activity {
         try (FileOutputStream out = new FileOutputStream(file)) {
             out.write(bytes);
         }
-        Bitmap thumb = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        Bitmap thumb = ArticlePhotoInsert.decodeSampledBitmap(bytes, dp(140));
         if (thumb != null) thumb = Bitmap.createScaledBitmap(thumb, dp(70), dp(70), true);
         Bitmap finalThumb = thumb;
         runOnUiThread(() -> {
             photos.add(new SelectedPhoto(file.getAbsolutePath(), capturedAtMillis, finalThumb));
             refreshState();
         });
-    }
-
-    private byte[] squareJpeg(Bitmap bitmap, int quality) {
-        int side = Math.min(bitmap.getWidth(), bitmap.getHeight());
-        int left = Math.max(0, (bitmap.getWidth() - side) / 2);
-        int top = Math.max(0, (bitmap.getHeight() - side) / 2);
-        Bitmap square = Bitmap.createBitmap(bitmap, left, top, side, side);
-        int outSide = Math.min(1080, side);
-        Bitmap scaled = Bitmap.createScaledBitmap(square, outSide, outSide, true);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out);
-        return out.toByteArray();
     }
 
     private void finishWithPhotos() {

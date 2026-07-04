@@ -40,6 +40,7 @@ public final class HttpClient {
         conn.setConnectTimeout(20_000);
         conn.setReadTimeout(120_000);
         if (bearer != null && !bearer.isEmpty()) conn.setRequestProperty("Authorization", "Bearer " + bearer);
+        conn.setRequestProperty("X-VD-Platform", "android");
         if (contentType != null) conn.setRequestProperty("Content-Type", contentType);
         if (body != null || file != null) {
             conn.setDoOutput(true);

@@ -202,14 +202,27 @@ public final class LibraryStore {
     }
 
     public boolean restyle(Recording rec, int styleVersion) throws Exception {
-        JSONObject body = new JSONObject()
-                .put("stem", rec.stem())
-                .put("styleV", styleVersion);
+        JSONObject body = restyleRequestBody(rec.stem(), styleVersion);
         HttpClient.Response response = http.postJson(
                 Api.agentBase() + "/restyle",
                 auth.bearer(),
                 body.toString().getBytes("UTF-8"));
         return response.ok() && new JSONObject(response.text()).optBoolean("ok", true);
+    }
+
+    public boolean remine(Recording rec) throws Exception {
+        JSONObject body = restyleRequestBody(rec.stem(), null);
+        HttpClient.Response response = http.postJson(
+                Api.agentBase() + "/restyle",
+                auth.bearer(),
+                body.toString().getBytes("UTF-8"));
+        return response.ok() && new JSONObject(response.text()).optBoolean("ok", true);
+    }
+
+    public static JSONObject restyleRequestBody(String stem, Integer styleVersion) throws Exception {
+        JSONObject body = new JSONObject().put("stem", stem);
+        if (styleVersion != null) body.put("styleV", styleVersion);
+        return body;
     }
 
     public JSONObject versionHistory(Recording rec) throws Exception {

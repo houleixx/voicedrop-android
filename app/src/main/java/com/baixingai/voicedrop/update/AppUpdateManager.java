@@ -110,12 +110,12 @@ public final class AppUpdateManager {
 
         String message = "发现新版本 " + release.tagName + "\n当前版本 " + currentVersionName(activity);
         if (release.apkSize > 0) message += "\n安装包约 " + formatBytes(release.apkSize);
-        IosDialog.show(activity, "发现新版本", message,
+        IosDialog.showAutoHeight(activity, "发现新版本", message,
                 "立即更新", () -> downloadAndInstall(activity, release),
-                "忽略此版本", () -> {
+                "忽略", () -> {
                     prefs.ignore(release.tagName);
                     SimpleToast.show(activity, "已忽略 " + release.tagName);
-                });
+                }, true, false);
     }
 
     private static CheckResult fetchLatest(String currentVersion) throws Exception {

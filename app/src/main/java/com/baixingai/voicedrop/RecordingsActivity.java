@@ -45,6 +45,7 @@ import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -64,6 +65,7 @@ import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
+import com.baixingai.voicedrop.net.LibraryCommandSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
@@ -72,6 +74,7 @@ import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.PullRefreshLayout;
+import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.SoftCircleShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.update.AppUpdateManager;
@@ -118,15 +121,24 @@ public final class RecordingsActivity extends Activity {
     protected AudioRecorder recorder;
     protected StatusSession statusSession;
     protected ArticleEditSession editSession;
+    protected LibraryCommandSession commandSession;
     protected AsrDictationSession dictationSession;
+    protected AsrDictationSession commandDictationSession;
     protected MediaPlayer mediaPlayer;
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
     protected List<ArticleEditSession.EditRequest> editQueue = new ArrayList<>();
+    protected List<LibraryCommandSession.CommandRequest> commandQueue = new ArrayList<>();
     protected String editReply;
     protected boolean editReplyOk = true;
+    protected String commandReply;
+    protected boolean commandReplyOk = true;
+    protected final HoldToTalkTranscript commandTranscript = new HoldToTalkTranscript();
+    protected boolean commandTalking;
+    protected boolean commandCanceled;
+    protected View commandFabView;
     private final HoldToTalkTranscript holdEditTranscript = new HoldToTalkTranscript();
     protected boolean holdEditCanceled;
     protected boolean holdEditFinishing;
@@ -212,6 +224,44 @@ public final class RecordingsActivity extends Activity {
                 // Silent: the list still refreshes on resume/upload.
             }
         });
+        commandSession = new LibraryCommandSession(this, auth, new LibraryCommandSession.Listener() {
+            @Override public void onQueueChanged(List<LibraryCommandSession.CommandRequest> queue) {
+                main.post(() -> {
+                    commandQueue = queue;
+                    refreshHomePages();
+                });
+            }
+
+            @Override public void onReply(String text, boolean ok) {
+                main.post(() -> {
+                    commandReply = text;
+                    commandReplyOk = ok;
+                    if (text != null && !text.isEmpty()) toast(text);
+                    refreshHomePages();
+                });
+            }
+
+            @Override public void onConfirm(String id, String text) {
+                main.post(() -> showLibraryCommandConfirm(id, text));
+            }
+
+            @Override public void onUpdate() {
+                main.post(RecordingsActivity.this::refreshAndDrain);
+            }
+
+            @Override public void onState(String state) {
+                if (state != null && !state.isEmpty()) main.post(() -> commandReply = state);
+            }
+
+            @Override public void onError(String message) {
+                main.post(() -> {
+                    commandReply = message;
+                    commandReplyOk = false;
+                    if (message != null && !message.isEmpty()) toast(message);
+                    refreshHomePages();
+                });
+            }
+        });
         root = new FrameLayout(this);
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
@@ -254,6 +304,10 @@ public final class RecordingsActivity extends Activity {
                 refreshDataSilently();
             }
             if (statusSession != null) statusSession.connect();
+            if (commandSession != null) {
+                commandSession.setRefs(currentCommandRefs());
+                commandSession.connect();
+            }
         }
     }
     @Override
@@ -265,6 +319,8 @@ public final class RecordingsActivity extends Activity {
         if (statusSession != null) statusSession.close();
         if (editSession != null) editSession.close();
         if (dictationSession != null) dictationSession.stop();
+        if (commandDictationSession != null) commandDictationSession.stop();
+        if (commandSession != null) commandSession.close();
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
         io.shutdownNow();
@@ -826,6 +882,7 @@ public final class RecordingsActivity extends Activity {
         return true;
     }
     protected void onPageCreate(Intent intent) {
+        if (handleDeepLink(intent)) return;
         handleShareIntent(intent);
         communityTab = false;
         showHome();
@@ -835,7 +892,53 @@ public final class RecordingsActivity extends Activity {
     }
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (handleDeepLink(intent)) return;
         handleShareIntent(intent);
+    }
+
+    protected boolean handleDeepLink(Intent intent) {
+        if (intent == null || intent.getData() == null) return false;
+        AppRouter.DeepLink link = AppRouter.parse(intent.getData());
+        if (link.kind == AppRouter.Kind.RECORDINGS) {
+            communityTab = false;
+            showHome();
+            refreshAndDrain();
+            if (statusSession != null) statusSession.connect();
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.COMMUNITY) {
+            communityTab = true;
+            showHome();
+            refreshDataInBackground();
+            if (statusSession != null) statusSession.connect();
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.SETTINGS) {
+            startActivity(new Intent(this, SettingsActivity.class));
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.RECORD) {
+            communityTab = false;
+            showHome();
+            if (statusSession != null) statusSession.connect();
+            startRecordingFlow();
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.ARTICLE) {
+            openArticleDeepLink(link.stem);
+            return true;
+        }
+        return false;
+    }
+
+    protected void openArticleDeepLink(String stem) {
+        if (stem == null || stem.trim().isEmpty()) return;
+        String decoded = Uri.decode(stem.trim());
+        String audioName = decoded.endsWith(".m4a") ? decoded : decoded + ".m4a";
+        Intent intent = new Intent(this, RecordingDetailActivity.class);
+        intent.putExtra(EXTRA_AUDIO_NAME, audioName);
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
     protected void refreshAndDrain() {
         loading = true;
@@ -1061,6 +1164,7 @@ public final class RecordingsActivity extends Activity {
             empty.setGravity(Gravity.CENTER);
             list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
         } else {
+            addLibraryCommandStatus(list);
             for (Recording rec : recordings) list.addView(recordingRow(rec));
         }
 
@@ -1112,16 +1216,208 @@ public final class RecordingsActivity extends Activity {
         fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
         fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
-        TextView label = text("轻点录音", 12, Theme.SECONDARY, Typeface.NORMAL);
+        TextView label = text(recordFabLabel(), 12, commandTalking ? Theme.RED : Theme.SECONDARY, Typeface.NORMAL);
         label.setLetterSpacing(0.08f);
         label.setPadding(0, 0, 0, 0);
         label.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
         labelLp.setMargins(0, -dp(3), 0, 0);
         fabCol.addView(label, labelLp);
-        fabCol.setOnClickListener(v -> startRecordingFlow());
-        fabRing.setOnClickListener(v -> startRecordingFlow());
-        label.setOnClickListener(v -> startRecordingFlow());
+        View.OnTouchListener commandTouch = createLibraryCommandFabTouchListener();
+        fabCol.setOnTouchListener(commandTouch);
+        fabRing.setOnTouchListener(commandTouch);
+        fab.setOnTouchListener(commandTouch);
+        label.setOnTouchListener(commandTouch);
+    }
+
+    protected String recordFabLabel() {
+        if (!commandTalking) return "轻点录音 · 长按说话";
+        return commandCanceled ? "上滑取消 · 松开放弃" : "松开发送 · 上滑取消";
+    }
+
+    protected View.OnTouchListener createLibraryCommandFabTouchListener() {
+        final Handler pressHandler = new Handler(Looper.getMainLooper());
+        final boolean[] longPressed = {false};
+        final boolean[] movedToCancel = {false};
+        final float[] startRawY = {0};
+        final Runnable[] startRunnable = new Runnable[1];
+        return (v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    commandFabView = v;
+                    longPressed[0] = false;
+                    movedToCancel[0] = false;
+                    startRawY[0] = event.getRawY();
+                    startRunnable[0] = () -> {
+                        longPressed[0] = true;
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                        startLibraryCommandTalk();
+                    };
+                    pressHandler.postDelayed(startRunnable[0], android.view.ViewConfiguration.getLongPressTimeout());
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (longPressed[0]) {
+                        boolean shouldCancel = HoldToTalkGesture.shouldCancel(startRawY[0], event.getRawY(), dp(60));
+                        if (shouldCancel != movedToCancel[0]) {
+                            movedToCancel[0] = shouldCancel;
+                            commandCanceled = shouldCancel;
+                            refreshHomePages();
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!longPressed[0]) {
+                        if (startRunnable[0] != null) pressHandler.removeCallbacks(startRunnable[0]);
+                        startRecordingFlow();
+                    } else {
+                        finishLibraryCommandTalk(HoldToTalkGesture.shouldAbortOnEnd(false, movedToCancel[0]));
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    if (startRunnable[0] != null) pressHandler.removeCallbacks(startRunnable[0]);
+                    if (longPressed[0]) finishLibraryCommandTalk(true);
+                    return true;
+                default:
+                    return false;
+            }
+        };
+    }
+
+    protected void startLibraryCommandTalk() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 12);
+            return;
+        }
+        if (commandTalking) return;
+        commandTranscript.clear();
+        commandReply = "按住说图库指令";
+        commandReplyOk = true;
+        commandCanceled = false;
+        commandTalking = true;
+        if (commandSession != null) {
+            commandSession.setRefs(currentCommandRefs());
+            commandSession.connect();
+        }
+        commandDictationSession = new AsrDictationSession(auth, new AsrDictationSession.Listener() {
+            @Override public void onText(String text, boolean isFinal) {
+                main.post(() -> {
+                    commandTranscript.accept(text, isFinal);
+                    commandReply = commandTranscript.bubbleText();
+                    refreshHomePages();
+                });
+            }
+
+            @Override public void onState(String state) {
+                main.post(() -> {
+                    if (commandTranscript.bestText().isEmpty()) commandReply = state;
+                    refreshHomePages();
+                });
+            }
+
+            @Override public void onError(String message) {
+                main.post(() -> {
+                    commandReply = message;
+                    commandReplyOk = false;
+                    toast(message == null || message.isEmpty() ? "听写失败" : message);
+                    refreshHomePages();
+                });
+            }
+        });
+        commandDictationSession.start();
+        refreshHomePages();
+    }
+
+    protected void finishLibraryCommandTalk(boolean cancel) {
+        if (!commandTalking) return;
+        commandCanceled = cancel;
+        final AsrDictationSession session = commandDictationSession;
+        if (session == null) {
+            completeLibraryCommandTalk(cancel);
+            return;
+        }
+        if (cancel) {
+            session.stop();
+            completeLibraryCommandTalk(true);
+            return;
+        }
+        session.finish(() -> main.post(() -> completeLibraryCommandTalk(false)));
+    }
+
+    protected void completeLibraryCommandTalk(boolean cancel) {
+        commandTalking = false;
+        commandDictationSession = null;
+        String text = commandTranscript.bestText();
+        if (cancel) {
+            commandReply = "已取消图库指令";
+            commandReplyOk = true;
+        } else if (text.isEmpty()) {
+            commandReply = "没有识别到指令";
+            commandReplyOk = false;
+        } else {
+            commandReply = text;
+            commandReplyOk = true;
+            if (commandSession != null) commandSession.enqueue(text, currentCommandRefs());
+        }
+        commandTranscript.clear();
+        commandCanceled = false;
+        refreshHomePages();
+    }
+
+    protected List<LibraryCommandSession.CommandRef> currentCommandRefs() {
+        List<LibraryCommandSession.CommandRef> refs = new ArrayList<>();
+        for (Recording rec : recordings) {
+            if (rec.uploading) continue;
+            refs.add(new LibraryCommandSession.CommandRef(refs.size() + 1, rec.stem(), rec.rowTitle()));
+        }
+        return refs;
+    }
+
+    protected int commandRefNumberFor(Recording rec) {
+        if (rec.uploading) return 0;
+        int n = 0;
+        for (Recording item : recordings) {
+            if (item.uploading) continue;
+            n++;
+            if (item == rec || item.audioName.equals(rec.audioName)) return n;
+        }
+        return 0;
+    }
+
+    protected void addLibraryCommandStatus(LinearLayout list) {
+        if (!commandTalking && commandQueue.isEmpty() && (commandReply == null || commandReply.isEmpty())) return;
+        String text;
+        int color = commandReplyOk ? Theme.SECONDARY : Theme.RED;
+        if (commandTalking) {
+            text = commandCanceled ? "松手取消图库指令" : commandTranscript.bubbleText();
+            color = commandCanceled ? Theme.RED : Theme.INK;
+        } else if (!commandQueue.isEmpty()) {
+            text = "图库指令处理中：" + commandQueue.size();
+            color = Theme.RED;
+        } else {
+            text = commandReply;
+        }
+        TextView status = text(text, 13, color, Typeface.BOLD);
+        status.setGravity(Gravity.CENTER);
+        status.setSingleLine(false);
+        status.setPadding(dp(12), dp(9), dp(12), dp(9));
+        status.setBackground(round(commandReplyOk ? Theme.ACCENT_SOFT : 0xffffebe8, 14));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(12));
+        list.addView(status, lp);
+    }
+
+    protected void showLibraryCommandConfirm(String id, String text) {
+        new MessageDialog("确认图库指令", text == null || text.isEmpty() ? "确认执行这条图库指令？" : text, "确认", "取消")
+                .setOkButton("确认", (dialog, v) -> {
+                    if (commandSession != null) commandSession.confirm(id);
+                    return false;
+                })
+                .setCancelButton("取消", (dialog, v) -> {
+                    if (commandSession != null) commandSession.cancel(id);
+                    return false;
+                })
+                .setCancelable(true)
+                .show();
     }
 
     protected View communityRow(CommunityStore.Post post) {
@@ -1160,6 +1456,7 @@ public final class RecordingsActivity extends Activity {
 
         TextView chevron = text("›", 30, 0xffcfc6b6, Typeface.NORMAL);
         row.addView(chevron);
+
         row.setOnClickListener(v -> openCommunityPost(post));
         return row;
     }
@@ -1257,6 +1554,7 @@ public final class RecordingsActivity extends Activity {
         waveIcon.addView(gap2);
         addWaveBar(waveIcon, dp(3), dp(14), silent ? mutedIconFg : Theme.RED);
         row.addView(waveIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        maybeLoadRowCover(rec, row, waveIcon);
 
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.VERTICAL);
@@ -1302,7 +1600,7 @@ public final class RecordingsActivity extends Activity {
                 IosDialog.show(this, "重新生成文章？", "会用相同的写作风格重新挖这篇文章，原文不变。",
                         "重新生成", () -> io.execute(() -> {
                             try {
-                                boolean ok = library.restyle(rec, -1);
+                                boolean ok = library.remine(rec);
                                 toast(ok ? "已请求重新生成" : "重新生成请求失败");
                                 if (ok) refreshAndDrain();
                             } catch (Exception e) {
@@ -1373,7 +1671,51 @@ public final class RecordingsActivity extends Activity {
             }
         });
 
+        if (commandTalking && !rec.uploading) {
+            int n = commandRefNumberFor(rec);
+            if (n > 0) {
+                TextView badge = text(String.valueOf(n), 12, Color.WHITE, Typeface.BOLD);
+                badge.setGravity(Gravity.CENTER);
+                badge.setBackground(round(Theme.RED, 12));
+                FrameLayout.LayoutParams badgeLp = new FrameLayout.LayoutParams(dp(24), dp(24),
+                        Gravity.LEFT | Gravity.TOP);
+                badgeLp.setMargins(dp(6), dp(6), 0, 0);
+                container.addView(badge, badgeLp);
+            }
+        }
+
         return container;
+    }
+
+    protected void maybeLoadRowCover(Recording rec, LinearLayout row, View fallbackIcon) {
+        if (rec == null || !rec.hasArticles || row == null || fallbackIcon == null) return;
+        io.execute(() -> {
+            try {
+                ArticleDoc doc = library.fetchDoc(rec);
+                if (doc == null || doc.articles.isEmpty()) return;
+                String key = null;
+                for (MinedArticle article : doc.articles) {
+                    key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+                    if (key != null) break;
+                }
+                if (key == null) return;
+                HttpClient.Response response = http.get(com.baixingai.voicedrop.net.Api.filesBase()
+                        + "/download/" + com.baixingai.voicedrop.net.Api.path(key), auth.bearer());
+                if (!response.ok()) return;
+                Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(response.body, dp(96));
+                if (bitmap == null) return;
+                main.post(() -> {
+                    int index = row.indexOfChild(fallbackIcon);
+                    if (index < 0) return;
+                    row.removeView(fallbackIcon);
+                    RoundedImageView cover = new RoundedImageView(this);
+                    cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    cover.setImageBitmap(bitmap);
+                    row.addView(cover, index, new LinearLayout.LayoutParams(dp(44), dp(44)));
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
     protected void showRecording(boolean first) {
         closeOpenSwipes();
@@ -1705,42 +2047,11 @@ public final class RecordingsActivity extends Activity {
                 empty.setGravity(Gravity.CENTER);
                 list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
             } else {
+                addLibraryCommandStatus(list);
                 for (Recording rec : recordings) list.addView(recordingRow(rec));
             }
 
-            // FAB
-            LinearLayout fabCol = new LinearLayout(this);
-            fabCol.setOrientation(LinearLayout.VERTICAL);
-            fabCol.setGravity(Gravity.CENTER_HORIZONTAL);
-            fabCol.setClickable(true);
-            FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
-            fabColLp.bottomMargin = dp(22);
-            contentArea.addView(fabCol, fabColLp);
-
-        FrameLayout fabRing = new SoftCircleShadowFrameLayout(RecordingsActivity.this);
-
-        FrameLayout fab = new FrameLayout(RecordingsActivity.this);
-        GradientDrawable fabBg = new GradientDrawable();
-        fabBg.setColor(Theme.RED);
-        fabBg.setCornerRadius(dp(30));
-        fab.setBackground(fabBg);
-        ImageView micIcon = new ImageView(RecordingsActivity.this);
-        AliIconFont.apply(micIcon, AliIconFont.MIC, 0xffffffff);
-        micIcon.setScaleType(ImageView.ScaleType.CENTER);
-        fab.addView(micIcon, new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER));
-        fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
-        fabRing.setLayoutParams(new LinearLayout.LayoutParams(dp(82), dp(82)));
-        fabCol.addView(fabRing);
-
-            TextView label = text("按住说话", 13, Theme.SECONDARY, Typeface.NORMAL);
-            label.setGravity(Gravity.CENTER);
-            label.setPadding(0, 0, 0, 0);
-            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
-            labelLp.setMargins(0, -dp(3), 0, 0);
-            fabCol.addView(label, labelLp);
-            fabCol.setOnClickListener(v -> startRecordingFlow());
-            fabRing.setOnClickListener(v -> startRecordingFlow());
-            label.setOnClickListener(v -> startRecordingFlow());
+            addRecordFab(contentArea);
         });
 
         // Handle the stopped recording — do NOT defer, upload immediately
@@ -1830,9 +2141,8 @@ public final class RecordingsActivity extends Activity {
         Object extra = data.getExtras() == null ? null : data.getExtras().get("data");
         if (!(extra instanceof Bitmap)) return;
         Bitmap bitmap = (Bitmap) extra;
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out);
-        byte[] bytes = out.toByteArray();
+        byte[] bytes = ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86);
+        if (bytes == null) return;
         long offset = Math.max(0, java.time.Duration.between(recordingStart, java.time.ZonedDateTime.now()).getSeconds());
         String key = RecordingName.photoKey(RecordingName.timestamp(recordingStart), (int) offset);
         capturedPhotos.add(new CapturedPhoto(key, bytes, bitmap));
@@ -1847,11 +2157,10 @@ public final class RecordingsActivity extends Activity {
                 if (in == null) return;
                 bytes = HttpClient.readAll(in);
             }
-            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(bytes, 1200);
             if (bitmap == null) return;
-            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out);
-            byte[] jpeg = out.toByteArray();
+            byte[] jpeg = ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86);
+            if (jpeg == null) return;
             long offset = Math.max(0, java.time.Duration.between(recordingStart, java.time.ZonedDateTime.now()).getSeconds());
             String key = RecordingName.photoKey(RecordingName.timestamp(recordingStart), (int) offset);
             capturedPhotos.add(new CapturedPhoto(key, jpeg, bitmap));
@@ -1878,6 +2187,7 @@ public final class RecordingsActivity extends Activity {
         }
         if (requestCode == 10) startRecordingFlow();
         if (requestCode == 11) openCamera();
+        if (requestCode == 12) startLibraryCommandTalk();
     }
 
     protected void handleShareIntent(Intent intent) {

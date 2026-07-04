@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.tencent.mm" />
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -23,6 +27,19 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="voicedrop" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ShareCollectActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -57,6 +74,10 @@
         <activity
             android:name=".WechatSettingsActivity"
             android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".wxapi.WXEntryActivity"
+            android:exported="true"
             android:theme="@style/AppTheme" />
         <activity
             android:name=".AccountActivity"

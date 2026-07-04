@@ -78,15 +78,21 @@ public final class CommunityStore {
     }
 
     public String share(Recording rec, String replyTo) throws Exception {
+        ShareResult result = shareResult(rec, replyTo);
+        return result.ok ? result.shareId : null;
+    }
+
+    public ShareResult shareResult(Recording rec, String replyTo) throws Exception {
         String url = Api.filesBase() + "/community/share/" + Api.path(rec.articleKey());
         byte[] body = replyTo == null ? new byte[0] : new JSONObject().put("replyTo", replyTo).toString().getBytes("UTF-8");
-        HttpClient.Response response = http.postJson(url, auth.bearer(), body);
-        if (!response.ok()) return null;
-        return new JSONObject(response.text()).optString("shareId", null);
+        HttpClient.Response response = http.postJson(url, auth.communityBearer(), body);
+        JSONObject json = response.text().isEmpty() ? new JSONObject() : new JSONObject(response.text());
+        if (!response.ok()) return ShareResult.error(response.code, json.optString("error", ""));
+        return ShareResult.ok(json.optString("shareId", null));
     }
 
     public boolean unshare(String shareId) throws Exception {
-        return http.postJson(Api.filesBase() + "/community/unshare/" + Api.path(shareId), auth.bearer(), new byte[0]).ok();
+        return http.postJson(Api.filesBase() + "/community/unshare/" + Api.path(shareId), auth.communityBearer(), new byte[0]).ok();
     }
 
     public boolean report(String shareId) throws Exception {
@@ -170,6 +176,32 @@ public final class CommunityStore {
         Ranking(List<String> order, List<String> liked) {
             this.order = order;
             this.liked = liked;
+        }
+    }
+
+    public static final class ShareResult {
+        public final boolean ok;
+        public final String shareId;
+        public final int code;
+        public final String error;
+
+        private ShareResult(boolean ok, String shareId, int code, String error) {
+            this.ok = ok;
+            this.shareId = shareId;
+            this.code = code;
+            this.error = error;
+        }
+
+        static ShareResult ok(String shareId) {
+            return new ShareResult(shareId != null && !shareId.isEmpty(), shareId, 200, null);
+        }
+
+        static ShareResult error(int code, String error) {
+            return new ShareResult(false, null, code, error == null ? "" : error);
+        }
+
+        public boolean needsWechatSignin() {
+            return code == 403 && "needs_wechat_signin".equals(error);
         }
     }
 }

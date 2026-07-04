@@ -32,7 +32,8 @@ public final class ArticleDoc {
         if (arr != null) {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject a = arr.getJSONObject(i);
-                articles.add(new MinedArticle(a.optString("title"), a.optString("body"), a.optString("wechatMediaId", null)));
+                Integer style = a.has("style") && !a.isNull("style") ? a.optInt("style") : null;
+                articles.add(new MinedArticle(a.optString("title"), a.optString("body"), style, a.optString("wechatMediaId", null)));
             }
         } else if (obj.has("body")) {
             articles.add(new MinedArticle(obj.optString("title", "(无题)"), obj.optString("body"), null));

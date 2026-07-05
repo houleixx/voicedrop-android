@@ -984,7 +984,12 @@ public final class CommunityDetailActivity extends Activity {
             // Load replies
             try {
                 List<CommunityStore.Post> replies = community.replies(shareId);
-                main.post(() -> renderReplies(repliesSection, replies, post));
+                List<CommunityStore.Post> fullReplies = new ArrayList<>();
+                for (CommunityStore.Post reply : replies) {
+                    CommunityStore.Post full = community.get(reply.shareId);
+                    fullReplies.add(full == null ? reply : full);
+                }
+                main.post(() -> renderReplies(repliesSection, fullReplies, post));
             } catch (Exception ignored) {}
 
             if (post.replyTo != null && !post.replyTo.isEmpty()) {
@@ -1203,50 +1208,87 @@ public final class CommunityDetailActivity extends Activity {
         if (replies == null || replies.isEmpty()) return;
         section.removeAllViews();
 
-        // Divider
-        View divider = new View(this);
-        divider.setBackgroundColor(0xffe0d8cc);
-        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(-1, dp(1));
-        dividerLp.setMargins(0, dp(32), 0, 0);
-        section.addView(divider, dividerLp);
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams headerLp = new LinearLayout.LayoutParams(-1, -2);
+        headerLp.setMargins(0, dp(30), 0, 0);
+        section.addView(header, headerLp);
+
+        View left = new View(this);
+        left.setBackgroundColor(0xffddd5c7);
+        header.addView(left, new LinearLayout.LayoutParams(0, 1, 1));
+        TextView count = text(replies.size() + " 篇回应", 12, 0xffa79f93, Typeface.BOLD);
+        count.setLetterSpacing(0.12f);
+        LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(-2, -2);
+        countLp.setMargins(dp(12), 0, dp(12), 0);
+        header.addView(count, countLp);
+        View right = new View(this);
+        right.setBackgroundColor(0xffddd5c7);
+        header.addView(right, new LinearLayout.LayoutParams(0, 1, 1));
 
         for (CommunityStore.Post reply : replies) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(13), 0, dp(13));
+            row.setGravity(Gravity.TOP);
+            row.setPadding(0, dp(26), 0, 0);
+
+            View accent = new View(this);
+            accent.setBackground(round(0xffe8c7b8, 2));
+            row.addView(accent, new LinearLayout.LayoutParams(dp(3), -1));
 
             LinearLayout texts = new LinearLayout(this);
-            texts.setOrientation(LinearLayout.HORIZONTAL);
-            texts.setGravity(Gravity.CENTER_VERTICAL);
+            texts.setOrientation(LinearLayout.VERTICAL);
+            texts.setPadding(dp(16), 0, 0, 0);
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+
+            LinearLayout byline = new LinearLayout(this);
+            byline.setOrientation(LinearLayout.HORIZONTAL);
+            byline.setGravity(Gravity.CENTER_VERTICAL);
+            texts.addView(byline);
 
             String replyAuthor = reply.author == null || reply.author.isEmpty() ? "匿名" : reply.author;
             TextView author = text(replyAuthor, 13, Theme.RED, Typeface.BOLD);
             author.setSingleLine(true);
-            texts.addView(author);
-            TextView timeText = text("  " + formatCommunityDate(reply.firstSharedAt), 13, Theme.FAINT, Typeface.NORMAL);
+            byline.addView(author);
+            TextView timeText = text("  续文 · " + formatCommunityDate(reply.firstSharedAt), 12, 0xff9a9387, Typeface.NORMAL);
             timeText.setSingleLine(true);
-            texts.addView(timeText);
+            byline.addView(timeText);
             if (reply.title != null && !reply.title.isEmpty()) {
-                TextView title = text(" · " + reply.title, 13, 0xff4f4942, Typeface.NORMAL);
-                title.setSingleLine(true);
-                title.setEllipsize(TextUtils.TruncateAt.END);
-                texts.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+                TextView title = text(reply.title, 19, 0xff2b2823, Typeface.BOLD);
+                title.setPadding(0, dp(8), 0, 0);
+                title.setLineSpacing(dp(5), 1.0f);
+                texts.addView(title);
             }
 
-            ImageView chevron = new ImageView(this);
-            chevron.setImageResource(R.drawable.ic_chevron_right_flat);
-            chevron.setColorFilter(0xffc9c0b3);
-            row.addView(chevron, new LinearLayout.LayoutParams(dp(18), dp(18)));
+            String preview = replyPreviewText(reply);
+            if (!preview.isEmpty()) {
+                TextView body = text(preview, 16, 0xff4f4942, Typeface.NORMAL);
+                body.setPadding(0, dp(10), 0, 0);
+                body.setLineSpacing(dp(8), 1.0f);
+                body.setMaxLines(8);
+                body.setEllipsize(TextUtils.TruncateAt.END);
+                texts.addView(body);
+                if (preview.length() > 160) {
+                    TextView more = text("继续阅读 ↓", 13, Theme.RED, Typeface.BOLD);
+                    more.setPadding(0, dp(10), 0, 0);
+                    texts.addView(more);
+                }
+            }
 
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             section.addView(row, lp);
-            View rowDivider = new View(this);
-            rowDivider.setBackgroundColor(0xffece3d5);
-            section.addView(rowDivider, new LinearLayout.LayoutParams(-1, 1));
             row.setOnClickListener(v -> openCommunityPost(reply));
         }
+    }
+
+    protected String replyPreviewText(CommunityStore.Post reply) {
+        if (reply == null || reply.doc == null || reply.doc.articles.isEmpty()) return "";
+        String preview = reply.doc.articles.get(0).body;
+        preview = preview.replaceAll("\\[\\[photo:[^\\]]+\\]\\]", " ");
+        preview = preview.replaceAll("[#>*`\\-]+", " ");
+        preview = preview.replaceAll("\\s+", " ").trim();
+        return preview.length() > 600 ? preview.substring(0, 600) : preview;
     }
 
     protected void renderReplyToChip(LinearLayout section, CommunityStore.Post original) {

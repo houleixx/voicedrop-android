@@ -26,7 +26,7 @@ public final class LibraryCommandSession {
         void onQueueChanged(List<CommandRequest> queue);
         void onReply(String text, boolean ok);
         void onConfirm(String id, String text);
-        void onUpdate();
+        void onUpdate(List<String> stems);
         void onState(String state);
         void onError(String message);
     }
@@ -131,7 +131,7 @@ public final class LibraryCommandSession {
                 return;
             }
             if ("updated".equals(type)) {
-                listener.onUpdate();
+                listener.onUpdate(strings(obj.optJSONArray("stems")));
                 resolve(id);
                 return;
             }
@@ -170,6 +170,16 @@ public final class LibraryCommandSession {
         persist();
         listener.onQueueChanged(queueSnapshot());
         listener.onState(queue.isEmpty() ? "已连接图库指令" : "正在执行图库指令");
+    }
+
+    private static List<String> strings(JSONArray arr) {
+        List<String> out = new ArrayList<>();
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            String value = arr.optString(i, "");
+            if (!value.isEmpty()) out.add(value);
+        }
+        return out;
     }
 
     private void resolve(String id) {

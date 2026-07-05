@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">VoiceDrop</string>
     <string name="home_subtitle">Android project initialized.</string>
+    <string name="shortcut_record_short">记一条</string>
+    <string name="shortcut_record_long">开始 VoiceDrop 录音</string>
 </resources>

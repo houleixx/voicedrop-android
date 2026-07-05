@@ -165,6 +165,9 @@ public final class RecordingsActivity extends Activity {
     protected TextView recordingsTabTitle;
     protected TextView communityTabTitle;
     protected View homeTabUnderline;
+    protected final List<String> homeTags = new ArrayList<>();
+    protected String selectedTag;
+    protected String defaultRecordTag;
     protected boolean recordingsLoadAttempted;
     protected boolean communityLoadAttempted;
     protected int articleIndex;                // current article section index in multi-article docs
@@ -245,7 +248,8 @@ public final class RecordingsActivity extends Activity {
                 main.post(() -> showLibraryCommandConfirm(id, text));
             }
 
-            @Override public void onUpdate() {
+            @Override public void onUpdate(List<String> stems) {
+                library.invalidateArticleCaches(stems);
                 main.post(RecordingsActivity.this::refreshAndDrain);
             }
 
@@ -785,6 +789,16 @@ public final class RecordingsActivity extends Activity {
         String time = parsed.hhmm != null ? parsed.hhmm : "";
         return month + day + (time.isEmpty() ? "" : " " + time);
     }
+
+    protected String formatTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return "";
+        List<String> clean = new ArrayList<>();
+        for (String tag : tags) {
+            if (tag != null && !tag.trim().isEmpty()) clean.add(tag.trim());
+        }
+        return TextUtils.join(" · ", clean);
+    }
+
     protected String parsedPeriod(Recording rec) {
         // Extract period from the filename (e.g. "Morning", "Afternoon")
         String[] p = rec.stem().split("-");
@@ -919,6 +933,8 @@ public final class RecordingsActivity extends Activity {
         }
         if (link.kind == AppRouter.Kind.RECORD) {
             communityTab = false;
+            selectedTag = null;
+            defaultRecordTag = link.tag;
             showHome();
             if (statusSession != null) statusSession.connect();
             startRecordingFlow();
@@ -987,13 +1003,28 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void loadRecordingsAndPublishPendingReplies() throws Exception {
-        recordings = library.load(uploader.pendingNames());
+        recordings = library.load(uploader.pendingNames(), uploader.pendingTagsByName());
+        refreshHomeTagsFromRecordings();
         int published = pendingReplies.publishReadyReplies(recordings,
                 (recording, replyToShareId) -> community.share(recording, replyToShareId) != null);
         if (published > 0) {
             posts = loadRankedCommunityPosts();
             main.post(() -> toast("回应已发布到社区"));
         }
+    }
+
+    protected void refreshHomeTagsFromRecordings() {
+        Set<String> seen = new HashSet<>();
+        List<String> tags = new ArrayList<>();
+        for (Recording rec : recordings) {
+            if (rec.tags == null) continue;
+            for (String tag : rec.tags) {
+                if (tag != null && !tag.trim().isEmpty() && seen.add(tag.trim())) tags.add(tag.trim());
+            }
+        }
+        homeTags.clear();
+        homeTags.addAll(tags);
+        if (selectedTag != null && !homeTags.contains(selectedTag)) selectedTag = null;
     }
 
     protected void refreshRecordingsFromPull(PullRefreshLayout refresher) {
@@ -1074,21 +1105,41 @@ public final class RecordingsActivity extends Activity {
                     overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
                 });
 
+        HorizontalScrollView tabScroll = new HorizontalScrollView(this);
+        tabScroll.setHorizontalScrollBarEnabled(false);
+        tabScroll.setFillViewport(false);
+        page.addView(tabScroll, new LinearLayout.LayoutParams(-1, -2));
+
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.BOTTOM);
         titleRow.setPadding(dp(18), 0, dp(18), 0);
-        page.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+        tabScroll.addView(titleRow, new HorizontalScrollView.LayoutParams(-2, -2));
 
-        recordingsTabTitle = text("我的录音", 20, communityTab ? Theme.FAINT : Theme.INK, Typeface.BOLD);
+        recordingsTabTitle = text("我的录音", 20, !communityTab && selectedTag == null ? Theme.INK : Theme.FAINT, Typeface.BOLD);
         recordingsTabTitle.setGravity(Gravity.CENTER);
-        recordingsTabTitle.setPadding(dp(8), dp(6), dp(8), dp(6));
-        titleRow.addView(recordingsTabTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        recordingsTabTitle.setPadding(dp(8), dp(6), dp(14), dp(6));
+        titleRow.addView(recordingsTabTitle, new LinearLayout.LayoutParams(-2, -2));
 
         communityTabTitle = text("VD社区", 20, communityTab ? Theme.INK : Theme.FAINT, Typeface.BOLD);
         communityTabTitle.setGravity(Gravity.CENTER);
-        communityTabTitle.setPadding(dp(8), dp(6), dp(8), dp(6));
-        titleRow.addView(communityTabTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        communityTabTitle.setPadding(dp(14), dp(6), dp(14), dp(6));
+        titleRow.addView(communityTabTitle, new LinearLayout.LayoutParams(-2, -2));
+
+        for (String tag : homeTags) {
+            TextView tagTitle = text(tag, 20, tag.equals(selectedTag) ? Theme.INK : Theme.FAINT, Typeface.BOLD);
+            tagTitle.setGravity(Gravity.CENTER);
+            tagTitle.setSingleLine(true);
+            tagTitle.setEllipsize(TextUtils.TruncateAt.END);
+            tagTitle.setPadding(dp(14), dp(6), dp(14), dp(6));
+            tagTitle.setOnClickListener(v -> {
+                communityTab = false;
+                selectedTag = tag;
+                if (homePager != null) homePager.setCurrentItem(homeTags.indexOf(tag) + 2, true);
+                updateHomeTabs();
+            });
+            titleRow.addView(tagTitle, new LinearLayout.LayoutParams(-2, -2));
+        }
 
         homeTabUnderline = new View(this);
         homeTabUnderline.setBackground(round(Theme.RED, 1));
@@ -1101,14 +1152,15 @@ public final class RecordingsActivity extends Activity {
 
         homePager = new LockedViewPager(this);
         homePager.setId(View.generateViewId());
-        homePager.setOffscreenPageLimit(2);
+        homePager.setOffscreenPageLimit(Math.max(2, homeTags.size() + 2));
         homePagerAdapter = new HomePagerAdapter();
         homePager.setAdapter(homePagerAdapter);
         page.addView(homePager, new LinearLayout.LayoutParams(-1, 0, 1));
-        homePager.setCurrentItem(communityTab ? 1 : 0, false);
+        homePager.setCurrentItem(currentHomePageIndex(), false);
         homePager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override public void onPageSelected(int position) {
                 communityTab = position == 1;
+                selectedTag = position >= 2 && position - 2 < homeTags.size() ? homeTags.get(position - 2) : null;
                 updateHomeTabs();
                 if (communityTab && !communityLoadAttempted) {
                     communityLoading = posts.isEmpty();
@@ -1120,8 +1172,12 @@ public final class RecordingsActivity extends Activity {
                 }
             }
         });
-        recordingsTabTitle.setOnClickListener(v -> homePager.setCurrentItem(0, true));
+        recordingsTabTitle.setOnClickListener(v -> {
+            selectedTag = null;
+            homePager.setCurrentItem(0, true);
+        });
         communityTabTitle.setOnClickListener(v -> {
+            selectedTag = null;
             if (!communityLoadAttempted && posts.isEmpty()) {
                 communityLoading = true;
                 refreshHomePages();
@@ -1137,12 +1193,42 @@ public final class RecordingsActivity extends Activity {
 
     protected void updateHomeTabs() {
         if (recordingsTabTitle == null || communityTabTitle == null || homeTabUnderline == null) return;
-        recordingsTabTitle.setTextColor(communityTab ? Theme.FAINT : Theme.INK);
+        recordingsTabTitle.setTextColor(!communityTab && selectedTag == null ? Theme.INK : Theme.FAINT);
         communityTabTitle.setTextColor(communityTab ? Theme.INK : Theme.FAINT);
-        updateUnderline(homeTabUnderline, recordingsTabTitle, communityTabTitle, communityTab);
+        if (selectedTag == null) {
+            homeTabUnderline.setVisibility(View.VISIBLE);
+            updateUnderline(homeTabUnderline, recordingsTabTitle, communityTabTitle, communityTab);
+        } else {
+            homeTabUnderline.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    protected int currentHomePageIndex() {
+        if (communityTab) return 1;
+        if (selectedTag != null) {
+            int index = homeTags.indexOf(selectedTag);
+            if (index >= 0) return index + 2;
+        }
+        return 0;
     }
 
     protected View buildRecordingsTabPage() {
+        return buildRecordingsListPage(recordings, "轻点下方按钮开始第一条录音");
+    }
+
+    protected View buildTagTabPage(String tag) {
+        return buildRecordingsListPage(recordingsForTag(tag), "「" + tag + "」标签下还没有文章");
+    }
+
+    protected List<Recording> recordingsForTag(String tag) {
+        List<Recording> out = new ArrayList<>();
+        for (Recording rec : recordings) {
+            if (rec.tags != null && rec.tags.contains(tag)) out.add(rec);
+        }
+        return out;
+    }
+
+    protected View buildRecordingsListPage(List<Recording> listForPage, String emptyText) {
         FrameLayout contentArea = new FrameLayout(this);
 
         PullRefreshLayout refresher = pullRefreshContainer();
@@ -1157,15 +1243,15 @@ public final class RecordingsActivity extends Activity {
         refresher.setOnRefreshListener(() -> refreshRecordingsFromPull(refresher));
         contentArea.addView(refresher, match());
 
-        if (loading && recordings.isEmpty() && !communityTab) {
+        if (loading && listForPage.isEmpty() && !communityTab) {
             list.addView(new LoadingStateView(this), new LinearLayout.LayoutParams(-1, dp(180)));
-        } else if (recordings.isEmpty()) {
-            TextView empty = text("轻点下方按钮开始第一条录音", 16, Theme.SECONDARY, Typeface.NORMAL);
+        } else if (listForPage.isEmpty()) {
+            TextView empty = text(emptyText, 16, Theme.SECONDARY, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
             list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
         } else {
             addLibraryCommandStatus(list);
-            for (Recording rec : recordings) list.addView(recordingRow(rec));
+            for (Recording rec : listForPage) list.addView(recordingRow(rec));
         }
 
         addRecordFab(contentArea);
@@ -1365,17 +1451,26 @@ public final class RecordingsActivity extends Activity {
 
     protected List<LibraryCommandSession.CommandRef> currentCommandRefs() {
         List<LibraryCommandSession.CommandRef> refs = new ArrayList<>();
-        for (Recording rec : recordings) {
+        for (Recording rec : currentCommandTargets()) {
             if (rec.uploading) continue;
             refs.add(new LibraryCommandSession.CommandRef(refs.size() + 1, rec.stem(), rec.rowTitle()));
         }
         return refs;
     }
 
+    protected List<Recording> currentCommandTargets() {
+        if (selectedTag == null) return recordings;
+        List<Recording> out = new ArrayList<>();
+        for (Recording rec : recordings) {
+            if (rec.tags != null && rec.tags.contains(selectedTag)) out.add(rec);
+        }
+        return out;
+    }
+
     protected int commandRefNumberFor(Recording rec) {
         if (rec.uploading) return 0;
         int n = 0;
-        for (Recording item : recordings) {
+        for (Recording item : currentCommandTargets()) {
             if (item.uploading) continue;
             n++;
             if (item == rec || item.audioName.equals(rec.audioName)) return n;
@@ -1463,7 +1558,7 @@ public final class RecordingsActivity extends Activity {
 
     protected final class HomePagerAdapter extends PagerAdapter {
         @Override public int getCount() {
-            return 2;
+            return 2 + homeTags.size();
         }
 
         @Override public boolean isViewFromObject(View view, Object object) {
@@ -1471,7 +1566,15 @@ public final class RecordingsActivity extends Activity {
         }
 
         @Override public Object instantiateItem(ViewGroup container, int position) {
-            View page = position == 0 ? buildRecordingsTabPage() : buildCommunityTabPage();
+            View page;
+            if (position == 0) {
+                page = buildRecordingsTabPage();
+            } else if (position == 1) {
+                page = buildCommunityTabPage();
+            } else {
+                String tag = position - 2 < homeTags.size() ? homeTags.get(position - 2) : "";
+                page = buildTagTabPage(tag);
+            }
             container.addView(page, new ViewGroup.LayoutParams(-1, -1));
             return page;
         }
@@ -1572,9 +1675,11 @@ public final class RecordingsActivity extends Activity {
         meta.addView(sub);
         String dateTime = formatArticleSubtitle(rec);
         String duration = rec.durationLabel();
-        String metaText = dateTime.isEmpty()
-                ? (duration.isEmpty() ? "录音" : duration)
-                : dateTime + (duration.isEmpty() ? "" : "  " + duration);
+        List<String> metaParts = new ArrayList<>();
+        if (!dateTime.isEmpty()) metaParts.add(dateTime);
+        if (!duration.isEmpty()) metaParts.add(duration);
+        if (!formatTags(rec.tags).isEmpty()) metaParts.add(formatTags(rec.tags));
+        String metaText = metaParts.isEmpty() ? "录音" : TextUtils.join("  ", metaParts);
         sub.addView(text(metaText, 13, silent ? mutedMeta : Theme.FAINT, Typeface.NORMAL));
 
         int statusColor = silent ? mutedMeta : (rec.hasArticles ? Theme.GREEN : Theme.AMBER);
@@ -1630,8 +1735,10 @@ public final class RecordingsActivity extends Activity {
                     float dY = event.getRawY() - downY[0];
                     if (!isSwiping[0] && Math.abs(dX) > dp(10) && Math.abs(dX) > Math.abs(dY)) {
                         isSwiping[0] = true;
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(true);
                     }
                     if (isSwiping[0] && dX < 0) {
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(true);
                         float tx = Math.max(-deleteWidth - dp(10), dX / 3f);
                         row.setTranslationX(tx);
                         return true;
@@ -1641,6 +1748,7 @@ public final class RecordingsActivity extends Activity {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (isSwiping[0]) {
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(false);
                         float currentTx = row.getTranslationX();
                         float fullOpen = -deleteWidth - dp(10);
                         if (currentTx < fullOpen / 2f) {
@@ -1653,6 +1761,7 @@ public final class RecordingsActivity extends Activity {
                         isSwiping[0] = false;
                         return true;
                     }
+                    if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(false);
                     return false;
             }
             return false;
@@ -1895,6 +2004,7 @@ public final class RecordingsActivity extends Activity {
             return;
         }
         try {
+            if ((defaultRecordTag == null || defaultRecordTag.isEmpty()) && selectedTag != null) defaultRecordTag = selectedTag;
             recorder.start();
             recordingStart = recorder.startDate();
             capturedPhotos.clear();
@@ -2083,6 +2193,10 @@ public final class RecordingsActivity extends Activity {
     protected void uploadTake(AudioRecorder.Take take, List<CapturedPhoto> photos) {
         io.execute(() -> {
             uploadCapturedPhotos(photos);
+            if (defaultRecordTag != null && !defaultRecordTag.isEmpty()) {
+                Uploader.writeTagsSidecar(take.file, java.util.Collections.singletonList(defaultRecordTag));
+                defaultRecordTag = null;
+            }
             uploader.upload(take.file);
             try {
                 loadRecordingsAndPublishPendingReplies();

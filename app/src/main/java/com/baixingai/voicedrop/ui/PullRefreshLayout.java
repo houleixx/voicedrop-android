@@ -24,6 +24,7 @@ public class PullRefreshLayout extends FrameLayout {
     private OnRefreshListener listener;
     private boolean refreshing;
     private boolean dragging;
+    private float downX;
     private float downY;
     private float pullDistance;
     private int spinnerColor;
@@ -97,11 +98,17 @@ public class PullRefreshLayout extends FrameLayout {
         if (refreshing || content == null) return false;
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                downX = ev.getX();
                 downY = ev.getY();
                 dragging = false;
                 break;
             case MotionEvent.ACTION_MOVE:
+                float dx = ev.getX() - downX;
                 float dy = ev.getY() - downY;
+                if (Math.abs(dx) > touchSlop && Math.abs(dx) > Math.abs(dy)) {
+                    dragging = false;
+                    return false;
+                }
                 if (dy > touchSlop && !content.canScrollVertically(-1)) {
                     dragging = true;
                     return true;

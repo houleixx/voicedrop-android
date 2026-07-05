@@ -28,6 +28,11 @@ public class RecordingDetailStyleSourceTest {
         assertTrue(source.contains("styleRewriteButtonText"));
         assertTrue(source.contains("generatedVersions.containsKey(styleVersion) ? \"切换到 v\""));
         assertTrue(source.contains("showBlockingLoading(\"正在用新风格重写...\""));
+        assertTrue(source.contains("new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar)"));
+        assertTrue(source.contains("private static final int BLOCKING_LOADING_SCRIM = 0x33000000"));
+        assertTrue(source.contains("root.setBackgroundColor(BLOCKING_LOADING_SCRIM)"));
+        assertTrue(source.contains("DialogWindowDefaults.applyModal(dialog.getWindow(), BLOCKING_LOADING_SCRIM, BLOCKING_LOADING_SCRIM, true)"));
+        assertFalse(source.contains("configureBlockingLoadingWindow"));
         assertTrue(source.contains("library.restyle(rec, styleVersion)"));
         assertTrue(source.contains("library.patchHead(rec, head)"));
         assertTrue(source.contains("showArticle(rec, nextDoc, false, false)"));

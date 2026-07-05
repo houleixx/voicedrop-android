@@ -12,6 +12,10 @@ public class AppRouterTest {
         assertEquals(AppRouter.Kind.SETTINGS, AppRouter.parse("voicedrop://settings").kind);
         assertEquals(AppRouter.Kind.RECORD, AppRouter.parse("voicedrop://record").kind);
 
+        AppRouter.DeepLink taggedRecord = AppRouter.parse("voicedrop://record?tag=%E5%88%9B%E4%B8%9A");
+        assertEquals(AppRouter.Kind.RECORD, taggedRecord.kind);
+        assertEquals("创业", taggedRecord.tag);
+
         AppRouter.DeepLink article = AppRouter.parse("voicedrop://article/VoiceDrop-2026-07-04-093000");
         assertEquals(AppRouter.Kind.ARTICLE, article.kind);
         assertEquals("VoiceDrop-2026-07-04-093000", article.stem);

@@ -2,6 +2,8 @@ package com.baixingai.voicedrop.data;
 
 import com.baixingai.voicedrop.core.RecordingName;
 
+import java.util.List;
+
 public final class Recording {
     public final String audioName;
     public final String uploaded;
@@ -11,6 +13,7 @@ public final class Recording {
     public boolean uploading;
     public String phase;
     public String blockReason;
+    public List<String> tags;
 
     public Recording(String audioName, String uploaded, boolean hasArticles, boolean isEmpty) {
         this.audioName = audioName;
@@ -27,11 +30,13 @@ public final class Recording {
     public String emptyKey() { return emptyKey(stem()); }
     public String srtKey() { return srtKey(stem()); }
     public String blockedKey() { return blockedKey(stem()); }
+    public String tagsKey() { return tagsKey(stem()); }
 
     public static String articleKey(String stem) { return "articles/" + stem + ".json"; }
     public static String emptyKey(String stem) { return "articles/" + stem + ".empty"; }
     public static String srtKey(String stem) { return "articles/" + stem + ".srt"; }
     public static String blockedKey(String stem) { return "articles/" + stem + ".blocked"; }
+    public static String tagsKey(String stem) { return "articles/" + stem + ".tags"; }
 
     public String rowTitle() {
         if (articleTitle != null && !articleTitle.isEmpty()) return articleTitle;

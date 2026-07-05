@@ -70,6 +70,7 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.ArticleVersionNavigation;
 import com.baixingai.voicedrop.ui.AudioPlaybackState;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.DialogWindowDefaults;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -133,6 +134,8 @@ import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.net.HttpClient;
 
 public final class RecordingDetailActivity extends Activity {
+    private static final int BLOCKING_LOADING_SCRIM = 0x33000000;
+
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
     protected final Handler main = new Handler(Looper.getMainLooper());
@@ -1359,18 +1362,17 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected android.app.Dialog showBlockingLoading(String message) {
-        android.app.Dialog dialog = new android.app.Dialog(this);
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
         dialog.setCancelable(false);
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(0x66000000);
+        root.setBackgroundColor(BLOCKING_LOADING_SCRIM);
         LoadingStateView loading = new LoadingStateView(this, message);
         loading.setPadding(dp(22), dp(22), dp(22), dp(22));
         loading.setBackground(round(0xf8ffffff, 16));
         root.addView(loading, new FrameLayout.LayoutParams(dp(230), dp(150), Gravity.CENTER));
         dialog.setContentView(root);
-        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         dialog.show();
-        if (dialog.getWindow() != null) dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        DialogWindowDefaults.applyModal(dialog.getWindow(), BLOCKING_LOADING_SCRIM, BLOCKING_LOADING_SCRIM, true);
         return dialog;
     }
 

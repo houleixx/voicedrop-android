@@ -19,6 +19,7 @@ public final class LibraryStore {
     private final AuthStore auth;
     private final HttpClient http;
     private final Map<String, String> titleCache = new HashMap<>();
+    private final Map<String, List<String>> tagsCache = new HashMap<>();
     private String cachedScope;
 
     public LibraryStore(AuthStore auth, HttpClient http) {
@@ -27,6 +28,10 @@ public final class LibraryStore {
     }
 
     public List<Recording> load(List<String> localUploading) throws Exception {
+        return load(localUploading, new HashMap<String, List<String>>());
+    }
+
+    public List<Recording> load(List<String> localUploading, Map<String, List<String>> pendingTagsByName) throws Exception {
         HttpClient.Response response = http.get(Api.filesBase() + "/list", auth.bearer());
         if (!response.ok()) throw new IllegalStateException("加载失败 HTTP " + response.code);
         JSONObject root = new JSONObject(response.text());
@@ -46,6 +51,7 @@ public final class LibraryStore {
         for (String local : localUploading) {
             Recording r = new Recording(local, "", false, false);
             r.uploading = true;
+            r.tags = pendingTagsByName == null ? null : pendingTagsByName.get(local);
             recordings.add(r);
         }
         for (Item item : items) {
@@ -58,6 +64,11 @@ public final class LibraryStore {
                     names.contains(Recording.articleKey(stem)),
                     names.contains(Recording.emptyKey(stem)));
             r.articleTitle = titleCache.get(r.articleKey());
+            r.tags = tagsCache.get(r.articleKey());
+            if ((r.tags == null || r.tags.isEmpty()) && pendingTagsByName != null) r.tags = pendingTagsByName.get(last);
+            if ((r.tags == null || r.tags.isEmpty()) && !r.hasArticles && names.contains(Recording.tagsKey(stem))) {
+                r.tags = fetchTagsSidecar(stem);
+            }
             recordings.add(r);
         }
         Collections.sort(recordings, (a, b) -> {
@@ -71,10 +82,38 @@ public final class LibraryStore {
                 if (doc != null && !doc.articles.isEmpty()) {
                     r.articleTitle = doc.articles.get(0).title;
                     titleCache.put(r.articleKey(), r.articleTitle);
+                    r.tags = doc.tags.isEmpty() ? null : doc.tags;
+                    tagsCache.put(r.articleKey(), doc.tags);
                 }
             }
         }
         return recordings;
+    }
+
+    public void invalidateArticleCaches(List<String> stems) {
+        if (stems == null) return;
+        for (String stem : stems) {
+            if (stem == null || stem.isEmpty()) continue;
+            String key = Recording.articleKey(stem);
+            titleCache.remove(key);
+            tagsCache.remove(key);
+        }
+    }
+
+    private List<String> fetchTagsSidecar(String stem) {
+        try {
+            HttpClient.Response response = http.get(Api.filesBase() + "/download/" + Api.path(Recording.tagsKey(stem)), auth.bearer());
+            if (!response.ok()) return null;
+            JSONArray arr = new JSONArray(response.text());
+            List<String> out = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) {
+                String tag = arr.optString(i, "").trim();
+                if (!tag.isEmpty()) out.add(tag);
+            }
+            return out.isEmpty() ? null : out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public ArticleDoc fetchDoc(Recording rec) {
@@ -104,6 +143,7 @@ public final class LibraryStore {
         boolean articleDeleted = deleteKey(rec.articleKey());
         boolean srtDeleted = deleteKey(rec.srtKey());
         boolean emptyDeleted = deleteKey(rec.emptyKey());
+        deleteKey(rec.tagsKey());
         return recordingDeleteSucceeded(audioDeleted, articleDeleted, srtDeleted, emptyDeleted);
     }
 
@@ -198,6 +238,9 @@ public final class LibraryStore {
         boolean ok = deleteKey(rec.articleKey());
         deleteKey(rec.srtKey());
         deleteKey(rec.emptyKey());
+        deleteKey(rec.tagsKey());
+        titleCache.remove(rec.articleKey());
+        tagsCache.remove(rec.articleKey());
         return ok;
     }
 

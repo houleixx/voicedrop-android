@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutDisabledMessage="@string/shortcut_record_long"
+        android:shortcutId="start_recording"
+        android:shortcutLongLabel="@string/shortcut_record_long"
+        android:shortcutShortLabel="@string/shortcut_record_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="voicedrop://record"
+            android:targetClass="com.baixingai.voicedrop.RecordingsActivity"
+            android:targetPackage="com.baixingai.voicedrop" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

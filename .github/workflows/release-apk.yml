@@ -39,12 +39,14 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          UMENG_APP_KEY: ${{ secrets.UMENG_APP_KEY }}
         run: |
           set -euo pipefail
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
+          test -n "$UMENG_APP_KEY"
 
       - name: Restore release signing files
         env:
@@ -61,6 +63,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          UMENG_APP_KEY: ${{ secrets.UMENG_APP_KEY }}
+          UMENG_CHANNEL: github
         run: ./gradlew --no-daemon assembleRelease
 
       - name: Prepare APK file

@@ -3,14 +3,18 @@ package com.baixingai.voicedrop;
 import android.app.Application;
 import android.app.Activity;
 import android.os.Bundle;
+import android.text.TextUtils;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.DialogX;
 import com.kongzue.dialogx.style.IOSStyle;
+import com.umeng.analytics.MobclickAgent;
+import com.umeng.commonsdk.UMConfigure;
 
 public class VoiceDropApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        initUmengAnalytics();
         DialogX.init(this);
         DialogX.globalStyle = IOSStyle.style();
         DialogX.globalTheme = DialogX.THEME.LIGHT;
@@ -30,6 +34,13 @@ public class VoiceDropApplication extends Application {
             @Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
             @Override public void onActivityDestroyed(Activity activity) {}
         });
+    }
+
+    private void initUmengAnalytics() {
+        if (TextUtils.isEmpty(BuildConfig.UMENG_APP_KEY)) return;
+        UMConfigure.preInit(this, BuildConfig.UMENG_APP_KEY, BuildConfig.UMENG_CHANNEL);
+        UMConfigure.init(this, BuildConfig.UMENG_APP_KEY, BuildConfig.UMENG_CHANNEL, UMConfigure.DEVICE_TYPE_PHONE, null);
+        MobclickAgent.setPageCollectionMode(MobclickAgent.PageMode.AUTO);
     }
 
     private void applySystemBarDefaults(Activity activity) {

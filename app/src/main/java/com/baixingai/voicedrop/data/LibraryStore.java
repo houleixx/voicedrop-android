@@ -77,7 +77,7 @@ public final class LibraryStore {
             return byUpload != 0 ? byUpload : b.audioName.compareTo(a.audioName);
         });
         for (Recording r : recordings) {
-            if (r.hasArticles && r.articleTitle == null) {
+            if (r.hasArticles && (r.articleTitle == null || r.tags == null)) {
                 ArticleDoc doc = fetchDoc(r);
                 if (doc != null && !doc.articles.isEmpty()) {
                     r.articleTitle = doc.articles.get(0).title;

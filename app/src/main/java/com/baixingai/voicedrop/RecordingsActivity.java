@@ -139,6 +139,13 @@ public final class RecordingsActivity extends Activity {
     protected boolean commandTalking;
     protected boolean commandCanceled;
     protected View commandFabView;
+    protected TextView fabLabel;
+    protected TextView fabStatus;
+    protected LinearLayout recordingsList;
+    protected String emptyListText;
+    protected final HashMap<String, LinearLayout> recordingsListsByPage = new HashMap<>();
+    protected final HashMap<String, String> emptyListTextByPage = new HashMap<>();
+    protected static final String COMMAND_NUMBER_BADGE_TAG = "command-number-badge";
     private final HoldToTalkTranscript holdEditTranscript = new HoldToTalkTranscript();
     protected boolean holdEditCanceled;
     protected boolean holdEditFinishing;
@@ -237,9 +244,9 @@ public final class RecordingsActivity extends Activity {
 
             @Override public void onReply(String text, boolean ok) {
                 main.post(() -> {
+                    if (isQuietLibraryCommandMessage(text)) return;
                     commandReply = text;
                     commandReplyOk = ok;
-                    if (text != null && !text.isEmpty()) toast(text);
                     refreshHomePages();
                 });
             }
@@ -254,11 +261,13 @@ public final class RecordingsActivity extends Activity {
             }
 
             @Override public void onState(String state) {
-                if (state != null && !state.isEmpty()) main.post(() -> commandReply = state);
+                // Match iOS: connection lifecycle is quiet. The home feedback area is only
+                // for active dictation, queued commands, confirmations, replies, and errors.
             }
 
             @Override public void onError(String message) {
                 main.post(() -> {
+                    if (isQuietLibraryCommandMessage(message)) return;
                     commandReply = message;
                     commandReplyOk = false;
                     if (message != null && !message.isEmpty()) toast(message);
@@ -752,6 +761,18 @@ public final class RecordingsActivity extends Activity {
             }
         });
     }
+
+    protected boolean isQuietLibraryCommandMessage(String message) {
+        if (message == null) return false;
+        String value = message.trim();
+        if (value.isEmpty()) return false;
+        return value.contains("已连接图库指令")
+                || value.contains("已连接到图库指令")
+                || value.contains("正在恢复图库指令")
+                || value.contains("正在执行图库指令")
+                || value.contains("图库指令连接断开")
+                || value.contains("图库指令已完成");
+    }
     // MARK: - Community Terms Gate
 
     protected void showCommunityTermsGate(Runnable onAgree) {
@@ -853,6 +874,13 @@ public final class RecordingsActivity extends Activity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+    protected GradientDrawable roundStroke(int fillColor, int radiusDp, int strokeColor, int strokeWidthDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(dp(radiusDp));
+        drawable.setStroke(dp(strokeWidthDp), strokeColor);
         return drawable;
     }
     protected FrameLayout.LayoutParams match() {
@@ -962,13 +990,15 @@ public final class RecordingsActivity extends Activity {
         recordingsLoadAttempted = true;
         io.execute(() -> {
             uploader.drainPending();
+            boolean tagsChanged = false;
             try {
-                loadRecordingsAndPublishPendingReplies();
+                tagsChanged = loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
             loading = false;
-            main.post(this::refreshHomePages);
+            final boolean rebuildHome = tagsChanged;
+            main.post(() -> refreshHomeAfterRecordingLoad(rebuildHome));
         });
     }
     protected void refreshDataInBackground() {
@@ -981,14 +1011,19 @@ public final class RecordingsActivity extends Activity {
         }
         io.execute(() -> {
             uploader.drainPending();
+            boolean tagsChanged = false;
             try {
                 if (loadCommunity) posts = loadRankedCommunityPosts();
-                else loadRecordingsAndPublishPendingReplies();
+                else tagsChanged = loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
             if (loadCommunity) communityLoading = false;
-            main.post(this::refreshHomePages);
+            final boolean rebuildHome = tagsChanged;
+            main.post(() -> {
+                if (loadCommunity) refreshHomePages();
+                else refreshHomeAfterRecordingLoad(rebuildHome);
+            });
         });
     }
     protected void refreshDataSilently() {
@@ -1002,18 +1037,20 @@ public final class RecordingsActivity extends Activity {
         });
     }
 
-    protected void loadRecordingsAndPublishPendingReplies() throws Exception {
+    protected boolean loadRecordingsAndPublishPendingReplies() throws Exception {
         recordings = library.load(uploader.pendingNames(), uploader.pendingTagsByName());
-        refreshHomeTagsFromRecordings();
+        boolean tagsChanged = refreshHomeTagsFromRecordings();
         int published = pendingReplies.publishReadyReplies(recordings,
                 (recording, replyToShareId) -> community.share(recording, replyToShareId) != null);
         if (published > 0) {
             posts = loadRankedCommunityPosts();
             main.post(() -> toast("回应已发布到社区"));
         }
+        return tagsChanged;
     }
 
-    protected void refreshHomeTagsFromRecordings() {
+    protected boolean refreshHomeTagsFromRecordings() {
+        List<String> previous = new ArrayList<>(homeTags);
         Set<String> seen = new HashSet<>();
         List<String> tags = new ArrayList<>();
         for (Recording rec : recordings) {
@@ -1025,6 +1062,17 @@ public final class RecordingsActivity extends Activity {
         homeTags.clear();
         homeTags.addAll(tags);
         if (selectedTag != null && !homeTags.contains(selectedTag)) selectedTag = null;
+        return !previous.equals(homeTags);
+    }
+
+    protected void refreshHomeAfterRecordingLoad(boolean tagsChanged) {
+        if (tagsChanged && homePager != null && root.getChildCount() > 0 && !isDetailActivity()) {
+            clearHomePagerRefs();
+            root.removeAllViews();
+            showHome();
+        } else {
+            refreshHomePages();
+        }
     }
 
     protected void refreshRecordingsFromPull(PullRefreshLayout refresher) {
@@ -1032,14 +1080,16 @@ public final class RecordingsActivity extends Activity {
         closeOpenSwipes();
         io.execute(() -> {
             uploader.drainPending();
+            boolean tagsChanged = false;
             try {
-                loadRecordingsAndPublishPendingReplies();
+                tagsChanged = loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
+            final boolean rebuildHome = tagsChanged;
             main.post(() -> {
                 refresher.setRefreshing(false);
-                refreshHomePages();
+                refreshHomeAfterRecordingLoad(rebuildHome);
             });
         });
     }
@@ -1213,11 +1263,15 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected View buildRecordingsTabPage() {
-        return buildRecordingsListPage(recordings, "轻点下方按钮开始第一条录音");
+        return buildRecordingsListPage(recordingsPageKey(null), recordings, "轻点下方按钮开始第一条录音");
     }
 
     protected View buildTagTabPage(String tag) {
-        return buildRecordingsListPage(recordingsForTag(tag), "「" + tag + "」标签下还没有文章");
+        return buildRecordingsListPage(recordingsPageKey(tag), recordingsForTag(tag), "「" + tag + "」标签下还没有文章");
+    }
+
+    protected String recordingsPageKey(String tag) {
+        return tag == null ? "__all_recordings__" : "tag:" + tag;
     }
 
     protected List<Recording> recordingsForTag(String tag) {
@@ -1228,7 +1282,7 @@ public final class RecordingsActivity extends Activity {
         return out;
     }
 
-    protected View buildRecordingsListPage(List<Recording> listForPage, String emptyText) {
+    protected View buildRecordingsListPage(String pageKey, List<Recording> listForPage, String emptyText) {
         FrameLayout contentArea = new FrameLayout(this);
 
         PullRefreshLayout refresher = pullRefreshContainer();
@@ -1243,6 +1297,23 @@ public final class RecordingsActivity extends Activity {
         refresher.setOnRefreshListener(() -> refreshRecordingsFromPull(refresher));
         contentArea.addView(refresher, match());
 
+        recordingsList = list;
+        recordingsListsByPage.put(pageKey, list);
+        emptyListText = emptyText;
+        emptyListTextByPage.put(pageKey, emptyText);
+        populateRecordingList(list, emptyText, listForPage);
+
+        addRecordFab(contentArea);
+        return contentArea;
+    }
+
+    protected void populateRecordingList(List<Recording> listForPage) {
+        populateRecordingList(recordingsList, emptyListText, listForPage);
+    }
+
+    protected void populateRecordingList(LinearLayout list, String emptyText, List<Recording> listForPage) {
+        if (list == null) return;
+        list.removeAllViews();
         if (loading && listForPage.isEmpty() && !communityTab) {
             list.addView(new LoadingStateView(this), new LinearLayout.LayoutParams(-1, dp(180)));
         } else if (listForPage.isEmpty()) {
@@ -1250,12 +1321,8 @@ public final class RecordingsActivity extends Activity {
             empty.setGravity(Gravity.CENTER);
             list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
         } else {
-            addLibraryCommandStatus(list);
             for (Recording rec : listForPage) list.addView(recordingRow(rec));
         }
-
-        addRecordFab(contentArea);
-        return contentArea;
     }
 
     protected View buildCommunityTabPage() {
@@ -1283,7 +1350,7 @@ public final class RecordingsActivity extends Activity {
         fabCol.setOrientation(LinearLayout.VERTICAL);
         fabCol.setGravity(Gravity.CENTER_HORIZONTAL);
         fabCol.setClickable(true);
-        FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-2, -2,
+        FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-1, -2,
                 Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         fabColLp.bottomMargin = dp(22);
         contentArea.addView(fabCol, fabColLp);
@@ -1300,20 +1367,23 @@ public final class RecordingsActivity extends Activity {
         micIcon.setScaleType(ImageView.ScaleType.CENTER);
         fab.addView(micIcon, new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER));
         fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
+        addLibraryCommandStatus(fabCol);
+        TextView localFabStatus = fabStatus;
         fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
-        TextView label = text(recordFabLabel(), 12, commandTalking ? Theme.RED : Theme.SECONDARY, Typeface.NORMAL);
-        label.setLetterSpacing(0.08f);
-        label.setPadding(0, 0, 0, 0);
-        label.setGravity(Gravity.CENTER);
+        fabLabel = text(recordFabLabel(), 12, commandTalking ? Theme.RED : Theme.SECONDARY, Typeface.NORMAL);
+        TextView localFabLabel = fabLabel;
+        fabLabel.setLetterSpacing(0.08f);
+        fabLabel.setPadding(0, 0, 0, 0);
+        fabLabel.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
         labelLp.setMargins(0, -dp(3), 0, 0);
-        fabCol.addView(label, labelLp);
-        View.OnTouchListener commandTouch = createLibraryCommandFabTouchListener();
+        fabCol.addView(fabLabel, labelLp);
+        View.OnTouchListener commandTouch = createLibraryCommandFabTouchListener(localFabLabel, localFabStatus);
         fabCol.setOnTouchListener(commandTouch);
         fabRing.setOnTouchListener(commandTouch);
         fab.setOnTouchListener(commandTouch);
-        label.setOnTouchListener(commandTouch);
+        fabLabel.setOnTouchListener(commandTouch);
     }
 
     protected String recordFabLabel() {
@@ -1321,13 +1391,15 @@ public final class RecordingsActivity extends Activity {
         return commandCanceled ? "上滑取消 · 松开放弃" : "松开发送 · 上滑取消";
     }
 
-    protected View.OnTouchListener createLibraryCommandFabTouchListener() {
+    protected View.OnTouchListener createLibraryCommandFabTouchListener(TextView localFabLabel, TextView localFabStatus) {
         final Handler pressHandler = new Handler(Looper.getMainLooper());
         final boolean[] longPressed = {false};
         final boolean[] movedToCancel = {false};
         final float[] startRawY = {0};
         final Runnable[] startRunnable = new Runnable[1];
         return (v, event) -> {
+            fabLabel = localFabLabel;
+            fabStatus = localFabStatus;
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     commandFabView = v;
@@ -1339,7 +1411,7 @@ public final class RecordingsActivity extends Activity {
                         v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                         startLibraryCommandTalk();
                     };
-                    pressHandler.postDelayed(startRunnable[0], android.view.ViewConfiguration.getLongPressTimeout());
+                    pressHandler.postDelayed(startRunnable[0], commandLongPressConfirmDelayMs());
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     if (longPressed[0]) {
@@ -1347,7 +1419,8 @@ public final class RecordingsActivity extends Activity {
                         if (shouldCancel != movedToCancel[0]) {
                             movedToCancel[0] = shouldCancel;
                             commandCanceled = shouldCancel;
-                            refreshHomePages();
+                            updateFabLabel();
+                            updateFabStatus();
                         }
                     }
                     return true;
@@ -1361,12 +1434,16 @@ public final class RecordingsActivity extends Activity {
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     if (startRunnable[0] != null) pressHandler.removeCallbacks(startRunnable[0]);
-                    if (longPressed[0]) finishLibraryCommandTalk(true);
+                    finishLibraryCommandTalk(true);
                     return true;
                 default:
                     return false;
             }
         };
+    }
+
+    protected int commandLongPressConfirmDelayMs() {
+        return 300;
     }
 
     protected void startLibraryCommandTalk() {
@@ -1376,7 +1453,7 @@ public final class RecordingsActivity extends Activity {
         }
         if (commandTalking) return;
         commandTranscript.clear();
-        commandReply = "按住说图库指令";
+        commandReply = "正在连接…";
         commandReplyOk = true;
         commandCanceled = false;
         commandTalking = true;
@@ -1388,34 +1465,50 @@ public final class RecordingsActivity extends Activity {
             @Override public void onText(String text, boolean isFinal) {
                 main.post(() -> {
                     commandTranscript.accept(text, isFinal);
+                    if (!commandTalking) return;
                     commandReply = commandTranscript.bubbleText();
-                    refreshHomePages();
+                    updateFabLabel();
+                    updateFabStatus();
                 });
             }
 
             @Override public void onState(String state) {
                 main.post(() -> {
+                    if (!commandTalking) return;
                     if (commandTranscript.bestText().isEmpty()) commandReply = state;
-                    refreshHomePages();
+                    updateFabLabel();
+                    updateFabStatus();
                 });
             }
 
             @Override public void onError(String message) {
                 main.post(() -> {
+                    if (!commandTalking) return;
                     commandReply = message;
                     commandReplyOk = false;
                     toast(message == null || message.isEmpty() ? "听写失败" : message);
-                    refreshHomePages();
+                    updateFabStatus();
                 });
             }
         });
         commandDictationSession.start();
-        refreshHomePages();
+        // Update FAB label/status in-place without rebuilding the view tree,
+        // so the ongoing long-press touch stream isn't interrupted.
+        updateFabLabel();
+        updateFabStatus();
+        refreshRecordingList();
     }
 
     protected void finishLibraryCommandTalk(boolean cancel) {
         if (!commandTalking) return;
         commandCanceled = cancel;
+        // Don't refreshHomePages() here -- the view tree rebuild destroys the touch
+        // target. Just update the label in-place. Full rebuild happens after release.
+        commandTalking = false;
+        commandReply = null;
+        commandReplyOk = true;
+        updateFabLabel();
+        updateFabStatus();
         final AsrDictationSession session = commandDictationSession;
         if (session == null) {
             completeLibraryCommandTalk(cancel);
@@ -1430,15 +1523,14 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void completeLibraryCommandTalk(boolean cancel) {
-        commandTalking = false;
         commandDictationSession = null;
         String text = commandTranscript.bestText();
         if (cancel) {
-            commandReply = "已取消图库指令";
+            commandReply = null;
             commandReplyOk = true;
         } else if (text.isEmpty()) {
-            commandReply = "没有识别到指令";
-            commandReplyOk = false;
+            commandReply = null;
+            commandReplyOk = true;
         } else {
             commandReply = text;
             commandReplyOk = true;
@@ -1479,26 +1571,61 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void addLibraryCommandStatus(LinearLayout list) {
-        if (!commandTalking && commandQueue.isEmpty() && (commandReply == null || commandReply.isEmpty())) return;
+        fabStatus = text("", 13, Theme.SECONDARY, Typeface.BOLD);
+        fabStatus.setGravity(Gravity.CENTER);
+        fabStatus.setSingleLine(false);
+        fabStatus.setPadding(dp(20), dp(9), dp(20), dp(9));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(16), 0, dp(16), dp(12));
+        list.addView(fabStatus, lp);
+        updateFabStatus();
+    }
+
+    protected void updateFabLabel() {
+        if (fabLabel == null) return;
+        fabLabel.setText(recordFabLabel());
+        fabLabel.setTextColor(commandTalking ? Theme.RED : Theme.SECONDARY);
+    }
+
+    protected void updateFabStatus() {
+        if (fabStatus == null) return;
         String text;
         int color = commandReplyOk ? Theme.SECONDARY : Theme.RED;
         if (commandTalking) {
-            text = commandCanceled ? "松手取消图库指令" : commandTranscript.bubbleText();
-            color = commandCanceled ? Theme.RED : Theme.INK;
+            String transcriptText = commandTranscript.bestText();
+            if (commandCanceled) {
+                text = "松手取消图库指令";
+                color = Theme.RED;
+            } else {
+                text = transcriptText.isEmpty() ? commandReply : transcriptText;
+                color = Theme.INK;
+            }
         } else if (!commandQueue.isEmpty()) {
-            text = "图库指令处理中：" + commandQueue.size();
+            text = commandQueue.get(commandQueue.size() - 1).text;
             color = Theme.RED;
-        } else {
+        } else if (commandReply != null && !commandReply.isEmpty()) {
             text = commandReply;
+        } else {
+            fabStatus.setVisibility(View.GONE);
+            return;
         }
-        TextView status = text(text, 13, color, Typeface.BOLD);
-        status.setGravity(Gravity.CENTER);
-        status.setSingleLine(false);
-        status.setPadding(dp(12), dp(9), dp(12), dp(9));
-        status.setBackground(round(commandReplyOk ? Theme.ACCENT_SOFT : 0xffffebe8, 14));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(12));
-        list.addView(status, lp);
+        fabStatus.setText(text);
+        fabStatus.setTextColor(color);
+        fabStatus.setBackground(round(commandReplyOk ? Theme.ACCENT_SOFT : 0xffffebe8, 14));
+        fabStatus.setVisibility(View.VISIBLE);
+    }
+
+    /** Rebuild just the recording list rows without touching the FAB column. */
+    protected void refreshRecordingList() {
+        String pageKey = recordingsPageKey(selectedTag);
+        LinearLayout list = recordingsListsByPage.get(pageKey);
+        if (list == null) return;
+        List<Recording> listForPage = (selectedTag == null) ? recordings : recordingsForTag(selectedTag);
+        String emptyText = emptyListTextByPage.get(pageKey);
+        if (emptyText == null) emptyText = selectedTag == null
+                ? "轻点下方按钮开始第一条录音"
+                : "「" + selectedTag + "」标签下还没有文章";
+        populateRecordingList(list, emptyText, listForPage);
     }
 
     protected void showLibraryCommandConfirm(String id, String text) {
@@ -1656,8 +1783,21 @@ public final class RecordingsActivity extends Activity {
         gap2.setLayoutParams(new LinearLayout.LayoutParams(dp(4), 1));
         waveIcon.addView(gap2);
         addWaveBar(waveIcon, dp(3), dp(14), silent ? mutedIconFg : Theme.RED);
-        row.addView(waveIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
-        maybeLoadRowCover(rec, row, waveIcon);
+
+        FrameLayout iconWrap = new FrameLayout(this);
+        iconWrap.setClipChildren(false);
+        iconWrap.setClipToPadding(false);
+        iconWrap.addView(waveIcon, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
+        int commandNumber = commandRefNumberFor(rec);
+        if (commandNumber > 0) {
+            View badge = commandNumberBadge(commandNumber);
+            badge.setTag(COMMAND_NUMBER_BADGE_TAG);
+            badge.setVisibility(commandTalking ? View.VISIBLE : View.GONE);
+            iconWrap.addView(badge, new FrameLayout.LayoutParams(dp(24), dp(24),
+                    Gravity.START | Gravity.TOP));
+        }
+        row.addView(iconWrap, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        maybeLoadRowCover(rec, iconWrap, waveIcon);
 
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.VERTICAL);
@@ -1780,24 +1920,18 @@ public final class RecordingsActivity extends Activity {
             }
         });
 
-        if (commandTalking && !rec.uploading) {
-            int n = commandRefNumberFor(rec);
-            if (n > 0) {
-                TextView badge = text(String.valueOf(n), 12, Color.WHITE, Typeface.BOLD);
-                badge.setGravity(Gravity.CENTER);
-                badge.setBackground(round(Theme.RED, 12));
-                FrameLayout.LayoutParams badgeLp = new FrameLayout.LayoutParams(dp(24), dp(24),
-                        Gravity.LEFT | Gravity.TOP);
-                badgeLp.setMargins(dp(6), dp(6), 0, 0);
-                container.addView(badge, badgeLp);
-            }
-        }
-
         return container;
     }
 
-    protected void maybeLoadRowCover(Recording rec, LinearLayout row, View fallbackIcon) {
-        if (rec == null || !rec.hasArticles || row == null || fallbackIcon == null) return;
+    protected TextView commandNumberBadge(int n) {
+        TextView badge = text(String.valueOf(n), 13, Color.BLACK, Typeface.BOLD);
+        badge.setGravity(Gravity.CENTER);
+        badge.setBackground(roundStroke(Color.WHITE, 12, 0xffd8d8d8, 1));
+        return badge;
+    }
+
+    protected void maybeLoadRowCover(Recording rec, FrameLayout iconWrap, View fallbackIcon) {
+        if (rec == null || !rec.hasArticles || iconWrap == null || fallbackIcon == null) return;
         io.execute(() -> {
             try {
                 ArticleDoc doc = library.fetchDoc(rec);
@@ -1814,13 +1948,13 @@ public final class RecordingsActivity extends Activity {
                 Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(response.body, dp(96));
                 if (bitmap == null) return;
                 main.post(() -> {
-                    int index = row.indexOfChild(fallbackIcon);
+                    int index = iconWrap.indexOfChild(fallbackIcon);
                     if (index < 0) return;
-                    row.removeView(fallbackIcon);
+                    iconWrap.removeView(fallbackIcon);
                     RoundedImageView cover = new RoundedImageView(this);
                     cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
                     cover.setImageBitmap(bitmap);
-                    row.addView(cover, index, new LinearLayout.LayoutParams(dp(44), dp(44)));
+                    iconWrap.addView(cover, index, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
                 });
             } catch (Exception ignored) {
             }
@@ -1837,7 +1971,7 @@ public final class RecordingsActivity extends Activity {
 
         // Status: centered red dot + "正在录音"
         FrameLayout statusWrap = new FrameLayout(this);
-        statusWrap.setPadding(0, dp(64) + getStatusBarHeight(), 0, 0);
+        statusWrap.setPadding(dp(20), dp(64) + getStatusBarHeight(), dp(20), 0);
         page.addView(statusWrap, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout statusRow = new LinearLayout(this);
@@ -2157,7 +2291,6 @@ public final class RecordingsActivity extends Activity {
                 empty.setGravity(Gravity.CENTER);
                 list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
             } else {
-                addLibraryCommandStatus(list);
                 for (Recording rec : recordings) list.addView(recordingRow(rec));
             }
 

@@ -5,6 +5,11 @@ import com.baixingai.voicedrop.data.LibraryStore;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 import static org.junit.Assert.*;
 
 public class LibraryStoreRequestTest {
@@ -21,5 +26,18 @@ public class LibraryStoreRequestTest {
         JSONObject body = LibraryStore.restyleRequestBody("VoiceDrop-2026-07-01-120000-0m1s", 8);
 
         assertEquals(8, body.getInt("styleV"));
+    }
+
+    @Test
+    public void loadRefreshesArticleDocWhenTagsAreMissingEvenIfTitleIsCached() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
+
+        assertTrue(source.contains("r.hasArticles && (r.articleTitle == null || r.tags == null)"));
+    }
+
+    private static String readSource(String moduleRelative) throws Exception {
+        Path path = Paths.get(moduleRelative);
+        if (!Files.exists(path)) path = Paths.get("app", moduleRelative);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 }

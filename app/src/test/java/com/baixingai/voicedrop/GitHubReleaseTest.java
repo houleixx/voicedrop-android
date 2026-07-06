@@ -46,7 +46,24 @@ public class GitHubReleaseTest {
         GitHubRelease release = GitHubRelease.parse(json);
 
         assertEquals("voicedrop-0.1.2.apk", release.apkName);
-        assertEquals("https://github.com/example.apk", release.apkDownloadUrl);
+        assertEquals("https://jianshuo.dev/gh/example.apk", release.apkDownloadUrl);
         assertEquals(654321, release.apkSize);
+    }
+
+    @Test
+    public void rewritesGitHubDownloadUrlThroughJianshuoProxy() throws Exception {
+        String json = "{"
+                + "\"tag_name\":\"v0.4.0\","
+                + "\"assets\":[{"
+                + "\"name\":\"voicedrop-0.4.0.apk\","
+                + "\"browser_download_url\":\"https://github.com/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk\","
+                + "\"size\":123"
+                + "}]"
+                + "}";
+
+        GitHubRelease release = GitHubRelease.parse(json);
+
+        assertEquals("https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk",
+                release.apkDownloadUrl);
     }
 }

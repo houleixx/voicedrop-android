@@ -39,7 +39,7 @@ public final class GitHubRelease {
             int nextAsset = text.indexOf("\"name\"", nameMatcher.end());
             int assetEnd = nextAsset > 0 ? nextAsset : text.length();
             String asset = text.substring(Math.max(0, assetStart), assetEnd);
-            apkUrl = stringField(asset, "browser_download_url");
+            apkUrl = proxiedDownloadUrl(stringField(asset, "browser_download_url"));
             apkSize = longField(asset, "size");
         }
         return new GitHubRelease(
@@ -55,6 +55,14 @@ public final class GitHubRelease {
 
     public boolean hasApk() {
         return apkDownloadUrl != null && !apkDownloadUrl.isEmpty();
+    }
+
+    private static String proxiedDownloadUrl(String url) {
+        String value = url == null ? "" : url;
+        String prefix = "https://github.com/";
+        return value.startsWith(prefix)
+                ? "https://jianshuo.dev/gh/" + value.substring(prefix.length())
+                : value;
     }
 
     private static String stringField(String json, String field) {

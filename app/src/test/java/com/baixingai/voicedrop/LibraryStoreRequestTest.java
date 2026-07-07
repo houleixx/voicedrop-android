@@ -29,6 +29,22 @@ public class LibraryStoreRequestTest {
     }
 
     @Test
+    public void xhsPackBodyUsesStemOnly() throws Exception {
+        JSONObject body = LibraryStore.xhsPackRequestBody("VoiceDrop-2026-07-01-120000-0m1s");
+
+        assertEquals("VoiceDrop-2026-07-01-120000-0m1s", body.getString("stem"));
+        assertEquals(1, body.length());
+    }
+
+    @Test
+    public void patchQuestionBodyMatchesFilesApiContract() throws Exception {
+        JSONObject body = LibraryStore.patchQuestionRequestBody("q1", "answered");
+
+        assertEquals("q1", body.getString("id"));
+        assertEquals("answered", body.getString("status"));
+    }
+
+    @Test
     public void loadRefreshesArticleDocWhenTagsAreMissingEvenIfTitleIsCached() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
 

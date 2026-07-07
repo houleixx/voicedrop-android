@@ -268,6 +268,38 @@ public final class LibraryStore {
         return body;
     }
 
+    public XhsPack xhsPack(Recording rec) throws Exception {
+        JSONObject body = xhsPackRequestBody(rec.stem());
+        HttpClient.Response response = http.postJson(
+                Api.agentBase() + "/xhs-pack",
+                auth.bearer(),
+                body.toString().getBytes("UTF-8"));
+        if (!response.ok()) return null;
+        return XhsPack.fromJson(new JSONObject(response.text()));
+    }
+
+    public static JSONObject xhsPackRequestBody(String stem) throws Exception {
+        return new JSONObject().put("stem", stem);
+    }
+
+    public boolean patchQuestion(Recording rec, String id, String status) throws Exception {
+        JSONObject body = patchQuestionRequestBody(id, status);
+        HttpClient.Response response = http.patchJson(
+                Api.filesBase() + "/articles/" + Api.path(rec.stem()) + "/question",
+                auth.bearer(),
+                body.toString().getBytes("UTF-8"));
+        return response.ok();
+    }
+
+    public static JSONObject patchQuestionRequestBody(String id, String status) throws Exception {
+        return new JSONObject().put("id", id).put("status", status);
+    }
+
+    public boolean deleteAccount() throws Exception {
+        HttpClient.Response response = http.postJson(Api.filesBase() + "/account/delete", auth.bearer(), new byte[0]);
+        return response.ok();
+    }
+
     public JSONObject versionHistory(Recording rec) throws Exception {
         HttpClient.Response response = http.get(
                 Api.filesBase() + "/articles/" + Api.path(rec.stem()) + "/history",
@@ -317,6 +349,49 @@ public final class LibraryStore {
         Item(String name, String uploaded) {
             this.name = name;
             this.uploaded = uploaded == null ? "" : uploaded;
+        }
+    }
+
+    public static final class XhsPack {
+        public final String title;
+        public final String body;
+        public final List<String> tags;
+        public final List<String> photoKeys;
+
+        private XhsPack(String title, String body, List<String> tags, List<String> photoKeys) {
+            this.title = title == null ? "" : title;
+            this.body = body == null ? "" : body;
+            this.tags = tags == null ? new ArrayList<>() : tags;
+            this.photoKeys = photoKeys == null ? new ArrayList<>() : photoKeys;
+        }
+
+        public String clipboardText() {
+            StringBuilder out = new StringBuilder();
+            out.append(title).append("\n\n").append(body);
+            if (!tags.isEmpty()) {
+                out.append("\n\n");
+                for (int i = 0; i < tags.size(); i++) {
+                    if (i > 0) out.append(' ');
+                    out.append('#').append(tags.get(i));
+                }
+            }
+            return out.toString();
+        }
+
+        static XhsPack fromJson(JSONObject obj) {
+            List<String> tags = new ArrayList<>();
+            JSONArray tagArr = obj.optJSONArray("tags");
+            if (tagArr != null) for (int i = 0; i < tagArr.length(); i++) {
+                String tag = tagArr.optString(i, "").trim();
+                if (!tag.isEmpty()) tags.add(tag);
+            }
+            List<String> photoKeys = new ArrayList<>();
+            JSONArray photoArr = obj.optJSONArray("photoKeys");
+            if (photoArr != null) for (int i = 0; i < photoArr.length(); i++) {
+                String key = photoArr.optString(i, "").trim();
+                if (!key.isEmpty()) photoKeys.add(key);
+            }
+            return new XhsPack(obj.optString("title", ""), obj.optString("body", ""), tags, photoKeys);
         }
     }
 }

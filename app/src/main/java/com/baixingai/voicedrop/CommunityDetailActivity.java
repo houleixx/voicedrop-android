@@ -907,6 +907,65 @@ public final class CommunityDetailActivity extends Activity {
         final String shareId = post.shareId;
         final String authorName = communityAuthorName(post);
         final boolean[] liked = {prefs.likedCommunityPost(shareId)};
+        final boolean[] fed = {false};
+        final boolean[] feeding = {false};
+
+        FrameLayout feedBtn = new FrameLayout(this);
+        feedBtn.setClickable(true);
+        final ImageView feedIcon = new ImageView(this);
+        feedIcon.setImageResource(R.drawable.ic_settings_bolt);
+        feedIcon.setColorFilter(Theme.INK);
+        feedIcon.setScaleType(ImageView.ScaleType.CENTER);
+        feedBtn.addView(feedIcon, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
+        bar.addView(feedBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        io.execute(() -> {
+            try {
+                List<String> ids = new ArrayList<>();
+                ids.add(shareId);
+                Map<String, CommunityStore.FeedState> states = community.feedStates(ids);
+                CommunityStore.FeedState state = states.get(shareId);
+                if (state != null) {
+                    main.post(() -> {
+                        fed[0] = state.fed;
+                        feedIcon.setColorFilter(fed[0] ? 0xffd99a1a : Theme.INK);
+                    });
+                }
+            } catch (Exception ignored) {}
+        });
+        feedBtn.setOnClickListener(v -> {
+            if (fed[0] || feeding[0]) return;
+            feeding[0] = true;
+            feedBtn.setAlpha(0.45f);
+            io.execute(() -> {
+                try {
+                    CommunityStore.FeedResult result = community.feed(shareId);
+                    main.post(() -> {
+                        feeding[0] = false;
+                        feedBtn.setAlpha(1f);
+                        if (result.ok || result.already) {
+                            fed[0] = true;
+                            feedIcon.setColorFilter(0xffd99a1a);
+                            if (result.already) toast("已经投过这篇了");
+                            else toast("已投币：你 +" + suanliText(result.feederSuanli) + "，作者 +" + suanliText(result.authorSuanli) + " 算力");
+                        } else if ("cannot_feed_own".equals(result.error)) {
+                            toast("不能给自己的文章投币");
+                        } else if ("pool_exhausted".equals(result.error)) {
+                            toast("今日算力池已发完，明天再来");
+                        } else if (result.needsWechatSignin()) {
+                            toast("投币需要先用微信登录");
+                        } else {
+                            toast("投币失败，稍后再试");
+                        }
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        feeding[0] = false;
+                        feedBtn.setAlpha(1f);
+                        toast("投币失败：" + e.getMessage());
+                    });
+                }
+            });
+        });
 
         // Like button
         FrameLayout likeBtn = new FrameLayout(this);
@@ -1441,6 +1500,10 @@ public final class CommunityDetailActivity extends Activity {
         startActivity(Intent.createChooser(intent, "分享社区文章"));
     }
 
+    protected String suanliText(double value) {
+        return value == Math.rint(value) ? String.valueOf((int) value) : String.format(java.util.Locale.US, "%.1f", value);
+    }
+
     protected void uploadCapturedPhotos(List<CapturedPhoto> photos) {
         for (CapturedPhoto photo : photos) {
             try {
@@ -1625,9 +1688,19 @@ public final class CommunityDetailActivity extends Activity {
             }
         }
         ImageView image = new RoundedImageView(this);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+        frame.post(() -> {
+            int width = frame.getWidth();
+            if (width <= 0 || bitmap.getWidth() <= 0) return;
+            int height = Math.max(dp(72), Math.round(width * (bitmap.getHeight() / (float) bitmap.getWidth())));
+            ViewGroup.LayoutParams lp = frame.getLayoutParams();
+            if (lp != null && lp.height != height) {
+                lp.height = height;
+                frame.setLayoutParams(lp);
+            }
+        });
     }
 
     protected void showDetailLoading() {

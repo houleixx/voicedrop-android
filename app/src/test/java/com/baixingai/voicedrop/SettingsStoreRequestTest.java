@@ -29,4 +29,15 @@ public class SettingsStoreRequestTest {
 
         assertEquals(0, body.getJSONArray("styles").length());
     }
+
+    @Test
+    public void appConfigBodyStoresNoFollowupsOnlyWhenDisabled() throws Exception {
+        JSONObject enabled = SettingsStore.appConfigBody(true, true);
+        JSONObject disabled = SettingsStore.appConfigBody(false, false);
+
+        assertTrue(enabled.getBoolean("autoShareCommunity"));
+        assertFalse(enabled.has("noFollowups"));
+        assertFalse(disabled.getBoolean("autoShareCommunity"));
+        assertTrue(disabled.getBoolean("noFollowups"));
+    }
 }

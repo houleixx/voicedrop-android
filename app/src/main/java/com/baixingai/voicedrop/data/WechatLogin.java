@@ -7,7 +7,7 @@ import com.tencent.mm.opensdk.openapi.IWXAPI;
 import com.tencent.mm.opensdk.openapi.WXAPIFactory;
 
 public final class WechatLogin {
-    public static final String APP_ID = "wx0f27540982386e4d";
+    public static final String APP_ID = "wx1573f936967f5420";
     public static final String SCOPE = "snsapi_userinfo";
     public static final String STATE = "voicedrop_android_wechat_login";
 

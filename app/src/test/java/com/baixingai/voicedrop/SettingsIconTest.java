@@ -14,12 +14,27 @@ import static org.junit.Assert.assertTrue;
 public class SettingsIconTest {
     @Test
     public void everyVisibleSettingsRowHasAnIcon() {
-        assertEquals(9, SettingsActivity.SETTING_ROW_ICON_RES_IDS.length);
+        assertEquals(11, SettingsActivity.SETTING_ROW_ICON_RES_IDS.length);
         for (int resId : SettingsActivity.SETTING_ROW_ICON_RES_IDS) {
             assertTrue("Setting rows should declare a drawable icon", resId != 0);
         }
         assertFalse(Arrays.stream(SettingsActivity.SETTING_ROW_ICON_RES_IDS)
                 .anyMatch(resId -> resId == R.drawable.ic_settings_trash));
+    }
+
+    @Test
+    public void aiInstructionsAndUsageUseDistinctIcons() {
+        assertEquals(R.drawable.ic_settings_ai_instruction, SettingsActivity.SETTING_ROW_ICON_RES_IDS[2]);
+        assertEquals(R.drawable.ic_settings_bolt, SettingsActivity.SETTING_ROW_ICON_RES_IDS[4]);
+    }
+
+    @Test
+    public void aiInstructionSettingsIconUsesMagicWandGlyph() throws Exception {
+        String xml = new String(Files.readAllBytes(Paths.get(
+                "src/main/res/drawable/ic_settings_ai_instruction.xml")), StandardCharsets.UTF_8);
+
+        assertTrue(xml.contains("M395.69,372.48"));
+        assertTrue(xml.contains("M578.05,226.86"));
     }
 
     @Test

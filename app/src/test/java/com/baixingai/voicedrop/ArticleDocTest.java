@@ -28,4 +28,19 @@ public class ArticleDocTest {
         assertEquals("创业", doc.tags.get(0));
         assertEquals("产品", doc.tags.get(1));
     }
+
+    @Test
+    public void parsesFollowupQuestionsSidecarFromArticleDoc() throws Exception {
+        ArticleDoc doc = ArticleDoc.fromJson("{"
+                + "\"questions\":[{\"id\":\"q1\",\"articleIndex\":0,\"text\":\"还有一个例子吗？\",\"status\":\"pending\",\"createdAt\":1234}],"
+                + "\"articles\":[{\"title\":\"标题\",\"body\":\"正文\"}]"
+                + "}");
+
+        assertEquals(1, doc.questions.size());
+        assertEquals("q1", doc.questions.get(0).id);
+        assertEquals(Integer.valueOf(0), doc.questions.get(0).articleIndex);
+        assertEquals("还有一个例子吗？", doc.questions.get(0).text);
+        assertEquals("pending", doc.questions.get(0).status);
+        assertEquals(Double.valueOf(1234), doc.questions.get(0).createdAt);
+    }
 }

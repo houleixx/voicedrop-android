@@ -46,8 +46,10 @@ public class SettingsActivity extends Activity {
     static final int[] SETTING_ROW_ICON_RES_IDS = {
             R.drawable.ic_settings_account,
             R.drawable.ic_settings_pen,
+            R.drawable.ic_settings_ai_instruction,
             R.drawable.ic_settings_broadcast,
             R.drawable.ic_settings_bolt,
+            R.drawable.ic_settings_broadcast,
             R.drawable.ic_settings_community,
             R.drawable.ic_settings_info,
             R.drawable.ic_settings_update,
@@ -145,8 +147,10 @@ public class SettingsActivity extends Activity {
 
         addSection(content, "创作");
         addSettingRow(content, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
+        addSettingRow(content, R.drawable.ic_settings_ai_instruction, "AI 指令", "自定义长按菜单里的每个动作", this::openInstructionSettings);
         addSettingRow(content, R.drawable.ic_settings_broadcast, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
         addSettingRow(content, R.drawable.ic_settings_bolt, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
+        addFollowupsSwitchRow(content, R.drawable.ic_settings_broadcast);
 
         addSection(content, "同步与社区");
         addAutoShareSwitchRow(content, R.drawable.ic_settings_community);
@@ -182,6 +186,11 @@ public class SettingsActivity extends Activity {
 
     private void openWechatSettings() {
         startActivity(new Intent(this, WechatSettingsActivity.class));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    private void openInstructionSettings() {
+        startActivity(new Intent(this, InstructionSettingsActivity.class));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
@@ -298,6 +307,78 @@ public class SettingsActivity extends Activity {
                 autoShare.setChecked(!autoShare.isChecked());
             }
         });
+    }
+
+    private void addFollowupsSwitchRow(LinearLayout content, int iconResId) {
+        LinearLayout row = switchRow(content, iconResId, "成文后追问", "AI 追问一两个细节，把文章补厚");
+        IosSwitch followups = (IosSwitch) row.getTag();
+        final boolean[] ready = {false};
+        followups.setEnabled(false);
+        io.execute(() -> {
+            try {
+                JSONObject cfg = settingsStore.loadConfig();
+                boolean enabled = !cfg.optBoolean("noFollowups", false);
+                runOnUiThread(() -> {
+                    ready[0] = false;
+                    followups.setChecked(enabled);
+                    ready[0] = true;
+                    followups.setEnabled(true);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    ready[0] = true;
+                    followups.setEnabled(true);
+                    toast("配置读取失败：" + e.getMessage());
+                });
+            }
+        });
+        followups.setOnCheckedChangeListener((button, checked) -> {
+            if (!ready[0]) return;
+            button.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    JSONObject cfg = settingsStore.loadConfig();
+                    settingsStore.saveConfig(cfg.optBoolean("autoShareCommunity", false), checked);
+                    toast(checked ? "已开启成文后追问" : "已关闭成文后追问");
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        ready[0] = false;
+                        followups.setChecked(!checked);
+                        ready[0] = true;
+                        toast("配置保存失败：" + e.getMessage());
+                    });
+                } finally {
+                    runOnUiThread(() -> button.setEnabled(true));
+                }
+            });
+        });
+        row.setOnClickListener(v -> {
+            if (followups.isEnabled()) followups.setChecked(!followups.isChecked());
+        });
+    }
+
+    private LinearLayout switchRow(LinearLayout content, int iconResId, String titleText, String subtitleText) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.setBackground(round(Theme.CARD, 12));
+        row.setClickable(true);
+        row.addView(settingIcon(iconResId));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(text(titleText, 16, Theme.INK, Typeface.BOLD));
+        TextView sub = text(subtitleText, 12, Theme.SECONDARY, Typeface.NORMAL);
+        sub.setPadding(0, dp(4), 0, 0);
+        texts.addView(sub);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        IosSwitch toggle = new IosSwitch(this);
+        row.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
+        row.setTag(toggle);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(8));
+        content.addView(row, lp);
+        return row;
     }
 
     private ImageView settingIcon(int iconResId) {

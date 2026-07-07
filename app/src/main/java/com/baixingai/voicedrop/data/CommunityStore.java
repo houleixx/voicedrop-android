@@ -118,6 +118,35 @@ public final class CommunityStore {
         }
     }
 
+    public Map<String, FeedState> feedStates(List<String> shareIds) throws Exception {
+        if (shareIds == null || shareIds.isEmpty()) return new HashMap<>();
+        JSONArray arr = new JSONArray();
+        for (String id : shareIds) if (id != null && !id.isEmpty()) arr.put(id);
+        JSONObject body = new JSONObject().put("share_ids", arr);
+        HttpClient.Response response = http.postJson(Api.agentBase() + "/feed/state", auth.bearer(),
+                body.toString().getBytes("UTF-8"));
+        if (!response.ok()) return new HashMap<>();
+        JSONObject states = new JSONObject(response.text()).optJSONObject("states");
+        Map<String, FeedState> out = new HashMap<>();
+        if (states == null) return out;
+        JSONArray names = states.names();
+        if (names == null) return out;
+        for (int i = 0; i < names.length(); i++) {
+            String id = names.optString(i);
+            JSONObject s = states.optJSONObject(id);
+            if (s != null) out.put(id, new FeedState(s.optInt("count", 0), s.optBoolean("fed", false)));
+        }
+        return out;
+    }
+
+    public FeedResult feed(String shareId) throws Exception {
+        JSONObject body = new JSONObject().put("share_id", shareId);
+        HttpClient.Response response = http.postJson(Api.agentBase() + "/feed", auth.communityBearer(),
+                body.toString().getBytes("UTF-8"));
+        JSONObject json = response.text().isEmpty() ? new JSONObject() : new JSONObject(response.text());
+        return FeedResult.from(response.code, json);
+    }
+
     public List<Post> replies(String shareId) throws Exception {
         HttpClient.Response response = http.get(Api.filesBase() + "/community/replies/" + Api.path(shareId), auth.bearer());
         JSONArray arr = response.ok() ? new JSONObject(response.text()).optJSONArray("posts") : null;
@@ -202,6 +231,45 @@ public final class CommunityStore {
 
         public boolean needsWechatSignin() {
             return code == 403 && "needs_wechat_signin".equals(error);
+        }
+    }
+
+    public static final class FeedState {
+        public final int count;
+        public final boolean fed;
+
+        public FeedState(int count, boolean fed) {
+            this.count = count;
+            this.fed = fed;
+        }
+    }
+
+    public static final class FeedResult {
+        public final boolean ok;
+        public final boolean already;
+        public final String error;
+        public final double authorSuanli;
+        public final double feederSuanli;
+
+        private FeedResult(boolean ok, boolean already, String error, double authorSuanli, double feederSuanli) {
+            this.ok = ok;
+            this.already = already;
+            this.error = error == null ? "" : error;
+            this.authorSuanli = authorSuanli;
+            this.feederSuanli = feederSuanli;
+        }
+
+        static FeedResult from(int code, JSONObject json) {
+            JSONObject suanli = json.optJSONObject("suanli");
+            return new FeedResult(json.optBoolean("ok", code >= 200 && code < 300),
+                    json.optBoolean("already", false),
+                    json.optString("error", ""),
+                    suanli == null ? 0 : suanli.optDouble("author", 0),
+                    suanli == null ? 0 : suanli.optDouble("feeder", 0));
+        }
+
+        public boolean needsWechatSignin() {
+            return "needs_wechat_signin".equals(error) || "needs_apple_signin".equals(error);
         }
     }
 }

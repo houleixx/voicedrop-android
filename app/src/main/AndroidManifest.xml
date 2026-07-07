@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
         <package android:name="com.tencent.mm" />
+        <package android:name="com.xingin.xhs" />
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -83,6 +84,10 @@
             android:theme="@style/AppTheme" />
         <activity
             android:name=".WechatSettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".InstructionSettingsActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity

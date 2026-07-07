@@ -95,9 +95,21 @@ public final class SettingsStore {
     }
 
     public void saveConfig(boolean autoShareCommunity) throws Exception {
-        JSONObject body = new JSONObject().put("autoShareCommunity", autoShareCommunity);
+        JSONObject current = loadConfig();
+        boolean followupsEnabled = !current.optBoolean("noFollowups", false);
+        saveConfig(autoShareCommunity, followupsEnabled);
+    }
+
+    public void saveConfig(boolean autoShareCommunity, boolean followupsEnabled) throws Exception {
+        JSONObject body = appConfigBody(autoShareCommunity, followupsEnabled);
         HttpClient.Response response = http.putBytes(Api.filesBase() + "/upload/CONFIG.json", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("config HTTP " + response.code);
+    }
+
+    public static JSONObject appConfigBody(boolean autoShareCommunity, boolean followupsEnabled) throws Exception {
+        JSONObject body = new JSONObject().put("autoShareCommunity", autoShareCommunity);
+        if (!followupsEnabled) body.put("noFollowups", true);
+        return body;
     }
 
     public String articlesPageUrl() throws Exception {

@@ -183,6 +183,7 @@ public final class RecordingDetailActivity extends Activity {
     protected String holdEditPromptText;
     protected boolean articleLocatorsVisible;
     protected final List<View> articleLocatorViews = new ArrayList<>();
+    protected final Set<String> locallyFinishedQuestionIds = new HashSet<>();
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
     protected FrameLayout articleUndoButton;
     protected FrameLayout articleRedoButton;
@@ -1794,6 +1795,14 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(commRow);
         menu.addView(divider());
 
+        LinearLayout xhsRow = menuRow("分享到小红书", AliIconFont.DOC, Theme.RED);
+        xhsRow.setOnClickListener(v -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            shareToXhs(rec);
+        });
+        menu.addView(xhsRow);
+        menu.addView(divider());
+
         LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED);
         shareRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
@@ -1812,6 +1821,35 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(delRow);
 
         popupRef[0] = showDetailMorePopup(menu, anchor);
+    }
+
+    protected void shareToXhs(Recording rec) {
+        toast("正在生成小红书文案…");
+        io.execute(() -> {
+            try {
+                LibraryStore.XhsPack pack = library.xhsPack(rec);
+                if (pack == null) {
+                    toast("小红书文案生成失败，稍后再试");
+                    return;
+                }
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 小红书文案", pack.clipboardText()));
+                runOnUiThread(() -> {
+                    toast("文案已复制");
+                    Intent launch = getPackageManager().getLaunchIntentForPackage("com.xingin.xhs");
+                    if (launch != null) {
+                        startActivity(launch);
+                    } else {
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("text/plain");
+                        send.putExtra(Intent.EXTRA_TEXT, pack.clipboardText());
+                        startActivity(Intent.createChooser(send, "分享到小红书"));
+                    }
+                });
+            } catch (Exception e) {
+                toast("小红书文案生成失败：" + e.getMessage());
+            }
+        });
     }
 
     protected LinearLayout menuRow(String label, int iconResId, int iconColor) {
@@ -1994,6 +2032,31 @@ public final class RecordingDetailActivity extends Activity {
         panel.setPadding(dp(20), dp(8), dp(20), dp(18));
 
         // Reply / server response area
+        ArticleDoc.FollowupQuestion followupQuestion = pendingFollowupQuestion();
+        if (followupQuestion != null) {
+            LinearLayout qCard = new LinearLayout(this);
+            qCard.setOrientation(LinearLayout.VERTICAL);
+            qCard.setPadding(dp(14), dp(12), dp(14), dp(12));
+            qCard.setBackground(roundStroke(0xfffffbf7, 14, 0xffffd6ad, 1));
+            LinearLayout qTop = new LinearLayout(this);
+            qTop.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label = text("追问", 12, Theme.AMBER, Typeface.BOLD);
+            label.setLetterSpacing(0.08f);
+            qTop.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView skip = text("跳过", 13, Theme.SECONDARY, Typeface.BOLD);
+            skip.setPadding(dp(10), dp(2), dp(10), dp(2));
+            skip.setOnClickListener(v -> skipFollowupQuestion(rec, followupQuestion));
+            qTop.addView(skip);
+            qCard.addView(qTop);
+            TextView question = text(followupQuestion.text, 16, Theme.INK, Typeface.BOLD);
+            question.setLineSpacing(dp(6), 1f);
+            question.setPadding(0, dp(8), 0, 0);
+            qCard.addView(question);
+            LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(-1, -2);
+            qLp.setMargins(0, 0, 0, dp(8));
+            panel.addView(qCard, qLp);
+        }
+
         if (editReply != null && !editReply.isEmpty()) {
             TextView reply = text((editReplyOk ? "✨ " : "⚠ ") + editReply, 14,
                     editReplyOk ? Theme.INK : Theme.RED, Typeface.NORMAL);
@@ -2057,7 +2120,7 @@ public final class RecordingDetailActivity extends Activity {
         micLp.setMargins(0, 0, dp(9), 0);
         editContainer.addView(micIcon, micLp);
 
-        TextView speak = text(editQueue.isEmpty() ? "按住 说话 修改" : "正在改…按住继续说", 17, Theme.INK, Typeface.BOLD);
+        TextView speak = text(followupQuestion != null ? "按住 说话 回答" : (editQueue.isEmpty() ? "按住 说话 修改" : "正在改…按住继续说"), 17, Theme.INK, Typeface.BOLD);
         speak.setGravity(Gravity.CENTER);
         speak.setMaxLines(2);
         speak.setEllipsize(TextUtils.TruncateAt.END);
@@ -2230,8 +2293,40 @@ public final class RecordingDetailActivity extends Activity {
             toast("没有识别到语音");
             return;
         }
-        startArticleEdit(rec, text);
+        ArticleDoc.FollowupQuestion q = pendingFollowupQuestion();
+        if (q != null) {
+            locallyFinishedQuestionIds.add(q.id);
+            startArticleEdit(rec, followupInstruction(q, text));
+            io.execute(() -> {
+                try { library.patchQuestion(rec, q.id, "answered"); } catch (Exception ignored) {}
+            });
+        } else {
+            startArticleEdit(rec, text);
+        }
         toast("已发送修改：" + text);
+    }
+
+    protected ArticleDoc.FollowupQuestion pendingFollowupQuestion() {
+        if (currentArticleDoc == null || currentArticleDoc.questions == null) return null;
+        for (ArticleDoc.FollowupQuestion q : currentArticleDoc.questions) {
+            int idx = q.articleIndex == null ? 0 : q.articleIndex;
+            if (idx == articleIndex && "pending".equals(q.status) && !locallyFinishedQuestionIds.contains(q.id)) return q;
+        }
+        return null;
+    }
+
+    protected String followupInstruction(ArticleDoc.FollowupQuestion q, String answer) {
+        return "【回答追问】问题：「" + q.text + "」我的口述回答：「" + answer
+                + "」把回答里的信息织进正文最相关的段落——只用回答里出现的事实，不照抄问题本身、不动无关段落。";
+    }
+
+    protected void skipFollowupQuestion(Recording rec, ArticleDoc.FollowupQuestion q) {
+        locallyFinishedQuestionIds.add(q.id);
+        io.execute(() -> {
+            try { library.patchQuestion(rec, q.id, "skipped"); } catch (Exception ignored) {}
+        });
+        toast("已跳过追问");
+        if (currentArticleDoc != null) renderArticleOrDefer(rec, currentArticleDoc);
     }
 
     protected void resetHoldArticleEditButton() {
@@ -2566,9 +2661,19 @@ public final class RecordingDetailActivity extends Activity {
             }
         }
         ImageView image = new RoundedImageView(this);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setImageBitmap(bitmap);
         frame.addView(image, 0, match());
+        frame.post(() -> {
+            int width = frame.getWidth();
+            if (width <= 0 || bitmap.getWidth() <= 0) return;
+            int height = Math.max(dp(72), Math.round(width * (bitmap.getHeight() / (float) bitmap.getWidth())));
+            ViewGroup.LayoutParams lp = frame.getLayoutParams();
+            if (lp != null && lp.height != height) {
+                lp.height = height;
+                frame.setLayoutParams(lp);
+            }
+        });
     }
 
     protected void showDetailLoading() {

@@ -21,6 +21,15 @@ public class CommunityRepliesSourceTest {
         assertTrue(source.contains("preview.replaceAll(\"\\\\[\\\\[photo:[^\\\\]]+\\\\]\\\\]\", \" \")"));
     }
 
+    @Test
+    public void feedButtonUsesFlatVectorIcon() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java");
+
+        assertTrue(source.contains("feedIcon.setImageResource(R.drawable.ic_settings_bolt)"));
+        assertTrue(source.contains("feedIcon.setColorFilter(fed[0] ? 0xffd99a1a : Theme.INK)"));
+        assertFalse(source.contains("final TextView feedIcon = text(\"⚡\""));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

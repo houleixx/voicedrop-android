@@ -25,6 +25,7 @@ import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
+import com.kongzue.dialogx.dialogs.MessageDialog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -130,6 +131,8 @@ public final class AccountActivity extends Activity {
         content.addView(dataCard(recordingCount, minedCount, loaded), matchWrap(0, 0, 0, dp(22)));
         addSection(content, "转移与同步");
         content.addView(transferCard(), matchWrap(0, 0, 0, dp(22)));
+        addSection(content, "账户管理");
+        content.addView(deleteCard(), matchWrap(0, 0, 0, dp(22)));
     }
 
     private View identityCard() {
@@ -280,6 +283,62 @@ public final class AccountActivity extends Activity {
         hint.setPadding(dp(4), dp(10), dp(4), 0);
         wrap.addView(hint);
         return wrap;
+    }
+
+    private View deleteCard() {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout card = card();
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(14), dp(15), dp(14));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_settings_trash);
+        icon.setColorFilter(Theme.RED);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        TextView title = text("删除账户", 16, Theme.RED, Typeface.BOLD);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1);
+        titleLp.setMargins(dp(10), 0, 0, 0);
+        row.addView(title, titleLp);
+        row.setClickable(true);
+        row.setOnClickListener(v -> confirmDeleteAccount());
+        card.addView(row);
+        wrap.addView(card);
+        TextView hint = text("永久删除云端与本机的全部数据（录音、文章、照片、设置、社区分享、微信登录绑定），不可恢复。", 12, Theme.FAINT, Typeface.NORMAL);
+        hint.setPadding(dp(4), dp(10), dp(4), 0);
+        hint.setLineSpacing(dp(3), 1f);
+        wrap.addView(hint);
+        return wrap;
+    }
+
+    private void confirmDeleteAccount() {
+        MessageDialog.show("永久删除账户？",
+                "将永久删除你的全部数据：云端录音、文章、照片、设置、社区分享和微信登录绑定，本机数据也会清空。此操作不可恢复。",
+                "永久删除", "取消")
+                .setOkButtonClickListener((dialog, v) -> {
+                    deleteAccount();
+                    return false;
+                });
+    }
+
+    private void deleteAccount() {
+        io.execute(() -> {
+            try {
+                if (!library.deleteAccount()) {
+                    toast("删除失败，请稍后再试");
+                    return;
+                }
+                getSharedPreferences("voicedrop.auth", MODE_PRIVATE).edit().clear().apply();
+                auth.resetAnonymous();
+                toast("账户已删除");
+                runOnUiThread(() -> {
+                    render(0, 0, true);
+                    finishWithPageTransition();
+                });
+            } catch (Exception e) {
+                toast("删除失败：" + e.getMessage());
+            }
+        });
     }
 
     private void startWechatLogin() {

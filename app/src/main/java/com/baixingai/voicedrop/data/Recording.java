@@ -82,9 +82,10 @@ public final class Recording {
 
     private static String periodFromStem(String stem) {
         String[] parts = stem.split("-");
-        // Period is at position 5: Afternoon, Morning, etc.
-        if (parts.length > 5) {
-            String period = parts[5];
+        // Period is at position 7: Afternoon, Morning, etc.
+        // VoiceDrop(0)-2026(1)-06(2)-18(3)-143052(4)-0m33s(5)-Thu(6)-Afternoon(7)
+        if (parts.length > 7) {
+            String period = parts[7];
             switch (period) {
                 case "EarlyMorning": return "清晨";
                 case "Morning": return "上午";

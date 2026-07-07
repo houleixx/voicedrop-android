@@ -9,7 +9,9 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -202,10 +204,26 @@ public final class InsertPhotoActivity extends Activity {
     }
 
     private void openLibrary() {
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-        intent.setType("image/*");
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        startActivityForResult(Intent.createChooser(intent, "选择图片"), REQ_LIBRARY);
+        Intent intent = albumIntent();
+        startActivityForResult(intent, REQ_LIBRARY);
+    }
+
+    private Intent albumIntent() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            Intent picker = new Intent(MediaStore.ACTION_PICK_IMAGES);
+            picker.setType("image/*");
+            picker.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, Math.min(50, MediaStore.getPickImagesMaxLimit()));
+            if (picker.resolveActivity(getPackageManager()) != null) return picker;
+        }
+
+        Intent album = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        album.setType("image/*");
+        if (album.resolveActivity(getPackageManager()) != null) return album;
+
+        Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+        fallback.setType("image/*");
+        fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        return Intent.createChooser(fallback, "选择图片");
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {

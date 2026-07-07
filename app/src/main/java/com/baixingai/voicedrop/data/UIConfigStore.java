@@ -54,6 +54,39 @@ public final class UIConfigStore {
         }
     }
 
+    public List<InstructionItem> loadCustomItems() throws Exception {
+        HttpClient.Response response = http.get(Api.agentBase() + "/ui-config/custom", auth.bearer());
+        if (!response.ok()) throw new IllegalStateException("ui-config custom HTTP " + response.code);
+        JSONArray arr = new JSONObject(response.text()).optJSONArray("items");
+        List<InstructionItem> out = new ArrayList<>();
+        if (arr != null) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.optJSONObject(i);
+                if (obj == null) continue;
+                out.add(new InstructionItem(
+                        obj.optString("id", ""),
+                        obj.optString("label", ""),
+                        obj.optString("default", ""),
+                        obj.isNull("override") ? null : obj.optString("override", null),
+                        obj.isNull("customLabel") ? null : obj.optString("customLabel", null),
+                        obj.optBoolean("hidden", false)));
+            }
+        }
+        return out;
+    }
+
+    public void saveCustomItem(String id, String instruction, String label, boolean hidden) throws Exception {
+        JSONObject body = new JSONObject()
+                .put("id", id)
+                .put("instruction", instruction == null ? "" : instruction)
+                .put("label", label == null ? "" : label)
+                .put("hidden", hidden);
+        HttpClient.Response response = http.putBytes(Api.agentBase() + "/ui-config/custom", auth.bearer(),
+                "application/json", body.toString().getBytes("UTF-8"));
+        if (!response.ok()) throw new IllegalStateException("ui-config custom save HTTP " + response.code);
+        refresh();
+    }
+
     private MenuConfig menu(String page, String kind) {
         UIConfigDoc source = doc == null ? builtin() : doc;
         PageConfig pageConfig = source.pages.get(page);
@@ -218,6 +251,36 @@ public final class UIConfigStore {
             this.label = label == null ? "" : label;
             this.type = type == null ? "" : type;
             this.instruction = instruction == null ? "" : instruction;
+        }
+    }
+
+    public static final class InstructionItem {
+        public final String id;
+        public final String label;
+        public final String defaultText;
+        public final String override;
+        public final String customLabel;
+        public final boolean hidden;
+
+        InstructionItem(String id, String label, String defaultText, String override, String customLabel, boolean hidden) {
+            this.id = id == null ? "" : id;
+            this.label = label == null ? "" : label;
+            this.defaultText = defaultText == null ? "" : defaultText;
+            this.override = override == null || override.isEmpty() ? null : override;
+            this.customLabel = customLabel == null || customLabel.isEmpty() ? null : customLabel;
+            this.hidden = hidden;
+        }
+
+        public String effectiveLabel() {
+            return customLabel == null ? label : customLabel;
+        }
+
+        public String effectiveInstruction() {
+            return override == null ? defaultText : override;
+        }
+
+        public boolean customized() {
+            return override != null || customLabel != null;
         }
     }
 }

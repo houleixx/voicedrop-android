@@ -8,5 +8,6 @@
 /.claude/
 /doc
 /docs
+/.worktrees
 /signing/
 /META-INF/

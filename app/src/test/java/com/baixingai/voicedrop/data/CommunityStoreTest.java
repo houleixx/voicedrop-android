@@ -23,4 +23,22 @@ public class CommunityStoreTest {
         assertEquals("正文标题", post.doc.articles.get(0).title);
         assertEquals("正文内容", post.doc.articles.get(0).body);
     }
+
+    @Test
+    public void unauthorizedShareRequiresWechatReauthentication() {
+        CommunityStore.ShareResult result = CommunityStore.ShareResult.error(401, "unauthorized");
+
+        assertTrue(result.needsWechatSignin());
+        assertTrue(result.hasInvalidSession());
+        assertEquals("微信登录已失效，请重新登录", result.failureMessage());
+    }
+
+    @Test
+    public void shareFailureReportsTheActualBackendError() {
+        CommunityStore.ShareResult result = CommunityStore.ShareResult.error(404, "article not found");
+
+        assertFalse(result.needsWechatSignin());
+        assertFalse(result.hasInvalidSession());
+        assertEquals("社区分享失败：文章不存在，请重新生成后再试", result.failureMessage());
+    }
 }

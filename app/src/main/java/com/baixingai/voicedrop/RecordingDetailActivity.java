@@ -965,17 +965,17 @@ public final class RecordingDetailActivity extends Activity {
             try {
                 CommunityStore.ShareResult result = community.shareResult(rec, replyTo);
                 if (result.needsWechatSignin()) {
-                    toast("请先微信登录后再分享到社区");
+                    if (result.hasInvalidSession()) auth.signOutWechat();
+                    toast(result.failureMessage());
                     return;
                 }
-                String shareId = result.shareId;
-                if (shareId == null || shareId.isEmpty()) {
-                    toast("社区分享失败，可能需要 Apple 会话");
-                } else {
-                    communityShareId = shareId;
-                    sharedToCommunity = true;
-                    toast("已在 VD 社区可见");
+                if (!result.ok) {
+                    toast(result.failureMessage());
+                    return;
                 }
+                communityShareId = result.shareId;
+                sharedToCommunity = true;
+                toast("已在 VD 社区可见");
             } catch (Exception e) {
                 toast("社区分享失败：" + e.getMessage());
             }

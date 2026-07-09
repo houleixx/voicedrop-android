@@ -230,7 +230,24 @@ public final class CommunityStore {
         }
 
         public boolean needsWechatSignin() {
-            return code == 403 && "needs_wechat_signin".equals(error);
+            return hasInvalidSession()
+                    || (code == 403 && ("needs_wechat_signin".equals(error)
+                    || "needs_apple_signin".equals(error)));
+        }
+
+        public boolean hasInvalidSession() {
+            return code == 401 && "unauthorized".equals(error);
+        }
+
+        public String failureMessage() {
+            if (hasInvalidSession()) return "微信登录已失效，请重新登录";
+            if (needsWechatSignin()) return "请先微信登录后再分享到社区";
+            if ("article not found".equals(error)) return "社区分享失败：文章不存在，请重新生成后再试";
+            if ("not shareable".equals(error)) return "社区分享失败：这篇内容无法分享";
+            if ("empty article".equals(error)) return "社区分享失败：文章内容为空";
+            if ("content_flagged".equals(error)) return "社区分享失败：内容未通过社区审核";
+            if (error != null && !error.isEmpty()) return "社区分享失败：" + error;
+            return "社区分享失败，请稍后再试";
         }
     }
 

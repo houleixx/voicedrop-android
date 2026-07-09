@@ -106,7 +106,8 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
         IosDialog.showAutoHeight(this, "该微信已关联另一个云端空间",
                 "切换后将显示微信账号中的录音和文章。当前匿名账号的数据不会删除，退出微信登录后可以恢复。",
                 "切换到微信账号", () -> completeLogin(auth, result),
-                "保留当前账号", this::keepCurrentAccount);
+                "保留当前账号", this::keepCurrentAccount,
+                false, false);
     }
 
     private void completeLogin(AuthStore auth, WechatAuthStore.Result result) {

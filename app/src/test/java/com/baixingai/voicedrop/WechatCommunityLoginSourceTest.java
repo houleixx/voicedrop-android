@@ -22,6 +22,8 @@ public class WechatCommunityLoginSourceTest {
         assertTrue(source.contains("result.requiresAccountSwitch(auth.anonId())"));
         assertTrue(source.contains("切换到微信账号"));
         assertTrue(source.contains("保留当前账号"));
+        assertTrue(source.contains("\"保留当前账号\", this::keepCurrentAccount,\n"
+                + "                false, false);"));
         assertTrue(completeLogin.contains("auth.storeSession(result.session)"));
         assertTrue(completeLogin.contains("clearPendingCommunityShare();"));
         assertTrue(completeLogin.contains("openRecordings("));

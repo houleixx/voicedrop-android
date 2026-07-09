@@ -19,27 +19,36 @@ public final class WechatAuthStore {
         if (nickname != null && !nickname.trim().isEmpty()) payload.put("nickname", nickname.trim());
         if (avatar != null && !avatar.trim().isEmpty()) payload.put("avatar", avatar.trim());
         HttpClient.Response response = http.postJson(Api.filesBase() + "/auth/wechat",
-                auth.bearer(), payload.toString().getBytes("UTF-8"));
+                auth.anonymousBearer(), payload.toString().getBytes("UTF-8"));
         JSONObject body = response.text().isEmpty() ? new JSONObject() : new JSONObject(response.text());
         if (!response.ok()) {
             return new Result(false, body.optString("error", "wechat_auth_failed"),
-                    body.optString("detail", ""));
+                    body.optString("detail", ""), "", "");
         }
         String session = body.optString("session", "");
         String scope = body.optString("scope", "");
-        boolean adopted = auth.storeSession(session);
-        return new Result(adopted, adopted ? null : "bad_session", adopted ? scope : "");
+        boolean valid = AuthStore.isSessionToken(session) && !scope.isEmpty();
+        return new Result(valid, valid ? null : "bad_session", "", session, scope);
     }
 
     public static final class Result {
         public final boolean ok;
         public final String error;
         public final String detail;
+        public final String session;
+        public final String scope;
 
-        Result(boolean ok, String error, String detail) {
+        Result(boolean ok, String error, String detail, String session, String scope) {
             this.ok = ok;
             this.error = error;
             this.detail = detail;
+            this.session = session == null ? "" : session;
+            this.scope = scope == null ? "" : scope;
+        }
+
+        public boolean requiresAccountSwitch(String anonId) {
+            if (!ok || anonId == null || anonId.trim().isEmpty()) return false;
+            return !("users/" + anonId.trim() + "/").equals(scope);
         }
     }
 }

@@ -58,11 +58,13 @@ import com.baixingai.voicedrop.data.DeviceLinkStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
+import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.data.UsageStore;
+import com.baixingai.voicedrop.data.WechatLogin;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
@@ -299,6 +301,7 @@ public final class RecordingDetailActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (isDetailActivity()) return;
         if (!isDetailActivity()) handleShareIntent(intent);
     }
     @Override
@@ -900,6 +903,7 @@ public final class RecordingDetailActivity extends Activity {
 
         renderCurrentArticle(content, rec, doc);
         renderArticleEditBar(articleFrame, rec);
+
     }
 
     protected void publishWechat(Recording rec) {
@@ -966,7 +970,14 @@ public final class RecordingDetailActivity extends Activity {
                 CommunityStore.ShareResult result = community.shareResult(rec, replyTo);
                 if (result.needsWechatSignin()) {
                     if (result.hasInvalidSession()) auth.signOutWechat();
-                    toast(result.failureMessage());
+                    PendingCommunityShareStore pending = new PendingCommunityShareStore(this);
+                    pending.save(rec.audioName, replyTo);
+                    main.post(() -> {
+                        if (!WechatLogin.start(this)) {
+                            pending.clear();
+                            toast("无法打开微信，请确认已安装微信");
+                        }
+                    });
                     return;
                 }
                 if (!result.ok) {

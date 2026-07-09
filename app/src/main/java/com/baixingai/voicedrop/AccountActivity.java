@@ -199,8 +199,7 @@ public final class AccountActivity extends Activity {
             signOut.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
             signOut.setOnClickListener(v -> {
                 auth.signOutWechat();
-                toast("已退出微信登录");
-                loadCounts();
+                openRecordingsAfterAccountChange("已退出微信登录，已恢复原账号");
             });
             row.addView(signOut, new LinearLayout.LayoutParams(dp(92), -1));
         } else {
@@ -345,6 +344,14 @@ public final class AccountActivity extends Activity {
         if (!WechatLogin.start(this)) {
             toast("无法打开微信，请确认已安装微信");
         }
+    }
+
+    private void openRecordingsAfterAccountChange(String message) {
+        toast(message);
+        Intent intent = new Intent(this, RecordingsActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
     }
 
     private void showTokenImport() {

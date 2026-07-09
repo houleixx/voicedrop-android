@@ -5,14 +5,13 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 
-import com.baixingai.voicedrop.AccountActivity;
-import com.baixingai.voicedrop.RecordingDetailActivity;
+import com.baixingai.voicedrop.RecordingsActivity;
 import com.baixingai.voicedrop.data.AuthStore;
-import com.baixingai.voicedrop.data.CommunityShareResume;
 import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.WechatAuthStore;
 import com.baixingai.voicedrop.data.WechatLogin;
 import com.baixingai.voicedrop.net.HttpClient;
+import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.tencent.mm.opensdk.modelbase.BaseReq;
 import com.tencent.mm.opensdk.modelbase.BaseResp;
@@ -77,15 +76,23 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
                 WechatAuthStore.Result result = new WechatAuthStore(auth, new HttpClient())
                         .exchangeCode(code, null, null);
                 runOnUiThread(() -> {
-                    toast(result.ok ? "微信登录成功" : "微信登录失败：" + message(result));
-                    if (!result.ok) clearPendingCommunityShare();
-                    routeAfterLogin(result.ok);
+                    if (!result.ok) {
+                        clearPendingCommunityShare();
+                        toast("微信登录失败：" + message(result));
+                        keepCurrentAccount();
+                        return;
+                    }
+                    if (result.requiresAccountSwitch(auth.anonId())) {
+                        showAccountSwitchConfirmation(auth, result);
+                    } else {
+                        completeLogin(auth, result);
+                    }
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     clearPendingCommunityShare();
                     toast("微信登录失败：" + e.getMessage());
-                    openAccount();
+                    keepCurrentAccount();
                 });
             }
         });
@@ -95,20 +102,30 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
         return result.detail == null || result.detail.isEmpty() ? result.error : result.detail;
     }
 
-    private void routeAfterLogin(boolean ok) {
-        if (!ok) {
-            openAccount();
+    private void showAccountSwitchConfirmation(AuthStore auth, WechatAuthStore.Result result) {
+        IosDialog.showAutoHeight(this, "该微信已关联另一个云端空间",
+                "切换后将显示微信账号中的录音和文章。当前匿名账号的数据不会删除，退出微信登录后可以恢复。",
+                "切换到微信账号", () -> completeLogin(auth, result),
+                "保留当前账号", this::keepCurrentAccount);
+    }
+
+    private void completeLogin(AuthStore auth, WechatAuthStore.Result result) {
+        if (!auth.storeSession(result.session)) {
+            clearPendingCommunityShare();
+            toast("微信登录失败：无效会话");
+            keepCurrentAccount();
             return;
         }
-        PendingCommunityShareStore.Pending pending = new PendingCommunityShareStore(this).peek();
-        String audioName = CommunityShareResume.detailAudioNameAfterLogin(pending);
-        if (audioName == null) {
-            openAccount();
-            return;
-        }
-        Intent intent = new Intent(this, RecordingDetailActivity.class);
-        intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, audioName);
-        intent.putExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, true);
+        boolean fromCommunityShare = new PendingCommunityShareStore(this).peek() != null;
+        clearPendingCommunityShare();
+        openRecordings(fromCommunityShare
+                ? "已切换到微信账号，请重新选择文章分享"
+                : "已切换到微信账号");
+    }
+
+    private void openRecordings(String message) {
+        toast(message);
+        Intent intent = new Intent(this, RecordingsActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();
@@ -118,10 +135,8 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
         new PendingCommunityShareStore(this).clear();
     }
 
-    private void openAccount() {
-        Intent intent = new Intent(this, AccountActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(intent);
+    private void keepCurrentAccount() {
+        clearPendingCommunityShare();
         finish();
     }
 

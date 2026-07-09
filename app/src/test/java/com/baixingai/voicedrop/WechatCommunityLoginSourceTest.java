@@ -12,22 +12,21 @@ import static org.junit.Assert.assertTrue;
 
 public class WechatCommunityLoginSourceTest {
     @Test
-    public void successfulWechatLoginRoutesPendingCommunityShareBackToRecordingDetail() throws Exception {
+    public void successfulWechatLoginSwitchesAccountAndReturnsToRecordingList() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/wxapi/WXEntryActivity.java");
-        String routeAfterLogin = methodBody(source, "private void routeAfterLogin");
+        String completeLogin = methodBody(source, "private void completeLogin");
 
-        assertTrue(source.contains("import com.baixingai.voicedrop.RecordingDetailActivity;"));
-        assertTrue(source.contains("import com.baixingai.voicedrop.data.CommunityShareResume;"));
+        assertTrue(source.contains("import com.baixingai.voicedrop.RecordingsActivity;"));
+        assertTrue(source.contains("import com.baixingai.voicedrop.ui.IosDialog;"));
         assertTrue(source.contains("import com.baixingai.voicedrop.data.PendingCommunityShareStore;"));
-        assertTrue(source.contains("routeAfterLogin(result.ok);"));
-        assertTrue(source.contains("PendingCommunityShareStore.Pending pending = new PendingCommunityShareStore(this).peek();"));
-        assertTrue(routeAfterLogin.contains("String audioName = CommunityShareResume.detailAudioNameAfterLogin(pending);"));
-        assertTrue(source.contains("Intent intent = new Intent(this, RecordingDetailActivity.class);"));
-        assertTrue(routeAfterLogin.contains("intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, audioName);"));
-        assertTrue(routeAfterLogin.contains("intent.putExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, true);"));
-        assertTrue(source.contains("new Intent(this, AccountActivity.class)"));
-        assertFalse(routeAfterLogin.contains("clearPendingCommunityShare();"));
-        assertFalse(source.contains("toast(result.ok ? \"微信登录成功\" : \"微信登录失败：\" + message(result));\n                    openAccount();"));
+        assertTrue(source.contains("result.requiresAccountSwitch(auth.anonId())"));
+        assertTrue(source.contains("切换到微信账号"));
+        assertTrue(source.contains("保留当前账号"));
+        assertTrue(completeLogin.contains("auth.storeSession(result.session)"));
+        assertTrue(completeLogin.contains("clearPendingCommunityShare();"));
+        assertTrue(completeLogin.contains("openRecordings("));
+        assertFalse(source.contains("CommunityShareResume"));
+        assertFalse(source.contains("RecordingDetailActivity"));
     }
 
     @Test
@@ -38,11 +37,11 @@ public class WechatCommunityLoginSourceTest {
         String exchange = methodBody(source, "private void exchange");
 
         assertTrue(onResp.contains("clearPendingCommunityShare();"));
-        assertTrue(exchange.contains("if (!result.ok) clearPendingCommunityShare();"));
+        assertTrue(exchange.contains("clearPendingCommunityShare();"));
         assertTrue(exchange.contains("clearPendingCommunityShare();\n                    toast(\"微信登录失败：\" + e.getMessage());"));
         assertTrue(source.contains("private void clearPendingCommunityShare()"));
         assertTrue(source.contains("new PendingCommunityShareStore(this).clear();"));
-        assertTrue(source.contains("private void openAccount()"));
+        assertTrue(source.contains("private void keepCurrentAccount()"));
         assertFalse(source.contains("clearPendingCommunityShare();\n        exchange(authResp.code.trim());"));
     }
 

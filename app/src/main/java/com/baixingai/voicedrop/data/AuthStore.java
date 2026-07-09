@@ -23,6 +23,11 @@ public final class AuthStore {
     }
 
     public String bearer() {
+        String session = session();
+        return session.isEmpty() ? anonymousBearer() : session;
+    }
+
+    public String anonymousBearer() {
         return ensureAnon();
     }
 
@@ -37,8 +42,7 @@ public final class AuthStore {
     }
 
     public String communityBearer() {
-        String session = session();
-        return session.isEmpty() ? bearer() : session;
+        return bearer();
     }
 
     public boolean isWechatAuthenticated() {
@@ -48,7 +52,7 @@ public final class AuthStore {
     public String anonId() {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(bearer().getBytes("UTF-8"));
+            byte[] hash = digest.digest(anonymousBearer().getBytes("UTF-8"));
             StringBuilder builder = new StringBuilder("anon-");
             for (int i = 0; i < 16 && i < hash.length; i++) {
                 builder.append(String.format("%02x", hash[i]));
@@ -104,7 +108,7 @@ public final class AuthStore {
         return builder.toString();
     }
 
-    private static boolean isSessionToken(String token) {
+    static boolean isSessionToken(String token) {
         if (token == null) return false;
         String[] parts = token.split("\\.");
         if (parts.length != 3) return false;

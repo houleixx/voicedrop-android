@@ -50,7 +50,6 @@ import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BlockStore;
-import com.baixingai.voicedrop.data.CommunityShareResume;
 import com.baixingai.voicedrop.data.CommunityStore;
 import com.baixingai.voicedrop.data.CommunityTerms;
 import com.baixingai.voicedrop.data.DeviceLinkCrypto;
@@ -302,11 +301,7 @@ public final class RecordingDetailActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (isDetailActivity()) {
-            setIntent(intent);
-            handleCommunityShareResumeIntent(intent);
-            return;
-        }
+        if (isDetailActivity()) return;
         if (!isDetailActivity()) handleShareIntent(intent);
     }
     @Override
@@ -815,12 +810,6 @@ public final class RecordingDetailActivity extends Activity {
     protected void onPageCreate(Intent intent) {
         showRecordingDetailFromIntent();
     }
-    protected void handleCommunityShareResumeIntent(Intent intent) {
-        if (intent == null || !intent.getBooleanExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, false)) {
-            return;
-        }
-        refreshAndDrain();
-    }
     protected void showRecordingDetailFromIntent() {
         String audioName = getIntent().getStringExtra(EXTRA_AUDIO_NAME);
         if (audioName == null || audioName.isEmpty()) {
@@ -915,15 +904,6 @@ public final class RecordingDetailActivity extends Activity {
         renderCurrentArticle(content, rec, doc);
         renderArticleEditBar(articleFrame, rec);
 
-        boolean resumeRequested = getIntent().getBooleanExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, false);
-        PendingCommunityShareStore.Pending pending = CommunityShareResume.consumeForDetailIfRequested(
-                new PendingCommunityShareStore(this), rec.audioName, resumeRequested);
-        if (resumeRequested && rec.audioName.equals(getIntent().getStringExtra(EXTRA_AUDIO_NAME))) {
-            getIntent().removeExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE);
-        }
-        if (pending != null) {
-            doShareCommunity(rec, pending.replyToShareId);
-        }
     }
 
     protected void publishWechat(Recording rec) {

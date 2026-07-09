@@ -16,7 +16,6 @@ public class CommunityShareErrorSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
         String doShareCommunity = methodBody(source, "protected void doShareCommunity");
 
-        assertTrue(source.contains("import com.baixingai.voicedrop.data.CommunityShareResume;"));
         assertTrue(source.contains("import com.baixingai.voicedrop.data.PendingCommunityShareStore;"));
         assertTrue(source.contains("import com.baixingai.voicedrop.data.WechatLogin;"));
         assertTrue(doShareCommunity.contains("if (result.hasInvalidSession()) auth.signOutWechat();"));
@@ -29,19 +28,12 @@ public class CommunityShareErrorSourceTest {
     }
 
     @Test
-    public void detailPageConsumesPendingShareAfterReloadingMatchingRecording() throws Exception {
+    public void detailPageDoesNotAutomaticallyRetryAnonymousArticleAfterLogin() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
-        String onNewIntent = methodBody(source, "protected void onNewIntent");
-        String showArticle = methodBody(source, "protected void showArticle(Recording rec, ArticleDoc doc, boolean animateOpen, boolean refreshHistory)");
 
-        assertTrue(onNewIntent.contains("if (isDetailActivity()) {"));
-        assertTrue(onNewIntent.contains("setIntent(intent);"));
-        assertTrue(onNewIntent.contains("handleCommunityShareResumeIntent(intent);"));
-        assertTrue(showArticle.contains("boolean resumeRequested = getIntent().getBooleanExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, false);"));
-        assertTrue(showArticle.contains("PendingCommunityShareStore.Pending pending = CommunityShareResume.consumeForDetailIfRequested("));
-        assertTrue(showArticle.contains("if (pending != null) {"));
-        assertTrue(showArticle.contains("getIntent().removeExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE);"));
-        assertTrue(showArticle.contains("doShareCommunity(rec, pending.replyToShareId);"));
+        assertFalse(source.contains("CommunityShareResume"));
+        assertFalse(source.contains("handleCommunityShareResumeIntent"));
+        assertFalse(source.contains("consumeForDetailIfRequested"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

@@ -8,6 +8,7 @@ import android.util.Log;
 import com.baixingai.voicedrop.AccountActivity;
 import com.baixingai.voicedrop.RecordingDetailActivity;
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.CommunityShareResume;
 import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.WechatAuthStore;
 import com.baixingai.voicedrop.data.WechatLogin;
@@ -100,13 +101,14 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
             return;
         }
         PendingCommunityShareStore.Pending pending = new PendingCommunityShareStore(this).peek();
-        if (pending == null) {
+        String audioName = CommunityShareResume.detailAudioNameAfterLogin(pending);
+        if (audioName == null) {
             openAccount();
             return;
         }
-        clearPendingCommunityShare();
         Intent intent = new Intent(this, RecordingDetailActivity.class);
-        intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, pending.audioName);
+        intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, audioName);
+        intent.putExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, true);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();

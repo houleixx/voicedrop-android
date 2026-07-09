@@ -14,14 +14,19 @@ public class WechatCommunityLoginSourceTest {
     @Test
     public void successfulWechatLoginRoutesPendingCommunityShareBackToRecordingDetail() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/wxapi/WXEntryActivity.java");
+        String routeAfterLogin = methodBody(source, "private void routeAfterLogin");
 
         assertTrue(source.contains("import com.baixingai.voicedrop.RecordingDetailActivity;"));
+        assertTrue(source.contains("import com.baixingai.voicedrop.data.CommunityShareResume;"));
         assertTrue(source.contains("import com.baixingai.voicedrop.data.PendingCommunityShareStore;"));
         assertTrue(source.contains("routeAfterLogin(result.ok);"));
         assertTrue(source.contains("PendingCommunityShareStore.Pending pending = new PendingCommunityShareStore(this).peek();"));
+        assertTrue(routeAfterLogin.contains("String audioName = CommunityShareResume.detailAudioNameAfterLogin(pending);"));
         assertTrue(source.contains("Intent intent = new Intent(this, RecordingDetailActivity.class);"));
-        assertTrue(source.contains("intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, pending.audioName);"));
+        assertTrue(routeAfterLogin.contains("intent.putExtra(RecordingDetailActivity.EXTRA_AUDIO_NAME, audioName);"));
+        assertTrue(routeAfterLogin.contains("intent.putExtra(CommunityShareResume.EXTRA_RESUME_COMMUNITY_SHARE, true);"));
         assertTrue(source.contains("new Intent(this, AccountActivity.class)"));
+        assertFalse(routeAfterLogin.contains("clearPendingCommunityShare();"));
         assertFalse(source.contains("toast(result.ok ? \"微信登录成功\" : \"微信登录失败：\" + message(result));\n                    openAccount();"));
     }
 

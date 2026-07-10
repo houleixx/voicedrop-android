@@ -25,7 +25,7 @@ public final class Api {
     }
 
     public static String sharePage(String id) {
-        return "https://" + HOST + "/voicedrop/" + id;
+        return "https://voicedrop.cn/" + id;
     }
 
     public static String path(String key) {

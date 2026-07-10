@@ -1663,9 +1663,7 @@ public final class CommunityDetailActivity extends Activity {
                     main.post(() -> showLoadedPhoto(frame, cached));
                     return;
                 }
-                byte[] data = library.photoData(scope + relKey);
-                if (data == null) return;
-                Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                Bitmap bitmap = library.photoImage(scope + relKey, false);
                 if (bitmap == null) return;
                 articlePhotoCache.put(cacheKey, bitmap);
                 main.post(() -> showLoadedPhoto(frame, bitmap));

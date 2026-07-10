@@ -6,6 +6,7 @@ import java.net.URLDecoder;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public final class AppRouter {
     private AppRouter() {
@@ -13,6 +14,10 @@ public final class AppRouter {
 
     public static DeepLink parse(Uri uri) {
         if (uri == null) return DeepLink.none();
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+        if ("https".equals(scheme) || "http".equals(scheme)) {
+            return parseUniversal(uri.getHost(), uri.getPathSegments(), uri.toString());
+        }
         String route = uri.getHost() == null ? "" : uri.getHost();
         List<String> segments = uri.getPathSegments();
         String first = segments.isEmpty() ? "" : segments.get(0);
@@ -42,10 +47,51 @@ public final class AppRouter {
                     }
                 }
             }
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+            if ("https".equals(scheme) || "http".equals(scheme)) {
+                return parseUniversal(uri.getHost(), pathSegments(path), raw);
+            }
             return parseParts(uri.getScheme(), uri.getHost() == null ? "" : uri.getHost(), first, tag);
         } catch (Exception e) {
             return DeepLink.none();
         }
+    }
+
+    private static List<String> pathSegments(String path) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        if (path == null || path.isEmpty()) return out;
+        for (String part : path.split("/")) {
+            if (!part.isEmpty()) out.add(decode(part));
+        }
+        return out;
+    }
+
+    private static DeepLink parseUniversal(String host, List<String> pathSegments, String rawUrl) {
+        if (host == null) return DeepLink.none();
+        String h = host.toLowerCase();
+        java.util.ArrayList<String> segs = new java.util.ArrayList<>(pathSegments == null
+                ? java.util.Collections.emptyList() : pathSegments);
+        if ("voicedrop.cn".equals(h) || "www.voicedrop.cn".equals(h)) {
+            // Entire public VoiceDrop site opens in-app; routable single-token paths
+            // become share links, everything else falls back to a web page.
+        } else if ("jianshuo.dev".equals(h) || "www.jianshuo.dev".equals(h)) {
+            if (segs.isEmpty() || !"voicedrop".equals(segs.get(0))) return DeepLink.none();
+            segs.remove(0);
+        } else {
+            return DeepLink.none();
+        }
+        if (segs.isEmpty()) return new DeepLink(Kind.RECORDINGS, "", "", "", rawUrl);
+        String first = segs.get(0);
+        if (segs.size() == 1 && SHARE_ID.matcher(first).matches() && !isStaticPath(first)) {
+            return new DeepLink(Kind.SHARE_LINK, "", "", first, rawUrl);
+        }
+        return new DeepLink(Kind.WEB, "", "", "", rawUrl);
+    }
+
+    private static final Pattern SHARE_ID = Pattern.compile("^[A-Za-z0-9_-]{6,16}$");
+
+    private static boolean isStaticPath(String path) {
+        return "privacy".equals(path) || "welcome".equals(path) || "help".equals(path);
     }
 
     private static DeepLink parseParts(String scheme, String route, String firstSegment, String tag) {
@@ -74,18 +120,28 @@ public final class AppRouter {
         COMMUNITY,
         SETTINGS,
         RECORD,
-        ARTICLE
+        ARTICLE,
+        SHARE_LINK,
+        WEB
     }
 
     public static final class DeepLink {
         public final Kind kind;
         public final String stem;
         public final String tag;
+        public final String id;
+        public final String url;
 
         DeepLink(Kind kind, String stem, String tag) {
+            this(kind, stem, tag, "", "");
+        }
+
+        DeepLink(Kind kind, String stem, String tag, String id, String url) {
             this.kind = kind;
             this.stem = stem == null ? "" : stem;
             this.tag = tag == null ? "" : tag;
+            this.id = id == null ? "" : id;
+            this.url = url == null ? "" : url;
         }
 
         static DeepLink none() {

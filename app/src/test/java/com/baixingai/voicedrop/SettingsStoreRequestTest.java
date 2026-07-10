@@ -31,13 +31,20 @@ public class SettingsStoreRequestTest {
     }
 
     @Test
-    public void appConfigBodyStoresNoFollowupsOnlyWhenDisabled() throws Exception {
-        JSONObject enabled = SettingsStore.appConfigBody(true, true);
-        JSONObject disabled = SettingsStore.appConfigBody(false, false);
+    public void appConfigBodyDoesNotPersistFollowupSwitch() throws Exception {
+        JSONObject enabled = SettingsStore.appConfigBody(true);
+        JSONObject disabled = SettingsStore.appConfigBody(false);
 
         assertTrue(enabled.getBoolean("autoShareCommunity"));
         assertFalse(enabled.has("noFollowups"));
         assertFalse(disabled.getBoolean("autoShareCommunity"));
-        assertTrue(disabled.getBoolean("noFollowups"));
+        assertFalse(disabled.has("noFollowups"));
+    }
+
+    @Test
+    public void nameBodyTrimsProfileName() throws Exception {
+        JSONObject body = SettingsStore.nameBody("  王小明  ");
+
+        assertEquals("王小明", body.getString("name"));
     }
 }

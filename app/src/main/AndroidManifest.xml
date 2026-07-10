@@ -43,6 +43,34 @@
 
                 <data android:scheme="voicedrop" />
             </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="voicedrop.cn"
+                    android:scheme="https" />
+                <data
+                    android:host="www.voicedrop.cn"
+                    android:scheme="https" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="jianshuo.dev"
+                    android:pathPrefix="/voicedrop"
+                    android:scheme="https" />
+                <data
+                    android:host="www.jianshuo.dev"
+                    android:pathPrefix="/voicedrop"
+                    android:scheme="https" />
+            </intent-filter>
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
@@ -76,6 +104,10 @@
             android:theme="@style/AppTheme" />
         <activity
             android:name=".CommunityDetailActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".SharedArticleActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity

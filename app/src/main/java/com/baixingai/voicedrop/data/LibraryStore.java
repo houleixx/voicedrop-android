@@ -4,6 +4,8 @@ import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 
+import android.graphics.Bitmap;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -158,6 +160,12 @@ public final class LibraryStore {
         return url.isEmpty() ? null : url + "?s=" + section;
     }
 
+    public LinkTarget resolveShareLink(String id) throws Exception {
+        if (id == null || id.trim().isEmpty()) return null;
+        HttpClient.Response response = http.get(Api.filesBase() + "/link/" + Api.path(id), auth.bearer());
+        return response.ok() ? LinkTarget.fromJson(response.text()) : null;
+    }
+
     public PublishResult publishWechat(Recording rec) throws Exception {
         HttpClient.Response response = http.postJson(Api.filesBase() + "/wechat/" + Api.path(rec.articleKey()), auth.bearer(), new byte[0]);
         if (response.code == 409) return PublishResult.notConfigured();
@@ -231,6 +239,42 @@ public final class LibraryStore {
 
         public boolean isConfigError() {
             return notConfigured || (errcode != null && (errcode == 40164 || errcode == 40125 || errcode == 40013));
+        }
+    }
+
+    public static final class LinkTarget {
+        public final String type;
+        public final String owner;
+        public final String stem;
+        public final String title;
+        public final ArticleDoc doc;
+        public final String rawJson;
+
+        private LinkTarget(String type, String owner, String stem, String title, ArticleDoc doc, String rawJson) {
+            this.type = type == null ? "" : type;
+            this.owner = owner == null ? "" : owner;
+            this.stem = stem == null ? "" : stem;
+            this.title = title == null ? "" : title;
+            this.doc = doc;
+            this.rawJson = rawJson == null ? "" : rawJson;
+        }
+
+        public static LinkTarget fromJson(String text) throws Exception {
+            JSONObject obj = new JSONObject(text == null ? "{}" : text);
+            ArticleDoc doc = null;
+            if (obj.has("articles") || obj.has("body")) {
+                doc = ArticleDoc.fromJson(obj.toString());
+            }
+            return new LinkTarget(obj.optString("type", ""),
+                    obj.optString("owner", ""),
+                    obj.optString("stem", ""),
+                    obj.optString("title", ""),
+                    doc,
+                    text);
+        }
+
+        public boolean isCommunity() {
+            return "community".equals(type);
         }
     }
 
@@ -325,8 +369,11 @@ public final class LibraryStore {
     }
 
     public byte[] photoData(String fullKey) throws Exception {
-        HttpClient.Response response = http.get(Api.filesBase() + "/photo/" + Api.path(fullKey), "");
-        return response.ok() ? response.body : null;
+        return PhotoService.data(fullKey, false, http);
+    }
+
+    public Bitmap photoImage(String fullKey, boolean ignoringLocalCache) throws Exception {
+        return PhotoService.image(fullKey, ignoringLocalCache);
     }
 
     public byte[] download(String key) throws Exception {

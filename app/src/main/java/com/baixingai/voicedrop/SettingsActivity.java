@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -61,6 +62,7 @@ public class SettingsActivity extends Activity {
     private SettingsStore settingsStore;
     private ExportManager exportManager;
     private File pendingExportZip;
+    private TextView nameValueText;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
     @Override
@@ -146,11 +148,13 @@ public class SettingsActivity extends Activity {
         addSettingRow(content, R.drawable.ic_settings_account, "账户", "匿名身份、数据与转移", this::openAccount);
 
         addSection(content, "创作");
+        nameValueText = addSettingRowWithValue(content, R.drawable.ic_settings_account, "名字",
+                "文章署名，以及挖文章时对你的称呼", "", this::showNameEditor);
+        loadNameRowValue();
         addSettingRow(content, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
         addSettingRow(content, R.drawable.ic_settings_ai_instruction, "AI 指令", "自定义长按菜单里的每个动作", this::openInstructionSettings);
         addSettingRow(content, R.drawable.ic_settings_broadcast, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
         addSettingRow(content, R.drawable.ic_settings_bolt, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
-        addFollowupsSwitchRow(content, R.drawable.ic_settings_broadcast);
 
         addSection(content, "同步与社区");
         addAutoShareSwitchRow(content, R.drawable.ic_settings_community);
@@ -227,6 +231,49 @@ public class SettingsActivity extends Activity {
         lp.setMargins(0, 0, 0, dp(8));
         content.addView(row, lp);
         row.setOnClickListener(v -> action.run());
+    }
+
+    private TextView addSettingRowWithValue(LinearLayout content, int iconResId, String title, String subtitle, String value, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.setBackground(round(Theme.CARD, 12));
+        row.addView(settingIcon(iconResId));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        texts.addView(text(title, 16, Theme.INK, Typeface.BOLD));
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView sub = text(subtitle, 12, Theme.SECONDARY, Typeface.NORMAL);
+            sub.setPadding(0, dp(4), 0, 0);
+            texts.addView(sub);
+        }
+        TextView valueText = text(value == null ? "" : value, 15, Theme.SECONDARY, Typeface.NORMAL);
+        valueText.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        valueText.setSingleLine(true);
+        valueText.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams valueLp = new LinearLayout.LayoutParams(dp(96), -2);
+        valueLp.setMargins(dp(12), 0, dp(8), 0);
+        row.addView(valueText, valueLp);
+        row.addView(text("›", 28, 0xffcfc6b6, Typeface.NORMAL));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(8));
+        content.addView(row, lp);
+        row.setOnClickListener(v -> action.run());
+        return valueText;
+    }
+
+    private void loadNameRowValue() {
+        io.execute(() -> {
+            try {
+                SettingsStore.Style style = settingsStore.loadStyle();
+                runOnUiThread(() -> {
+                    if (nameValueText != null) nameValueText.setText(style.name == null ? "" : style.name);
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private void addInfoRow(LinearLayout content, int iconResId, String title, String value) {
@@ -306,54 +353,6 @@ public class SettingsActivity extends Activity {
             if (autoShare.isEnabled()) {
                 autoShare.setChecked(!autoShare.isChecked());
             }
-        });
-    }
-
-    private void addFollowupsSwitchRow(LinearLayout content, int iconResId) {
-        LinearLayout row = switchRow(content, iconResId, "成文后追问", "AI 追问一两个细节，把文章补厚");
-        IosSwitch followups = (IosSwitch) row.getTag();
-        final boolean[] ready = {false};
-        followups.setEnabled(false);
-        io.execute(() -> {
-            try {
-                JSONObject cfg = settingsStore.loadConfig();
-                boolean enabled = !cfg.optBoolean("noFollowups", false);
-                runOnUiThread(() -> {
-                    ready[0] = false;
-                    followups.setChecked(enabled);
-                    ready[0] = true;
-                    followups.setEnabled(true);
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    ready[0] = true;
-                    followups.setEnabled(true);
-                    toast("配置读取失败：" + e.getMessage());
-                });
-            }
-        });
-        followups.setOnCheckedChangeListener((button, checked) -> {
-            if (!ready[0]) return;
-            button.setEnabled(false);
-            io.execute(() -> {
-                try {
-                    JSONObject cfg = settingsStore.loadConfig();
-                    settingsStore.saveConfig(cfg.optBoolean("autoShareCommunity", false), checked);
-                    toast(checked ? "已开启成文后追问" : "已关闭成文后追问");
-                } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        ready[0] = false;
-                        followups.setChecked(!checked);
-                        ready[0] = true;
-                        toast("配置保存失败：" + e.getMessage());
-                    });
-                } finally {
-                    runOnUiThread(() -> button.setEnabled(true));
-                }
-            });
-        });
-        row.setOnClickListener(v -> {
-            if (followups.isEnabled()) followups.setChecked(!followups.isChecked());
         });
     }
 
@@ -482,6 +481,52 @@ public class SettingsActivity extends Activity {
                         }
                     } catch (Exception e) {
                         toast("写作风格保存失败：" + e.getMessage());
+                    }
+                }), null, null, true, false);
+    }
+
+    private void showNameEditor() {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(12), dp(18), dp(12));
+
+        final android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setTextSize(17);
+        input.setTextColor(Theme.INK);
+        input.setHintTextColor(Theme.FAINT);
+        input.setHint("你的名字");
+        input.setBackground(round(0xfff7f2ec, 14));
+        input.setPadding(dp(14), dp(12), dp(14), dp(12));
+        form.addView(input, new LinearLayout.LayoutParams(-1, dp(54)));
+
+        TextView hint = text("这个名字会出现在文章署名，以及挖文章时对你的称呼。随时可改。", 13, Theme.SECONDARY, Typeface.NORMAL);
+        hint.setSingleLine(true);
+        hint.setEllipsize(TextUtils.TruncateAt.END);
+        hint.setPadding(0, dp(10), 0, 0);
+        form.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+
+        io.execute(() -> {
+            try {
+                SettingsStore.Style style = settingsStore.loadStyle();
+                runOnUiThread(() -> input.setText(style.name));
+            } catch (Exception ignored) {
+            }
+        });
+
+        IosDialog.showBottomSheet(this, "名字", form, 230,
+                "完成", () -> io.execute(() -> {
+                    try {
+                        String typedName = input.getText().toString().trim();
+                        if (typedName.length() > 20) typedName = typedName.substring(0, 20);
+                        final String name = typedName;
+                        settingsStore.saveName(name);
+                        runOnUiThread(() -> {
+                            if (nameValueText != null) nameValueText.setText(name);
+                        });
+                        toast("名字已保存");
+                    } catch (Exception e) {
+                        toast("名字保存失败：" + e.getMessage());
                     }
                 }), null, null, true, false);
     }

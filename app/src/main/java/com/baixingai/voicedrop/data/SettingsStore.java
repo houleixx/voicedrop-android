@@ -25,13 +25,23 @@ public final class SettingsStore {
         List<Integer> styles = new ArrayList<>();
         JSONArray arr = obj.optJSONArray("styles");
         if (arr != null) for (int i = 0; i < arr.length(); i++) styles.add(arr.optInt(i));
-        return new Style(obj.optString("style", ""), styles);
+        return new Style(obj.optString("style", ""), obj.optString("name", ""), styles);
     }
 
     public void saveStyle(String style) throws Exception {
         JSONObject body = new JSONObject().put("style", style.trim());
         HttpClient.Response response = http.putBytes(Api.filesBase() + "/style", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("save style HTTP " + response.code);
+    }
+
+    public void saveName(String name) throws Exception {
+        HttpClient.Response response = http.putBytes(Api.filesBase() + "/style", auth.bearer(), "application/json",
+                nameBody(name).toString().getBytes("UTF-8"));
+        if (!response.ok()) throw new IllegalStateException("save name HTTP " + response.code);
+    }
+
+    public static JSONObject nameBody(String name) throws Exception {
+        return new JSONObject().put("name", name == null ? "" : name.trim());
     }
 
     public JSONObject loadStyleHistory() throws Exception {
@@ -95,21 +105,18 @@ public final class SettingsStore {
     }
 
     public void saveConfig(boolean autoShareCommunity) throws Exception {
-        JSONObject current = loadConfig();
-        boolean followupsEnabled = !current.optBoolean("noFollowups", false);
-        saveConfig(autoShareCommunity, followupsEnabled);
-    }
-
-    public void saveConfig(boolean autoShareCommunity, boolean followupsEnabled) throws Exception {
-        JSONObject body = appConfigBody(autoShareCommunity, followupsEnabled);
+        JSONObject body = appConfigBody(autoShareCommunity);
         HttpClient.Response response = http.putBytes(Api.filesBase() + "/upload/CONFIG.json", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("config HTTP " + response.code);
     }
 
-    public static JSONObject appConfigBody(boolean autoShareCommunity, boolean followupsEnabled) throws Exception {
-        JSONObject body = new JSONObject().put("autoShareCommunity", autoShareCommunity);
-        if (!followupsEnabled) body.put("noFollowups", true);
-        return body;
+    @Deprecated
+    public void saveConfig(boolean autoShareCommunity, boolean followupsEnabled) throws Exception {
+        saveConfig(autoShareCommunity);
+    }
+
+    public static JSONObject appConfigBody(boolean autoShareCommunity) throws Exception {
+        return new JSONObject().put("autoShareCommunity", autoShareCommunity);
     }
 
     public String articlesPageUrl() throws Exception {
@@ -120,10 +127,12 @@ public final class SettingsStore {
 
     public static final class Style {
         public final String style;
+        public final String name;
         public final List<Integer> selectedStyles;
 
-        Style(String style, List<Integer> selectedStyles) {
+        Style(String style, String name, List<Integer> selectedStyles) {
             this.style = style;
+            this.name = name == null ? "" : name;
             this.selectedStyles = selectedStyles;
         }
     }

@@ -47,6 +47,7 @@ public final class AsrDictationSession {
     private volatile ScheduledFuture<?> finishTimeout;
     private volatile Runnable finishComplete;
     private WebSocket socket;
+    private volatile int turnGeneration;
     private final Object recorderLock = new Object();
     private AudioRecord recorder;
     // Used by finish() to know when the mic thread has actually started recording.
@@ -87,12 +88,14 @@ public final class AsrDictationSession {
         micReady = new CountDownLatch(1);
         socketReady = new CountDownLatch(1);
         audioFrames = new PendingAudioFrames();
+        final int generation = ++turnGeneration;
         startMicLoop(audioFrames);
         startSenderLoop(audioFrames, socketReady);
 
         String token = bearerToken(auth);
         socket = client.newWebSocket(asrRequest(token), new WebSocketListener() {
             @Override public void onOpen(WebSocket webSocket, Response response) {
+                if (!isCurrentTurn(webSocket, generation)) return;
                 Log.d(TAG, "WebSocket opened");
                 try {
                     webSocket.send(ByteString.of(VolcASRProtocol.buildFullClientPayload("voicedrop-android-edit", SAMPLE_RATE)));
@@ -105,17 +108,22 @@ public final class AsrDictationSession {
             }
 
             @Override public void onMessage(WebSocket webSocket, ByteString bytes) {
+                if (!isCurrentTurn(webSocket, generation)) return;
                 handleSocketMessage(bytes);
             }
 
             @Override public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                handleSocketFailure(t);
+                handleSocketFailure(webSocket, generation, t);
             }
 
             @Override public void onClosed(WebSocket webSocket, int code, String reason) {
-                handleSocketClosed(code, reason);
+                handleSocketClosed(webSocket, generation, code, reason);
             }
         });
+    }
+
+    private boolean isCurrentTurn(WebSocket webSocket, int generation) {
+        return generation == turnGeneration && webSocket == socket;
     }
 
     private void onSocketReady(WebSocket webSocket) {
@@ -146,7 +154,8 @@ public final class AsrDictationSession {
         }
     }
 
-    private void handleSocketFailure(Throwable t) {
+    private void handleSocketFailure(WebSocket webSocket, int generation, Throwable t) {
+        if (!isCurrentTurn(webSocket, generation)) return;
         Log.e(TAG, "WebSocket failure", t);
         if (running.get()) listener.onError(t.getMessage());
         awaitingFinishResult = false;
@@ -154,7 +163,8 @@ public final class AsrDictationSession {
         notifyFinishComplete();
     }
 
-    private void handleSocketClosed(int code, String reason) {
+    private void handleSocketClosed(WebSocket webSocket, int generation, int code, String reason) {
+        if (!isCurrentTurn(webSocket, generation)) return;
         Log.d(TAG, "WebSocket closed: code=" + code + " reason=" + reason);
         running.set(false);
         awaitingFinishResult = false;
@@ -224,6 +234,7 @@ public final class AsrDictationSession {
      */
     public void stop() {
         Log.d(TAG, "stop() called");
+        turnGeneration++;
         if (!running.getAndSet(false)) return;
         awaitingFinishResult = false;
         cancelFinishTimeout();

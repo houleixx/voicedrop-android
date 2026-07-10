@@ -23,7 +23,33 @@ public class AppRouterTest {
 
     @Test
     public void rejectsNonVoicedropRoutes() {
-        assertEquals(AppRouter.Kind.NONE, AppRouter.parse("https://jianshuo.dev/voicedrop/x").kind);
         assertEquals(AppRouter.Kind.NONE, AppRouter.parse("voicedrop://article").kind);
+    }
+
+    @Test
+    public void parsesUniversalShareLinks() {
+        AppRouter.DeepLink voiceDrop = AppRouter.parse("https://voicedrop.cn/abc123?s=1");
+        assertEquals(AppRouter.Kind.SHARE_LINK, voiceDrop.kind);
+        assertEquals("abc123", voiceDrop.id);
+        assertEquals("https://voicedrop.cn/abc123?s=1", voiceDrop.url);
+
+        AppRouter.DeepLink www = AppRouter.parse("https://www.voicedrop.cn/AbC_123-xy");
+        assertEquals(AppRouter.Kind.SHARE_LINK, www.kind);
+        assertEquals("AbC_123-xy", www.id);
+
+        AppRouter.DeepLink legacy = AppRouter.parse("https://jianshuo.dev/voicedrop/legacy9");
+        assertEquals(AppRouter.Kind.SHARE_LINK, legacy.kind);
+        assertEquals("legacy9", legacy.id);
+    }
+
+    @Test
+    public void parsesUniversalRootAndWebFallbacks() {
+        assertEquals(AppRouter.Kind.RECORDINGS, AppRouter.parse("https://voicedrop.cn/").kind);
+
+        AppRouter.DeepLink help = AppRouter.parse("https://voicedrop.cn/help");
+        assertEquals(AppRouter.Kind.WEB, help.kind);
+        assertEquals("https://voicedrop.cn/help", help.url);
+
+        assertEquals(AppRouter.Kind.NONE, AppRouter.parse("https://example.com/abc123").kind);
     }
 }

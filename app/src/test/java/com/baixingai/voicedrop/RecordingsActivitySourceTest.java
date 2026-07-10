@@ -230,6 +230,16 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void universalShareLinksResolveThroughFilesApi() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+
+        assertTrue(source.contains("openShareLink(link.id, link.url)"));
+        assertTrue(source.contains("library.resolveShareLink(id)"));
+        assertTrue(source.contains("target.isCommunity()"));
+        assertTrue(source.contains("openWebFallback(fallbackUrl)"));
+    }
+
+    @Test
     public void manifestExposesStartRecordingShortcut() throws Exception {
         String manifest = readSource("src/main/AndroidManifest.xml");
         String shortcuts = readSource("src/main/res/xml/shortcuts.xml");
@@ -238,6 +248,37 @@ public class RecordingsActivitySourceTest {
         assertTrue(shortcuts.contains("android:shortcutId=\"start_recording\""));
         assertTrue(shortcuts.contains("android:data=\"voicedrop://record\""));
         assertTrue(shortcuts.contains("android:targetClass=\"com.baixingai.voicedrop.RecordingsActivity\""));
+    }
+
+    @Test
+    public void aiInterviewerSharesPrimaryRecorderCaptureInModernMode() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String start = methodBody(source, "protected void startRecordingFlow");
+        String create = methodBody(source, "protected RecordingBackend createRecorderBackend");
+
+        assertTrue(source.contains("protected RecordingBackend recorder;"));
+        assertTrue(start.contains("EngineRecorder engineRecorder = null;"));
+        assertTrue(start.contains("engineRecorder.setPcmListener"));
+        assertTrue(start.contains("interviewer.onPcm16(pcm16le, sampleRate)"));
+        assertTrue(source.contains("recorder = createRecorderBackend();"));
+        assertTrue(create.contains("if (prefs.classicRecorder())"));
+        assertTrue(create.contains("new AudioRecorder(this)"));
+        assertTrue(create.contains("new EngineRecorder(this)"));
+    }
+
+    @Test
+    public void aiInterviewButtonUsesIosLikeWaveformMicIcon() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String icon = readSource("src/main/res/drawable/ic_waveform_mic.xml");
+
+        assertTrue(source.contains("R.drawable.ic_waveform_mic"));
+        assertFalse(source.contains("AliIconFont.apply(aiIcon, AliIconFont.MIC"));
+        assertTrue(icon.contains("android:viewportWidth=\"24\""));
+        assertTrue(icon.contains("android:strokeLineCap=\"round\""));
+        assertTrue(icon.contains("M3.2,13.2"));
+        assertTrue(icon.contains("M12.2,18.4"));
+        assertTrue(icon.contains("M15.2,12.2"));
+        assertFalse(icon.contains("M15,5"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

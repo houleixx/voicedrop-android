@@ -61,6 +61,7 @@ import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
+import com.baixingai.voicedrop.data.ReviewPrompter;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.data.UsageStore;
@@ -845,7 +846,8 @@ public final class RecordingDetailActivity extends Activity {
             finish();
             return;
         }
-        if (!rec.stem().equals(currentArticleStem)) {
+        boolean firstOpenForStem = !rec.stem().equals(currentArticleStem);
+        if (firstOpenForStem) {
             articleIndex = 0;
             editQueue = new ArrayList<>();
             editReply = null;
@@ -856,6 +858,7 @@ public final class RecordingDetailActivity extends Activity {
         }
         currentArticleStem = rec.stem();
         currentArticleDoc = doc;
+        if (firstOpenForStem) ReviewPrompter.articleOpened(this);
         ensureArticleEditSession(rec);
         refreshCommunityShareState(rec);
 
@@ -2652,9 +2655,7 @@ public final class RecordingDetailActivity extends Activity {
             try {
                 String scope = library.ownerScope();
                 if (scope == null) return;
-                byte[] data = library.photoData(scope + relKey);
-                if (data == null) return;
-                Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                Bitmap bitmap = library.photoImage(scope + relKey, false);
                 if (bitmap == null) return;
                 articlePhotoCache.put(relKey, bitmap);
                 main.post(() -> showLoadedPhoto(frame, bitmap));

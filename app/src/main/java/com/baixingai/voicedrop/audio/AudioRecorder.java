@@ -9,7 +9,7 @@ import java.io.File;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public final class AudioRecorder {
+public final class AudioRecorder implements RecordingBackend {
     public static final String STAGING_PREFIX = "recording-";
 
     private final Context context;
@@ -23,7 +23,7 @@ public final class AudioRecorder {
         this.context = context.getApplicationContext();
     }
 
-    public void start() throws Exception {
+    @Override public void start() throws Exception {
         cleanupStaleStaging(context);
         start = ZonedDateTime.now();
         currentFile = stagingFile(context, start);
@@ -41,7 +41,7 @@ public final class AudioRecorder {
         peakAmplitude = 0;
     }
 
-    public Take stop(String place) {
+    @Override public Take stop(String place) {
         if (recorder == null || currentFile == null || start == null) return null;
         sampleAmplitude();
         try {
@@ -63,7 +63,7 @@ public final class AudioRecorder {
         return take;
     }
 
-    public void cancel() {
+    @Override public void cancel() {
         if (recorder != null) {
             try {
                 recorder.stop();
@@ -82,24 +82,24 @@ public final class AudioRecorder {
         peakAmplitude = 0;
     }
 
-    public boolean isRecording() {
+    @Override public boolean isRecording() {
         return recorder != null;
     }
 
-    public long elapsedSeconds() {
+    @Override public long elapsedSeconds() {
         return isRecording() ? Math.max(0, (System.currentTimeMillis() - startedAtMs) / 1000) : 0;
     }
 
-    public ZonedDateTime startDate() {
+    @Override public ZonedDateTime startDate() {
         return start;
     }
 
-    public int sampleAmplitude() {
+    @Override public int sampleAmplitude() {
         sampleCurrentAmplitude();
         return peakAmplitude;
     }
 
-    public int sampleCurrentAmplitude() {
+    @Override public int sampleCurrentAmplitude() {
         if (recorder == null) return peakAmplitude;
         int current = 0;
         try {

@@ -4,6 +4,7 @@ import android.app.Application;
 import android.app.Activity;
 import android.os.Bundle;
 import android.text.TextUtils;
+import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.DialogX;
 import com.kongzue.dialogx.style.IOSStyle;
@@ -19,6 +20,7 @@ public class VoiceDropApplication extends Application {
         DialogX.globalStyle = IOSStyle.style();
         DialogX.globalTheme = DialogX.THEME.LIGHT;
         DialogX.DEBUGMODE = false;
+        new ReferralManager(this).runOnLaunch();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 applySystemBarDefaults(activity);

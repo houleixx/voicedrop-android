@@ -42,6 +42,9 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 import com.baixingai.voicedrop.audio.AudioRecorder;
 import com.baixingai.voicedrop.audio.AsrDictationSession;
+import com.baixingai.voicedrop.audio.EngineRecorder;
+import com.baixingai.voicedrop.audio.RealtimeInterviewer;
+import com.baixingai.voicedrop.audio.RecordingBackend;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
@@ -61,6 +64,7 @@ import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingReplyStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
+import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -118,7 +122,8 @@ public final class RecordingsActivity extends Activity {
     protected String pendingLinkPairingId;
     protected String pendingLinkPubkey;
     protected Uploader uploader;
-    protected AudioRecorder recorder;
+    protected RecordingBackend recorder;
+    protected RealtimeInterviewer interviewer;
     protected StatusSession statusSession;
     protected ArticleEditSession editSession;
     protected LibraryCommandSession commandSession;
@@ -333,6 +338,7 @@ public final class RecordingsActivity extends Activity {
         if (editSession != null) editSession.close();
         if (dictationSession != null) dictationSession.stop();
         if (commandDictationSession != null) commandDictationSession.stop();
+        if (interviewer != null) interviewer.stop();
         if (commandSession != null) commandSession.close();
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
@@ -501,6 +507,10 @@ public final class RecordingsActivity extends Activity {
         stopPlayback();
         if (communityRecording && recorder != null && recorder.isRecording()) {
             recorder.cancel();
+        }
+        if (interviewer != null) {
+            interviewer.stop();
+            interviewer = null;
         }
         communityRecording = false;
         replyToShareId = null;
@@ -972,7 +982,78 @@ public final class RecordingsActivity extends Activity {
             openArticleDeepLink(link.stem);
             return true;
         }
+        if (link.kind == AppRouter.Kind.SHARE_LINK) {
+            new ReferralManager(this).noteShareToken(link.id);
+            openShareLink(link.id, link.url);
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.WEB) {
+            openWebFallback(link.url);
+            return true;
+        }
         return false;
+    }
+
+    protected void openShareLink(String id, String fallbackUrl) {
+        if (id == null || id.trim().isEmpty()) {
+            openWebFallback(fallbackUrl);
+            return;
+        }
+        io.execute(() -> {
+            try {
+                LibraryStore.LinkTarget target = library.resolveShareLink(id);
+                if (target == null) {
+                    main.post(() -> openWebFallback(fallbackUrl));
+                    return;
+                }
+                String scope = library.ownerScope();
+                if (scope != null && scope.equals(target.owner) && !target.stem.isEmpty()) {
+                    main.post(() -> openArticleDeepLink(target.stem));
+                } else if (target.isCommunity()) {
+                    main.post(() -> openCommunityShare(id));
+                } else if (target.doc != null && !target.doc.articles.isEmpty()) {
+                    main.post(() -> openSharedArticle(target, fallbackUrl));
+                } else {
+                    main.post(() -> openWebFallback(fallbackUrl));
+                }
+            } catch (Exception e) {
+                main.post(() -> openWebFallback(fallbackUrl));
+            }
+        });
+    }
+
+    protected void openCommunityShare(String shareId) {
+        Intent intent = new Intent(this, CommunityDetailActivity.class);
+        intent.putExtra(EXTRA_SHARE_ID, shareId);
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    protected void openSharedArticle(LibraryStore.LinkTarget target, String fallbackUrl) {
+        if (target == null || target.rawJson.isEmpty()) {
+            openWebFallback(fallbackUrl);
+            return;
+        }
+        Intent intent = new Intent(this, SharedArticleActivity.class);
+        intent.putExtra(SharedArticleActivity.EXTRA_SHARED_JSON, target.rawJson);
+        int section = 0;
+        try {
+            Uri uri = Uri.parse(fallbackUrl);
+            String s = uri.getQueryParameter("s");
+            if (s != null) section = Math.max(0, Integer.parseInt(s));
+        } catch (Exception ignored) {
+        }
+        intent.putExtra(SharedArticleActivity.EXTRA_ARTICLE_INDEX, section);
+        startActivity(intent);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    protected void openWebFallback(String fallbackUrl) {
+        if (fallbackUrl == null || fallbackUrl.trim().isEmpty()) return;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)));
+        } catch (Exception ignored) {
+        }
     }
 
     protected void openArticleDeepLink(String stem) {
@@ -1942,10 +2023,9 @@ public final class RecordingsActivity extends Activity {
                     if (key != null) break;
                 }
                 if (key == null) return;
-                HttpClient.Response response = http.get(com.baixingai.voicedrop.net.Api.filesBase()
-                        + "/download/" + com.baixingai.voicedrop.net.Api.path(key), auth.bearer());
-                if (!response.ok()) return;
-                Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(response.body, dp(96));
+                String scope = library.ownerScope();
+                if (scope == null) return;
+                Bitmap bitmap = library.photoImage(scope + key, false);
                 if (bitmap == null) return;
                 main.post(() -> {
                     int index = iconWrap.indexOfChild(fallbackIcon);
@@ -1981,10 +2061,18 @@ public final class RecordingsActivity extends Activity {
         dot.setBackground(round(Theme.RED, 5));
         dot.setLayoutParams(new LinearLayout.LayoutParams(dp(9), dp(9)));
         statusRow.addView(dot);
-        TextView statusText = text(" 正在录音", 14, Theme.SECONDARY, Typeface.NORMAL);
+        boolean aiActive = interviewer != null && interviewer.interviewActive();
+        TextView statusText = text(aiActive ? " AI 采访中" : " 正在录音", 14, Theme.SECONDARY, Typeface.NORMAL);
         statusText.setLetterSpacing(0.14f);
         statusRow.addView(statusText);
         statusWrap.addView(statusRow, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL));
+        if (aiActive && interviewer != null) {
+            TextView aiStatus = text(interviewer.stateText(), 11, Theme.FAINT, Typeface.NORMAL);
+            aiStatus.setGravity(Gravity.CENTER);
+            FrameLayout.LayoutParams aiLp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL);
+            aiLp.topMargin = dp(24);
+            statusWrap.addView(aiStatus, aiLp);
+        }
 
         // Center: timer + waveform
         LinearLayout center = new LinearLayout(this);
@@ -2063,6 +2151,32 @@ public final class RecordingsActivity extends Activity {
         camBox.addView(camLabel, new LinearLayout.LayoutParams(-1, -2));
         camBox.setOnClickListener(v -> openCamera());
 
+        if (!prefs.classicRecorder()) {
+            LinearLayout aiBox = new LinearLayout(this);
+            aiBox.setOrientation(LinearLayout.VERTICAL);
+            aiBox.setGravity(Gravity.CENTER_HORIZONTAL);
+            aiBox.setClickable(true);
+            FrameLayout.LayoutParams aiLp = new FrameLayout.LayoutParams(dp(76), -2, Gravity.LEFT | Gravity.BOTTOM);
+            aiLp.leftMargin = dp(28);
+            aiLp.bottomMargin = dp(26);
+            bottom.addView(aiBox, aiLp);
+            FrameLayout aiButton = new FrameLayout(this);
+            aiButton.setBackground(round(aiActive ? Theme.AMBER_BG : Theme.CARD, 11));
+            ImageView aiIcon = new ImageView(this);
+            aiIcon.setImageResource(R.drawable.ic_waveform_mic);
+            aiIcon.setColorFilter(aiActive ? Theme.RED : Theme.SECONDARY);
+            aiIcon.setScaleType(ImageView.ScaleType.CENTER);
+            aiButton.addView(aiIcon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+            LinearLayout.LayoutParams aiBtnLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+            aiBtnLp.gravity = Gravity.CENTER_HORIZONTAL;
+            aiBox.addView(aiButton, aiBtnLp);
+            TextView aiLabel = text("采访", 11, aiActive ? Theme.RED : Theme.FAINT, Typeface.NORMAL);
+            aiLabel.setGravity(Gravity.CENTER);
+            aiLabel.setPadding(0, dp(6), 0, 0);
+            aiBox.addView(aiLabel, new LinearLayout.LayoutParams(-1, -2));
+            aiBox.setOnClickListener(v -> toggleInterview());
+        }
+
         if (first) main.postDelayed(timerTick, 500);
     }
 
@@ -2139,6 +2253,20 @@ public final class RecordingsActivity extends Activity {
         }
         try {
             if ((defaultRecordTag == null || defaultRecordTag.isEmpty()) && selectedTag != null) defaultRecordTag = selectedTag;
+            recorder = createRecorderBackend();
+            EngineRecorder engineRecorder = null;
+            if (recorder instanceof EngineRecorder) engineRecorder = (EngineRecorder) recorder;
+            if (engineRecorder != null) {
+                interviewer = new RealtimeInterviewer(this, auth);
+                interviewer.setOnStateChanged(() -> {
+                    if (recorder != null && recorder.isRecording()) showRecording(false);
+                });
+                engineRecorder.setPcmListener((pcm16le, sampleRate) -> {
+                    if (interviewer != null) interviewer.onPcm16(pcm16le, sampleRate);
+                });
+            } else {
+                interviewer = null;
+            }
             recorder.start();
             recordingStart = recorder.startDate();
             capturedPhotos.clear();
@@ -2148,7 +2276,16 @@ public final class RecordingsActivity extends Activity {
         }
     }
 
+    protected RecordingBackend createRecorderBackend() {
+        if (prefs.classicRecorder()) return new AudioRecorder(this);
+        return new EngineRecorder(this);
+    }
+
     protected void stopRecordingFlow() {
+        if (interviewer != null) {
+            interviewer.stop();
+            interviewer = null;
+        }
         AudioRecorder.Take take = recorder.stop(null);
         List<CapturedPhoto> photos = new ArrayList<>(capturedPhotos);
         capturedPhotos.clear();
@@ -2166,6 +2303,18 @@ public final class RecordingsActivity extends Activity {
                 uploadTake(take, photos);
             }
         }
+    }
+
+    protected void toggleInterview() {
+        if (recorder == null || !recorder.isRecording() || prefs.classicRecorder()) return;
+        if (interviewer == null) {
+            interviewer = new RealtimeInterviewer(this, auth);
+            interviewer.setOnStateChanged(() -> {
+                if (recorder != null && recorder.isRecording()) showRecording(false);
+            });
+        }
+        interviewer.toggle();
+        showRecording(false);
     }
 
     protected void clearHomePagerRefs() {

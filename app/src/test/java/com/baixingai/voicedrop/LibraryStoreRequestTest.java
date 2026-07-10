@@ -45,6 +45,35 @@ public class LibraryStoreRequestTest {
     }
 
     @Test
+    public void linkTargetParsesArticleAndCommunityResponses() throws Exception {
+        LibraryStore.LinkTarget article = LibraryStore.LinkTarget.fromJson("{"
+                + "\"type\":\"article\","
+                + "\"owner\":\"users/me/\","
+                + "\"stem\":\"VoiceDrop-2026-07-10-090000\","
+                + "\"title\":\"标题\","
+                + "\"articles\":[{\"title\":\"标题\",\"body\":\"正文\"}]"
+                + "}");
+        assertEquals("article", article.type);
+        assertEquals("users/me/", article.owner);
+        assertEquals("VoiceDrop-2026-07-10-090000", article.stem);
+        assertEquals(1, article.doc.articles.size());
+
+        LibraryStore.LinkTarget community = LibraryStore.LinkTarget.fromJson("{"
+                + "\"type\":\"community\","
+                + "\"owner\":\"users/other/\","
+                + "\"stem\":\"VoiceDrop-2026-07-10-090000\""
+                + "}");
+        assertEquals("community", community.type);
+    }
+
+    @Test
+    public void resolveShareLinkUsesFilesApiLinkEndpoint() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
+
+        assertTrue(source.contains("/link/\" + Api.path(id)"));
+    }
+
+    @Test
     public void loadRefreshesArticleDocWhenTagsAreMissingEvenIfTitleIsCached() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
 

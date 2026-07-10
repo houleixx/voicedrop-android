@@ -8,10 +8,16 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public final class HttpClient {
     public Response get(String url, String bearer) throws IOException {
         return request("GET", url, bearer, null, null, null);
+    }
+
+    public Response get(String url, String bearer, RequestOptions options) throws IOException {
+        return request("GET", url, bearer, null, null, null, options);
     }
 
     public Response delete(String url, String bearer) throws IOException {
@@ -35,6 +41,11 @@ public final class HttpClient {
     }
 
     private Response request(String method, String url, String bearer, String contentType, byte[] body, File file) throws IOException {
+        return request(method, url, bearer, contentType, body, file, null);
+    }
+
+    private Response request(String method, String url, String bearer, String contentType, byte[] body, File file,
+                             RequestOptions options) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod(method);
         conn.setConnectTimeout(20_000);
@@ -42,6 +53,11 @@ public final class HttpClient {
         if (bearer != null && !bearer.isEmpty()) conn.setRequestProperty("Authorization", "Bearer " + bearer);
         conn.setRequestProperty("X-VD-Platform", "android");
         if (contentType != null) conn.setRequestProperty("Content-Type", contentType);
+        if (options != null) {
+            for (Map.Entry<String, String> entry : options.headers.entrySet()) {
+                conn.setRequestProperty(entry.getKey(), entry.getValue());
+            }
+        }
         if (body != null || file != null) {
             conn.setDoOutput(true);
             try (OutputStream out = conn.getOutputStream()) {
@@ -59,6 +75,15 @@ public final class HttpClient {
         byte[] bytes = stream == null ? new byte[0] : readAll(stream);
         conn.disconnect();
         return new Response(code, bytes);
+    }
+
+    public static final class RequestOptions {
+        private final Map<String, String> headers = new LinkedHashMap<>();
+
+        public RequestOptions header(String name, String value) {
+            if (name != null && value != null) headers.put(name, value);
+            return this;
+        }
     }
 
     public static byte[] readAll(InputStream in) throws IOException {

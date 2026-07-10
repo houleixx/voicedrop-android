@@ -70,6 +70,16 @@ public class AsrDictationSessionTest {
         assertTrue(source.substring(source.indexOf("public void finish(Runnable onComplete)")).contains("latch.await"));
     }
 
+    @Test public void staleWebSocketCallbacksAreGuardedByGeneration() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/audio/AsrDictationSession.java");
+
+        assertTrue(source.contains("turnGeneration"));
+        assertTrue(source.contains("final int generation"));
+        assertTrue(source.contains("isCurrentTurn(webSocket, generation)"));
+        assertTrue(source.contains("handleSocketFailure(webSocket, generation, t)"));
+        assertTrue(source.contains("handleSocketClosed(webSocket, generation, code, reason)"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

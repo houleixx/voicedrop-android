@@ -10,6 +10,7 @@ public final class Prefs {
     private static final String PREFS = "voicedrop.prefs";
     private static final String DELETE_LOCAL = "deleteLocalAfterUpload";
     private static final String LIKED_COMMUNITY_POSTS = "likedCommunityPosts";
+    private static final String CLASSIC_RECORDER = "classicRecorder";
     private final SharedPreferences prefs;
 
     public Prefs(Context context) {
@@ -40,5 +41,13 @@ public final class Prefs {
     public void setLikedCommunityPosts(Set<String> shareIds) {
         Set<String> next = shareIds == null ? new HashSet<>() : new HashSet<>(shareIds);
         prefs.edit().putStringSet(LIKED_COMMUNITY_POSTS, next).apply();
+    }
+
+    public boolean classicRecorder() {
+        return prefs.getBoolean(CLASSIC_RECORDER, false);
+    }
+
+    public void setClassicRecorder(boolean value) {
+        prefs.edit().putBoolean(CLASSIC_RECORDER, value).apply();
     }
 }

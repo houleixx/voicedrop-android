@@ -13,7 +13,7 @@ public class ApiTest {
         assertEquals("https://jianshuo.dev/agent", Api.agentBase());
         assertEquals("https://jianshuo.dev/reco", Api.recoBase());
         assertEquals("wss://jianshuo.dev/agent", Api.agentWs());
-        assertEquals("https://jianshuo.dev/voicedrop/abc123", Api.sharePage("abc123"));
+        assertEquals("https://voicedrop.cn/abc123", Api.sharePage("abc123"));
     }
 
     @Test

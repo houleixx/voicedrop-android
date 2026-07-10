@@ -59,9 +59,68 @@ public class SettingsActivitySourceTest {
         assertFalse(source.contains("☐"));
     }
 
+    @Test
+    public void settingsRemovesFollowupSwitchAndHidesClassicRecorderEscapeHatch() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String recordings = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+
+        assertFalse(source.contains("成文后追问"));
+        assertFalse(source.contains("addFollowupsSwitchRow"));
+        assertFalse(source.contains("经典录音引擎"));
+        assertFalse(source.contains("addClassicRecorderSwitchRow"));
+        assertTrue(recordings.contains("prefs.classicRecorder()"));
+    }
+
+    @Test
+    public void settingsExposesProfileNameEditor() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+
+        assertTrue(source.contains("\"名字\""));
+        assertTrue(source.contains("showNameEditor"));
+        assertTrue(source.contains("settingsStore.saveName"));
+        assertTrue(source.contains("这个名字会出现在文章署名"));
+    }
+
+    @Test
+    public void profileNameHintUsesSingleLineEllipsis() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String method = methodBody(source, "private void showNameEditor");
+
+        assertTrue(method.contains("hint.setSingleLine(true)"));
+        assertTrue(method.contains("hint.setEllipsize(TextUtils.TruncateAt.END)"));
+    }
+
+    @Test
+    public void settingsShowsCurrentNameOnNameRow() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+
+        assertTrue(source.contains("private TextView nameValueText"));
+        assertTrue(source.contains("addSettingRowWithValue(content, R.drawable.ic_settings_account, \"名字\""));
+        assertTrue(source.contains("loadNameRowValue()"));
+        assertTrue(source.contains("nameValueText.setText(style.name"));
+        assertTrue(source.contains("nameValueText.setText(name)"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    }
+
+    private static String methodBody(String source, String signature) {
+        int start = source.indexOf(signature);
+        assertTrue("Missing method: " + signature, start >= 0);
+        int brace = source.indexOf('{', start);
+        int depth = 0;
+        for (int i = brace; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == '{') depth++;
+            if (c == '}') {
+                depth--;
+                if (depth == 0) return source.substring(start, i + 1);
+            }
+        }
+        fail("Unclosed method: " + signature);
+        return "";
     }
 }

@@ -23,10 +23,8 @@ import com.baixingai.voicedrop.ui.Theme;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,6 +32,11 @@ public final class UsageActivity extends Activity {
     private UsageStore usageStore;
     private LinearLayout content;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private UsageStore.Balance balance = new UsageStore.Balance(0, 0);
+    private UsageStore.Summary summary = new UsageStore.Summary(new ArrayList<>(), new ArrayList<>());
+    private final List<UsageStore.Entry> entries = new ArrayList<>();
+    private String nextCursor = "";
+    private boolean loadingMore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,30 +102,45 @@ public final class UsageActivity extends Activity {
     private void load() {
         io.execute(() -> {
             try {
-                UsageStore.Balance balance = usageStore.balance();
-                List<UsageStore.Entry> entries = usageStore.ledger();
-                runOnUiThread(() -> render(balance, entries, true));
+                UsageStore.Balance loadedBalance = usageStore.balance();
+                UsageStore.Summary loadedSummary = usageStore.summary();
+                UsageStore.LedgerPage page = usageStore.ledger();
+                runOnUiThread(() -> {
+                    balance = loadedBalance;
+                    summary = loadedSummary;
+                    entries.clear();
+                    entries.addAll(page.entries);
+                    nextCursor = page.nextCursor;
+                    render(true);
+                });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     toast("算力加载失败：" + e.getMessage());
-                    render(new UsageStore.Balance(0, 0), new ArrayList<>(), false);
+                    balance = new UsageStore.Balance(0, 0);
+                    summary = new UsageStore.Summary(new ArrayList<>(), new ArrayList<>());
+                    entries.clear();
+                    nextCursor = "";
+                    render(false);
                 });
             }
         });
     }
 
     private void renderLoading() {
-        render(new UsageStore.Balance(0, 0), new ArrayList<>(), false);
+        render(false);
     }
 
-    private void render(UsageStore.Balance balance, List<UsageStore.Entry> entries, boolean loaded) {
+    private void render(boolean loaded) {
         content.removeAllViews();
         content.addView(heroCard(balance, loaded), matchWrap(0, 0, 0, dp(22)));
         content.addView(subscriptionCard(), matchWrap(0, 0, 0, dp(22)));
-        List<Bucket> buckets = grantBuckets(entries);
-        if (!buckets.isEmpty()) {
+        if (!summary.granted.isEmpty()) {
             addSection(content, "算力来源");
-            content.addView(bucketCard(buckets), matchWrap(0, 0, 0, dp(22)));
+            content.addView(summaryCard(summary.granted, "+", 0xff2f9b68), matchWrap(0, 0, 0, dp(22)));
+        }
+        if (!summary.spent.isEmpty()) {
+            addSection(content, "花费总结");
+            content.addView(summaryCard(summary.spent, "-", Theme.RED), matchWrap(0, 0, 0, dp(22)));
         }
         addSection(content, "明细");
         content.addView(ledgerCard(entries, loaded), matchWrap(0, 0, 0, 0));
@@ -196,15 +214,25 @@ public final class UsageActivity extends Activity {
         return card;
     }
 
-    private View bucketCard(List<Bucket> buckets) {
+    private View summaryCard(List<UsageStore.SummaryRow> rows, String sign, int amountColor) {
         LinearLayout card = card();
-        for (int i = 0; i < buckets.size(); i++) {
-            Bucket b = buckets.get(i);
+        for (int i = 0; i < rows.size(); i++) {
+            UsageStore.SummaryRow rowData = rows.get(i);
             LinearLayout row = plainRow();
-            row.addView(text(b.title, 15, Theme.INK, Typeface.NORMAL), new LinearLayout.LayoutParams(0, -2, 1));
-            row.addView(text(String.valueOf((int) Math.round(b.total)), 15, Theme.INK, Typeface.BOLD));
+            LinearLayout labels = new LinearLayout(this);
+            labels.setOrientation(LinearLayout.HORIZONTAL);
+            labels.setGravity(Gravity.CENTER_VERTICAL);
+            labels.addView(text(rowData.reason, 15, Theme.INK, Typeface.NORMAL));
+            if (rowData.count > 1) {
+                TextView count = text(rowData.count + " 笔", 12, Theme.FAINT, Typeface.NORMAL);
+                LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(-2, -2);
+                countLp.setMargins(dp(6), 0, 0, 0);
+                labels.addView(count, countLp);
+            }
+            row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(text(sign + fmt(rowData.suanli), 15, amountColor, Typeface.BOLD));
             card.addView(row);
-            if (i < buckets.size() - 1) card.addView(divider());
+            if (i < rows.size() - 1) card.addView(divider());
         }
         return card;
     }
@@ -231,32 +259,41 @@ public final class UsageActivity extends Activity {
             row.addView(text((grant ? "+" : "-") + fmt(e.suanli), 15,
                     grant ? 0xff2f9b68 : Theme.RED, Typeface.BOLD));
             card.addView(row);
-            if (i < entries.size() - 1) card.addView(divider());
+            if (i < entries.size() - 1 || !nextCursor.isEmpty()) card.addView(divider());
+        }
+        if (!nextCursor.isEmpty()) {
+            TextView more = text(loadingMore ? "加载中…" : "加载更早的记录", 14, Theme.SECONDARY, Typeface.NORMAL);
+            more.setGravity(Gravity.CENTER);
+            more.setPadding(dp(15), dp(13), dp(15), dp(13));
+            more.setClickable(!loadingMore);
+            more.setOnClickListener(v -> loadMore());
+            card.addView(more);
         }
         return card;
     }
 
-    private List<Bucket> grantBuckets(List<UsageStore.Entry> entries) {
-        Map<String, Double> sums = new LinkedHashMap<>();
-        for (UsageStore.Entry e : entries) {
-            if (!"grant".equals(e.kind)) continue;
-            String key;
-            if ("signup".equals(e.reason)) key = "注册赠送";
-            else if (e.reason != null && e.reason.startsWith("campaign:")) key = "活动赠送";
-            else if ("monthly".equals(e.reason) || "subscription".equals(e.reason)) key = "包月发放";
-            else key = label(e);
-            Double value = sums.get(key);
-            sums.put(key, (value == null ? 0 : value) + e.suanli);
-        }
-        String[] order = new String[]{"包月发放", "活动赠送", "注册赠送"};
-        List<Bucket> out = new ArrayList<>();
-        for (String key : order) {
-            if (sums.containsKey(key)) {
-                out.add(new Bucket(key, sums.remove(key)));
+    private void loadMore() {
+        if (loadingMore || nextCursor.isEmpty()) return;
+        loadingMore = true;
+        render(true);
+        final String cursor = nextCursor;
+        io.execute(() -> {
+            try {
+                UsageStore.LedgerPage page = usageStore.ledger(cursor);
+                runOnUiThread(() -> {
+                    entries.addAll(page.entries);
+                    nextCursor = page.nextCursor;
+                    loadingMore = false;
+                    render(true);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    loadingMore = false;
+                    toast("加载更多失败：" + e.getMessage());
+                    render(true);
+                });
             }
-        }
-        for (Map.Entry<String, Double> e : sums.entrySet()) out.add(new Bucket(e.getKey(), e.getValue()));
-        return out;
+        });
     }
 
     private String label(UsageStore.Entry e) {
@@ -367,12 +404,4 @@ public final class UsageActivity extends Activity {
         runOnUiThread(() -> SimpleToast.show(this, message));
     }
 
-    private static final class Bucket {
-        final String title;
-        final double total;
-        Bucket(String title, double total) {
-            this.title = title;
-            this.total = total;
-        }
-    }
 }

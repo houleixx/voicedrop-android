@@ -43,10 +43,7 @@ public final class RealtimeInterviewer {
             }
 
             @Override public void onResponseDone() {
-                main.postDelayed(() -> {
-                    muted = false;
-                    notifyChanged();
-                }, 500);
+                main.postDelayed(RealtimeInterviewer.this::openMic, 500);
             }
         });
     }
@@ -101,6 +98,15 @@ public final class RealtimeInterviewer {
 
     private void beginAiTurn() {
         muted = true;
+        notifyChanged();
+    }
+
+    private void openMic() {
+        if (!active) return;
+        // Muting can cut a speaker off mid-sentence. Without clearing that fragment,
+        // the first fresh audio frame can make server VAD treat it as a completed turn.
+        session.clearInputBuffer();
+        muted = false;
         notifyChanged();
     }
 

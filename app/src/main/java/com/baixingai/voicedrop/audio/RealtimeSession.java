@@ -109,6 +109,15 @@ public final class RealtimeSession {
         }
     }
 
+    /** Drops speech captured before the half-duplex gate muted the microphone. */
+    public void clearInputBuffer() {
+        if (socket == null) return;
+        try {
+            socket.send(new JSONObject().put("type", "input_audio_buffer.clear").toString());
+        } catch (Exception ignored) {
+        }
+    }
+
     public void disconnect() {
         generation++;
         WebSocket ws = socket;

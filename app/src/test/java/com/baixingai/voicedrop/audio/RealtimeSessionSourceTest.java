@@ -50,6 +50,15 @@ public class RealtimeSessionSourceTest {
         assertFalse(source.contains("AudioAttributes.USAGE_VOICE_COMMUNICATION"));
     }
 
+    @Test
+    public void interviewerClearsInterruptedSpeechBeforeReopeningMicrophone() throws Exception {
+        String sessionSource = readSource("src/main/java/com/baixingai/voicedrop/audio/RealtimeSession.java");
+        String interviewerSource = readSource("src/main/java/com/baixingai/voicedrop/audio/RealtimeInterviewer.java");
+
+        assertTrue(sessionSource.contains("input_audio_buffer.clear"));
+        assertTrue(interviewerSource.contains("session.clearInputBuffer()"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

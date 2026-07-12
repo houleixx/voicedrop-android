@@ -37,4 +37,16 @@ public class ArticleEditSessionTest {
         assertTrue(payload.contains("\"data\":\"abc\""));
         assertTrue(payload.contains("\"mediaType\":\"image/jpeg\""));
     }
+
+    @Test
+    public void acceptsStreamingRestylePreviewEvents() throws Exception {
+        String source = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
+                "src/main/java/com/baixingai/voicedrop/net/ArticleEditSession.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("preview-delta"));
+        assertTrue(source.contains("preview-reset"));
+        assertTrue(source.contains("preview-done"));
+        assertTrue(source.contains("onPreviewDelta"));
+    }
 }

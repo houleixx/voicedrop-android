@@ -82,6 +82,24 @@ public final class ArticlePhotoInsert {
         return out.toByteArray();
     }
 
+    /** Compresses a gallery image without changing its aspect ratio. */
+    public static byte[] fitJpeg(Bitmap bitmap, int maxSide, int maxBytes, int quality) {
+        if (bitmap == null || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) return null;
+        float scale = Math.min(1f, maxSide / (float) Math.max(bitmap.getWidth(), bitmap.getHeight()));
+        int width = Math.max(1, Math.round(bitmap.getWidth() * scale));
+        int height = Math.max(1, Math.round(bitmap.getHeight() * scale));
+        Bitmap scaled = Bitmap.createScaledBitmap(bitmap, width, height, true);
+        int nextQuality = Math.max(40, Math.min(95, quality));
+        byte[] data;
+        do {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            scaled.compress(Bitmap.CompressFormat.JPEG, nextQuality, out);
+            data = out.toByteArray();
+            nextQuality -= 10;
+        } while (data.length > maxBytes && nextQuality >= 40);
+        return data;
+    }
+
     public static int sampleSizeForBounds(int width, int height, int maxPixel) {
         if (width <= 0 || height <= 0 || maxPixel <= 0) return 1;
         int sample = 1;

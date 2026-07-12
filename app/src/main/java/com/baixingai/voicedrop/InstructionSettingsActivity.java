@@ -1,6 +1,9 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -15,6 +18,7 @@ import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
+import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
@@ -50,7 +54,7 @@ public final class InstructionSettingsActivity extends Activity {
         FrameLayout back = navButton();
         back.setOnClickListener(v -> finishWithTransition());
         top.addView(back, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
-        top.addView(text("AI 指令", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
+        top.addView(text("提示词", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);
@@ -100,7 +104,7 @@ public final class InstructionSettingsActivity extends Activity {
 
     private void renderItems() {
         content.removeAllViews();
-        TextView hint = text("长按菜单里的动作名称和指令可以按自己的说法调整；留空会回到默认。", 13, Theme.SECONDARY, Typeface.NORMAL);
+        TextView hint = text("长按菜单里的动作名称和提示词可以按自己的说法调整；留空会回到默认。", 13, Theme.SECONDARY, Typeface.NORMAL);
         hint.setLineSpacing(dp(4), 1f);
         hint.setPadding(dp(4), 0, dp(4), dp(12));
         content.addView(hint);
@@ -135,6 +139,11 @@ public final class InstructionSettingsActivity extends Activity {
             badge.setPadding(dp(8), 0, dp(8), 0);
             row.addView(badge);
         }
+        if (item.sharing) {
+            TextView badge = text("分享中", 12, Theme.RED, Typeface.BOLD);
+            badge.setPadding(dp(8), 0, dp(4), 0);
+            row.addView(badge);
+        }
         row.addView(text("›", 28, 0xffcfc6b6, Typeface.NORMAL));
         return row;
     }
@@ -149,10 +158,10 @@ public final class InstructionSettingsActivity extends Activity {
         EditText name = input(item.customLabel == null ? "" : item.customLabel, "留空 = " + item.label, 44);
         form.addView(name, new LinearLayout.LayoutParams(-1, dp(44)));
 
-        TextView instructionLabel = label("我的指令");
+        TextView instructionLabel = label("我的提示词");
         instructionLabel.setPadding(0, dp(14), 0, dp(7));
         form.addView(instructionLabel);
-        EditText instruction = input(item.override == null ? "" : item.override, "留空 = 使用默认指令", 128);
+        EditText instruction = input(item.override == null ? "" : item.override, "留空 = 使用默认提示词", 128);
         instruction.setSingleLine(false);
         instruction.setGravity(Gravity.TOP);
         form.addView(instruction, new LinearLayout.LayoutParams(-1, dp(128)));
@@ -166,7 +175,9 @@ public final class InstructionSettingsActivity extends Activity {
         hiddenRow.addView(hidden);
         form.addView(hiddenRow);
 
-        TextView defaults = text("默认指令：\n" + item.defaultText, 12, Theme.FAINT, Typeface.NORMAL);
+        form.addView(promptShareCard(item));
+
+        TextView defaults = text("默认提示词：\n" + item.defaultText, 12, Theme.FAINT, Typeface.NORMAL);
         defaults.setPadding(0, dp(14), 0, 0);
         defaults.setLineSpacing(dp(4), 1f);
         form.addView(defaults);
@@ -184,6 +195,104 @@ public final class InstructionSettingsActivity extends Activity {
                 }
             });
         }, null, null, true, true);
+    }
+
+    private View promptShareCard(UIConfigStore.InstructionItem item) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(14), dp(12), dp(12));
+        card.setBackground(strokedRound(0xfffbf6ef, 10, 0xffeadccd));
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text("分享这条提示词", 15, Theme.INK, Typeface.BOLD));
+        labels.addView(text(item.sharing ? "分享中，关闭后分享码立即失效" : "开启后可用分享码或链接一次性使用", 12, Theme.FAINT, Typeface.NORMAL));
+        row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
+        IosSwitch sharing = new IosSwitch(this);
+        sharing.setChecked(item.sharing);
+        row.addView(sharing);
+        card.addView(row);
+
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(0, dp(12), 0, 0);
+        String[] code = {item.shareCode};
+        boolean[] changing = {false};
+        renderShareDetails(details, code[0]);
+        details.setVisibility(item.sharing && code[0] != null ? View.VISIBLE : View.GONE);
+        card.addView(details);
+
+        sharing.setOnCheckedChangeListener((button, enabled) -> {
+            if (changing[0]) return;
+            changing[0] = true;
+            button.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    UIConfigStore.ShareState state = store.setSharing(item.id, enabled);
+                    runOnUiThread(() -> {
+                        code[0] = state.code;
+                        renderShareDetails(details, code[0]);
+                        details.setVisibility(state.sharing && code[0] != null ? View.VISIBLE : View.GONE);
+                        button.setEnabled(true);
+                        changing[0] = false;
+                        loadItems();
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        button.setChecked(!enabled);
+                        button.setEnabled(true);
+                        changing[0] = false;
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+        return card;
+    }
+
+    private void renderShareDetails(LinearLayout details, String code) {
+        details.removeAllViews();
+        if (code == null || code.isEmpty()) return;
+        TextView number = text(code, 30, Theme.INK, Typeface.BOLD);
+        number.setLetterSpacing(0.12f);
+        number.setGravity(Gravity.CENTER);
+        details.addView(number, new LinearLayout.LayoutParams(-1, -2));
+        TextView url = text(Api.sharePage(code), 13, Theme.SECONDARY, Typeface.NORMAL);
+        url.setGravity(Gravity.CENTER);
+        url.setPadding(0, dp(4), 0, dp(9));
+        details.addView(url, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER);
+        actions.addView(shareAction("复制数字", () -> copyText(code, "已复制分享码")));
+        actions.addView(shareAction("复制链接", () -> copyText(Api.sharePage(code), "已复制链接")));
+        actions.addView(shareAction("分享…", () -> sharePromptLink(code)));
+        details.addView(actions, new LinearLayout.LayoutParams(-1, dp(38)));
+    }
+
+    private View shareAction(String title, Runnable action) {
+        TextView view = text(title, 13, Theme.RED, Typeface.BOLD);
+        view.setGravity(Gravity.CENTER);
+        view.setClickable(true);
+        view.setBackground(strokedRound(0xfff8e8dd, 8, 0xfff8e8dd));
+        view.setOnClickListener(v -> action.run());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(34), 1);
+        lp.setMargins(dp(3), 0, dp(3), 0);
+        view.setLayoutParams(lp);
+        return view;
+    }
+
+    private void copyText(String value, String confirmation) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", value));
+        toast(confirmation);
+    }
+
+    private void sharePromptLink(String code) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, Api.sharePage(code));
+        startActivity(Intent.createChooser(intent, "分享提示词"));
     }
 
     private EditText input(String value, String hint, int heightDp) {

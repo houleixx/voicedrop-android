@@ -28,6 +28,10 @@ public final class HttpClient {
         return request("POST", url, bearer, "application/json", body, null);
     }
 
+    public Response postJson(String url, String bearer, byte[] body, RequestOptions options) throws IOException {
+        return request("POST", url, bearer, "application/json", body, null, options);
+    }
+
     public Response patchJson(String url, String bearer, byte[] body) throws IOException {
         return request("PATCH", url, bearer, "application/json", body, null);
     }
@@ -49,7 +53,7 @@ public final class HttpClient {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod(method);
         conn.setConnectTimeout(20_000);
-        conn.setReadTimeout(120_000);
+        conn.setReadTimeout(options == null ? 120_000 : options.readTimeoutMs);
         if (bearer != null && !bearer.isEmpty()) conn.setRequestProperty("Authorization", "Bearer " + bearer);
         conn.setRequestProperty("X-VD-Platform", "android");
         if (contentType != null) conn.setRequestProperty("Content-Type", contentType);
@@ -79,9 +83,15 @@ public final class HttpClient {
 
     public static final class RequestOptions {
         private final Map<String, String> headers = new LinkedHashMap<>();
+        private int readTimeoutMs = 120_000;
 
         public RequestOptions header(String name, String value) {
             if (name != null && value != null) headers.put(name, value);
+            return this;
+        }
+
+        public RequestOptions readTimeoutMs(int timeoutMs) {
+            if (timeoutMs > 0) readTimeoutMs = timeoutMs;
             return this;
         }
     }

@@ -251,8 +251,8 @@ public final class ShareCollectActivity extends Activity {
         int uploaded = 0;
         for (int i = 0; i < payload.images.size(); i++) {
             byte[] raw = readUri(payload.images.get(i));
-            Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(raw, 1200);
-            byte[] jpeg = ArticlePhotoInsert.squareJpeg(bitmap, 640, 86);
+            Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(raw, 1440);
+            byte[] jpeg = ArticlePhotoInsert.fitJpeg(bitmap, 1440, 900_000, 86);
             if (jpeg == null) continue;
             String key = RecordingName.photoKey(sessionTs, i);
             if (http.putBytes(Api.filesBase() + "/upload/" + Api.path(key), auth.bearer(), "image/jpeg", jpeg).ok()) uploaded++;

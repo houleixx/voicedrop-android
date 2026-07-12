@@ -253,9 +253,9 @@ public final class InsertPhotoActivity extends Activity {
                     if (in == null) throw new IllegalStateException("无法读取图片");
                     bytes = HttpClient.readAll(in);
                 }
-                Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(bytes, 1200);
+                Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(bytes, 1440);
                 if (bitmap == null) throw new IllegalStateException("无法解码图片");
-                addPhotoBytes(ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86), System.currentTimeMillis());
+                addPhotoBytes(ArticlePhotoInsert.fitJpeg(bitmap, 1440, 900_000, 86), System.currentTimeMillis());
             } catch (Exception e) {
                 toast("照片读取失败：" + e.getMessage());
             }

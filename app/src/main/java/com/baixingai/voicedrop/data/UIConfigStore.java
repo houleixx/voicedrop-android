@@ -2,6 +2,7 @@ package com.baixingai.voicedrop.data;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -69,7 +70,9 @@ public final class UIConfigStore {
                         obj.optString("default", ""),
                         obj.isNull("override") ? null : obj.optString("override", null),
                         obj.isNull("customLabel") ? null : obj.optString("customLabel", null),
-                        obj.optBoolean("hidden", false)));
+                        obj.optBoolean("hidden", false),
+                        obj.isNull("shareCode") ? null : obj.optString("shareCode", null),
+                        obj.optBoolean("sharing", false)));
             }
         }
         return out;
@@ -85,6 +88,22 @@ public final class UIConfigStore {
                 "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("ui-config custom save HTTP " + response.code);
         refresh();
+    }
+
+    public ShareState setSharing(String id, boolean sharing) throws Exception {
+        String url = Api.agentBase() + "/prompt-share";
+        HttpClient.Response response;
+        if (sharing) {
+            response = http.postJson(url, auth.bearer(), new JSONObject().put("id", id).toString().getBytes("UTF-8"));
+        } else {
+            response = http.delete(url + "/" + Uri.encode(id), auth.bearer());
+        }
+        if (!response.ok()) {
+            if (response.code == 429) throw new IllegalStateException("今天生成分享码的次数已达上限，明天再试");
+            throw new IllegalStateException("提示词分享操作失败");
+        }
+        JSONObject body = new JSONObject(response.text());
+        return new ShareState(body.optString("code", ""), body.optBoolean("sharing", sharing));
     }
 
     private MenuConfig menu(String page, String kind) {
@@ -261,14 +280,19 @@ public final class UIConfigStore {
         public final String override;
         public final String customLabel;
         public final boolean hidden;
+        public final String shareCode;
+        public final boolean sharing;
 
-        InstructionItem(String id, String label, String defaultText, String override, String customLabel, boolean hidden) {
+        InstructionItem(String id, String label, String defaultText, String override, String customLabel, boolean hidden,
+                        String shareCode, boolean sharing) {
             this.id = id == null ? "" : id;
             this.label = label == null ? "" : label;
             this.defaultText = defaultText == null ? "" : defaultText;
             this.override = override == null || override.isEmpty() ? null : override;
             this.customLabel = customLabel == null || customLabel.isEmpty() ? null : customLabel;
             this.hidden = hidden;
+            this.shareCode = shareCode == null || shareCode.isEmpty() ? null : shareCode;
+            this.sharing = sharing;
         }
 
         public String effectiveLabel() {
@@ -281,6 +305,16 @@ public final class UIConfigStore {
 
         public boolean customized() {
             return override != null || customLabel != null;
+        }
+    }
+
+    public static final class ShareState {
+        public final String code;
+        public final boolean sharing;
+
+        ShareState(String code, boolean sharing) {
+            this.code = code;
+            this.sharing = sharing;
         }
     }
 }

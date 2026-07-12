@@ -293,7 +293,8 @@ public final class LibraryStore {
         HttpClient.Response response = http.postJson(
                 Api.agentBase() + "/restyle",
                 auth.bearer(),
-                body.toString().getBytes("UTF-8"));
+                body.toString().getBytes("UTF-8"),
+                new HttpClient.RequestOptions().readTimeoutMs(300_000));
         return response.ok() && new JSONObject(response.text()).optBoolean("ok", true);
     }
 

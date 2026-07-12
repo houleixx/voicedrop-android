@@ -152,7 +152,7 @@ public class SettingsActivity extends Activity {
                 "文章署名，以及挖文章时对你的称呼", "", this::showNameEditor);
         loadNameRowValue();
         addSettingRow(content, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
-        addSettingRow(content, R.drawable.ic_settings_ai_instruction, "AI 指令", "自定义长按菜单里的每个动作", this::openInstructionSettings);
+        addSettingRow(content, R.drawable.ic_settings_ai_instruction, "提示词", "自定义长按菜单里的每个动作", this::openInstructionSettings);
         addSettingRow(content, R.drawable.ic_settings_broadcast, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
         addSettingRow(content, R.drawable.ic_settings_bolt, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
 

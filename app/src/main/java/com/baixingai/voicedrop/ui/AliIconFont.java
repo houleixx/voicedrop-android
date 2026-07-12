@@ -7,6 +7,7 @@ import com.baixingai.voicedrop.R;
 public final class AliIconFont {
     public static final int BACK = R.drawable.ic_back;
     public static final int CAMERA = R.drawable.ic_camera;
+    public static final int CHEVRON_RIGHT_FLAT = R.drawable.ic_chevron_right_flat;
     public static final int DOC = R.drawable.ic_doc;
     public static final int FLAG = R.drawable.ic_flag;
     public static final int HAND = R.drawable.ic_hand;
@@ -22,6 +23,12 @@ public final class AliIconFont {
     public static final int REDO = R.drawable.ic_redo;
     public static final int SETTINGS = R.drawable.ic_settings;
     public static final int SHARE_UP = R.drawable.ic_share_up;
+    public static final int STYLE_AD = R.drawable.ic_style_ad;
+    public static final int STYLE_CARTOON = R.drawable.ic_style_cartoon;
+    public static final int STYLE_FILM = R.drawable.ic_style_film;
+    public static final int STYLE_OIL = R.drawable.ic_style_oil;
+    public static final int STYLE_SKETCH = R.drawable.ic_style_sketch;
+    public static final int STYLE_WATERCOLOR = R.drawable.ic_style_watercolor;
     public static final int TRASH = R.drawable.ic_trash;
     public static final int UNDO = R.drawable.ic_undo;
 

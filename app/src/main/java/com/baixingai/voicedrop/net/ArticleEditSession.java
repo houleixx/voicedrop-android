@@ -29,6 +29,9 @@ public final class ArticleEditSession {
         void onReply(String text, boolean ok);
         void onState(String state);
         void onError(String message);
+        void onPreviewDelta(List<PreviewDelta> deltas);
+        void onPreviewReset();
+        void onPreviewDone(boolean ok);
     }
 
     private final Context context;
@@ -141,6 +144,31 @@ public final class ArticleEditSession {
                 JSONObject article = obj.optJSONObject("article");
                 if (article != null) listener.onUpdated(ArticleDoc.fromJson(article.toString()));
                 reconcile(obj.optJSONArray("queue"));
+                return;
+            }
+            if ("preview-delta".equals(type)) {
+                JSONArray items = obj.optJSONArray("items");
+                List<PreviewDelta> deltas = new ArrayList<>();
+                if (items != null) {
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.optJSONObject(i);
+                        if (item == null) continue;
+                        String field = item.optString("field", "");
+                        String value = item.optString("text", "");
+                        if (("title".equals(field) || "body".equals(field)) && !value.isEmpty()) {
+                            deltas.add(new PreviewDelta(Math.max(0, item.optInt("a", 0)), field, value));
+                        }
+                    }
+                }
+                if (!deltas.isEmpty()) listener.onPreviewDelta(deltas);
+                return;
+            }
+            if ("preview-reset".equals(type)) {
+                listener.onPreviewReset();
+                return;
+            }
+            if ("preview-done".equals(type)) {
+                listener.onPreviewDone(obj.optBoolean("ok", true));
             }
         } catch (Exception e) {
             listener.onError(e.getMessage());
@@ -305,6 +333,18 @@ public final class ArticleEditSession {
         public AgentImage(String key, String base64) {
             this.key = key;
             this.base64 = base64;
+        }
+    }
+
+    public static final class PreviewDelta {
+        public final int articleIndex;
+        public final String field;
+        public final String text;
+
+        PreviewDelta(int articleIndex, String field, String text) {
+            this.articleIndex = articleIndex;
+            this.field = field;
+            this.text = text;
         }
     }
 }

@@ -99,8 +99,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -138,6 +140,9 @@ import com.baixingai.voicedrop.net.HttpClient;
 
 public final class RecordingDetailActivity extends Activity {
     private static final int BLOCKING_LOADING_SCRIM = 0x33000000;
+    private static final long PHOTO_MAKING_GRACE_MS = 900L;
+    private static final long PHOTO_POLL_INTERVAL_MS = 3_000L;
+    private static final long PHOTO_POLL_TIMEOUT_MS = 5 * 60_000L;
 
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
@@ -188,6 +193,12 @@ public final class RecordingDetailActivity extends Activity {
     protected final List<View> articleLocatorViews = new ArrayList<>();
     protected final Set<String> locallyFinishedQuestionIds = new HashSet<>();
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
+    protected final Map<Integer, RestylePreviewPiece> restylePreviewPieces = new TreeMap<>();
+    protected final AtomicBoolean restyleFinishing = new AtomicBoolean(false);
+    protected android.app.Dialog restylePreviewDialog;
+    protected TextView restylePreviewText;
+    protected BouncyScrollView restylePreviewScroll;
+    protected String restylePreviewStem;
     protected FrameLayout articleUndoButton;
     protected FrameLayout articleRedoButton;
     protected ImageView articleUndoIcon;
@@ -1361,19 +1372,107 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void requestStyleRewrite(Recording rec, int styleVersion, IosDialog dialog) {
         if (dialog != null) dialog.dismiss();
-        android.app.Dialog loading = showBlockingLoading("正在用新风格重写...");
+        showRestylePreview(rec);
         io.execute(() -> {
             try {
                 boolean ok = library.restyle(rec, styleVersion);
-                toast(ok ? "已请求用 v" + styleVersion + " 重写" : "换风格请求失败");
+                finishRestyle(rec, ok);
             } catch (Exception e) {
-                toast("换风格请求失败：" + e.getMessage());
-            } finally {
-                main.post(() -> {
-                    try { loading.dismiss(); } catch (Exception ignored) {}
-                });
+                finishRestyle(rec, false);
             }
         });
+    }
+
+    /** Shows the new article as it arrives over the editor WebSocket. */
+    protected void showRestylePreview(Recording rec) {
+        restyleFinishing.set(false);
+        restylePreviewStem = rec.stem();
+        restylePreviewPieces.clear();
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(BLOCKING_LOADING_SCRIM);
+        BouncyScrollView scroll = new BouncyScrollView(this);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(20), dp(18), dp(20), dp(18));
+        card.setBackground(round(0xfafffffb, 16));
+        TextView title = text("正在用新风格重写…", 14, Theme.SECONDARY, Typeface.BOLD);
+        title.setPadding(0, 0, 0, dp(12));
+        card.addView(title);
+        TextView body = text("新稿生成后会在这里实时出现", 15, Theme.INK, Typeface.NORMAL);
+        body.setLineSpacing(dp(7), 1f);
+        card.addView(body);
+        scroll.addView(card, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(scroll, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
+        dialog.setContentView(root);
+        dialog.show();
+        DialogWindowDefaults.applyModal(dialog.getWindow(), BLOCKING_LOADING_SCRIM, BLOCKING_LOADING_SCRIM, true);
+        restylePreviewDialog = dialog;
+        restylePreviewText = body;
+        restylePreviewScroll = scroll;
+    }
+
+    protected void appendRestylePreview(List<ArticleEditSession.PreviewDelta> deltas) {
+        if (deltas == null || restylePreviewText == null) return;
+        for (ArticleEditSession.PreviewDelta delta : deltas) {
+            RestylePreviewPiece piece = restylePreviewPieces.get(delta.articleIndex);
+            if (piece == null) {
+                piece = new RestylePreviewPiece();
+                restylePreviewPieces.put(delta.articleIndex, piece);
+            }
+            if ("title".equals(delta.field)) piece.title.append(delta.text);
+            else if ("body".equals(delta.field)) piece.body.append(delta.text);
+        }
+        StringBuilder rendered = new StringBuilder();
+        for (RestylePreviewPiece piece : restylePreviewPieces.values()) {
+            if (rendered.length() > 0) rendered.append("\n\n");
+            if (piece.title.length() > 0) rendered.append(piece.title).append("\n\n");
+            rendered.append(piece.body);
+        }
+        restylePreviewText.setText(rendered.length() == 0 ? "正在整理新稿…" : rendered.toString());
+        if (restylePreviewScroll != null) restylePreviewScroll.post(() -> restylePreviewScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    protected void resetRestylePreview() {
+        restylePreviewPieces.clear();
+        if (restylePreviewText != null) restylePreviewText.setText("正在重新整理新稿…");
+    }
+
+    protected void finishRestyle(Recording rec, boolean success) {
+        if (!restyleFinishing.compareAndSet(false, true)) return;
+        main.post(() -> {
+            if (restylePreviewDialog != null) {
+                try { restylePreviewDialog.dismiss(); } catch (Exception ignored) {}
+            }
+            restylePreviewDialog = null;
+            restylePreviewText = null;
+            restylePreviewScroll = null;
+            restylePreviewPieces.clear();
+        });
+        if (!success) {
+            toast("换风格请求失败");
+            return;
+        }
+        io.execute(() -> {
+            try {
+                ArticleDoc updated = library.fetchDoc(rec);
+                main.post(() -> {
+                    if (updated != null && !updated.articles.isEmpty() && isActivityActive()) {
+                        articleIndex = 0;
+                        showArticle(rec, updated, false);
+                    } else {
+                        toast("新风格文章暂不可读");
+                    }
+                });
+            } catch (Exception e) {
+                toast("新风格文章加载失败：" + e.getMessage());
+            }
+        });
+    }
+
+    protected static final class RestylePreviewPiece {
+        final StringBuilder title = new StringBuilder();
+        final StringBuilder body = new StringBuilder();
     }
 
     protected android.app.Dialog showBlockingLoading(String message) {
@@ -2005,6 +2104,22 @@ public final class RecordingDetailActivity extends Activity {
             @Override public void onError(String message) {
                 toast("修改失败：" + message);
             }
+
+            @Override public void onPreviewDelta(List<ArticleEditSession.PreviewDelta> deltas) {
+                main.post(() -> {
+                    if (rec.stem().equals(restylePreviewStem)) appendRestylePreview(deltas);
+                });
+            }
+
+            @Override public void onPreviewReset() {
+                main.post(() -> {
+                    if (rec.stem().equals(restylePreviewStem)) resetRestylePreview();
+                });
+            }
+
+            @Override public void onPreviewDone(boolean ok) {
+                if (rec.stem().equals(restylePreviewStem)) finishRestyle(rec, ok);
+            }
         });
         editSession.connect();
     }
@@ -2403,12 +2518,7 @@ public final class RecordingDetailActivity extends Activity {
                 FrameLayout photo = new FrameLayout(this);
                 photo.setBackground(round(0xfff1e7db, 10));
                 if (key != null) {
-                    ProgressBar spinner = new ProgressBar(this);
-                    spinner.setIndeterminate(true);
-                    tintLoadingSpinner(spinner);
-                    spinner.setTag("photo_loading");
-                    FrameLayout.LayoutParams spinnerLp = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER);
-                    photo.addView(spinner, spinnerLp);
+                    showPhotoLoading(photo);
                 }
                 TextView line = articleLocator(String.valueOf(lineNo[0]));
                 FrameLayout.LayoutParams lineLp = new FrameLayout.LayoutParams(dp(20), -2, Gravity.LEFT | Gravity.TOP);
@@ -2507,7 +2617,7 @@ public final class RecordingDetailActivity extends Activity {
         PopupWindow[] popup = new PopupWindow[1];
         Runnable[] showRoot = new Runnable[1];
         showRoot[0] = () -> {
-            LinearLayout view = configuredMenuView(menu.groups, filler, consumer, popup, showRoot, localRows);
+            LinearLayout view = configuredMenuView(menu.groups, filler, consumer, popup, showRoot, anchor, localRows);
             popup[0] = showConfiguredPopup(view, anchor);
         };
         showRoot[0].run();
@@ -2516,13 +2626,14 @@ public final class RecordingDetailActivity extends Activity {
     protected LinearLayout configuredMenuView(List<List<UIConfigStore.MenuNode>> groups,
                                              InstructionFiller filler, InstructionConsumer consumer,
                                              PopupWindow[] popup, Runnable[] showRoot,
+                                             View anchor,
                                              LocalMenuRow... localRows) {
         LinearLayout menu = configuredMenuContainer();
         boolean needsDivider = false;
         for (List<UIConfigStore.MenuNode> group : groups) {
             if (needsDivider) menu.addView(divider());
             needsDivider = true;
-            for (UIConfigStore.MenuNode node : group) addConfiguredNode(menu, node, filler, consumer, popup, showRoot);
+            for (UIConfigStore.MenuNode node : group) addConfiguredNode(menu, node, filler, consumer, popup, showRoot, anchor);
         }
         if (localRows != null && localRows.length > 0) {
             if (needsDivider) menu.addView(divider());
@@ -2540,9 +2651,9 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void addConfiguredNode(LinearLayout menu, UIConfigStore.MenuNode node,
                                      InstructionFiller filler, InstructionConsumer consumer,
-                                     PopupWindow[] popup, Runnable[] showRoot) {
+                                     PopupWindow[] popup, Runnable[] showRoot, View anchor) {
         if ("submenu".equals(node.type) && !node.children.isEmpty()) {
-            LinearLayout row = menuRow(node.label, AliIconFont.MORE, Theme.RED, Theme.INK);
+            LinearLayout row = menuRow(node.label, AliIconFont.CHEVRON_RIGHT_FLAT, Theme.RED, Theme.INK);
             row.setOnClickListener(v -> {
                 LinearLayout sub = configuredMenuContainer();
                 LinearLayout back = menuRow("返回", AliIconFont.BACK, Theme.SECONDARY, Theme.SECONDARY);
@@ -2552,19 +2663,33 @@ public final class RecordingDetailActivity extends Activity {
                 });
                 sub.addView(back);
                 sub.addView(divider());
-                for (UIConfigStore.MenuNode child : node.children) addConfiguredNode(sub, child, filler, consumer, popup, showRoot);
-                if (popup[0] != null) popup[0].setContentView(sub);
+                for (UIConfigStore.MenuNode child : node.children) addConfiguredNode(sub, child, filler, consumer, popup, showRoot, anchor);
+                if (popup[0] != null) popup[0].dismiss();
+                popup[0] = showConfiguredPopup(sub, anchor);
             });
             menu.addView(row);
             return;
         }
         if (node.instruction == null || node.instruction.isEmpty()) return;
-        LinearLayout row = menuRow(node.label, AliIconFont.PAPERPLANE, Theme.RED, Theme.INK);
+        LinearLayout row = menuRow(node.label, configuredInstructionIcon(node.id), Theme.RED, Theme.INK);
         row.setOnClickListener(v -> {
             if (popup[0] != null) popup[0].dismiss();
             consumer.accept(filler.fill(node.instruction));
         });
         menu.addView(row);
+    }
+
+    protected int configuredInstructionIcon(String id) {
+        if (id == null) return AliIconFont.PAPERPLANE;
+        switch (id) {
+            case "cartoon": return AliIconFont.STYLE_CARTOON;
+            case "ad": return AliIconFont.STYLE_AD;
+            case "watercolor": return AliIconFont.STYLE_WATERCOLOR;
+            case "sketch": return AliIconFont.STYLE_SKETCH;
+            case "oil": return AliIconFont.STYLE_OIL;
+            case "film": return AliIconFont.STYLE_FILM;
+            default: return AliIconFont.PAPERPLANE;
+        }
     }
 
     protected LinearLayout configuredMenuContainer() {
@@ -2646,32 +2771,138 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void loadPhotoInto(FrameLayout frame, String relKey) {
-        Bitmap cached = articlePhotoCache.get(relKey);
-        if (cached != null) {
-            showLoadedPhoto(frame, cached);
-            return;
+        loadPhotoInto(frame, relKey, false);
+    }
+
+    protected void loadPhotoInto(FrameLayout frame, String relKey, boolean ignoringLocalCache) {
+        if (!ignoringLocalCache) {
+            Bitmap cached = articlePhotoCache.get(relKey);
+            if (cached != null) {
+                showLoadedPhoto(frame, cached);
+                return;
+            }
+        } else {
+            articlePhotoCache.remove(relKey);
+            showPhotoLoading(frame);
         }
+        long startedAt = System.currentTimeMillis();
+        frame.setTag(startedAt);
+        schedulePhotoMakingState(frame, startedAt);
+        fetchPhotoInto(frame, relKey, startedAt, ignoringLocalCache);
+    }
+
+    protected void schedulePhotoMakingState(FrameLayout frame, long startedAt) {
+        main.postDelayed(() -> {
+            if (isPhotoLoadActive(frame, startedAt)) showPhotoMaking(frame);
+        }, PHOTO_MAKING_GRACE_MS);
+    }
+
+    protected void fetchPhotoInto(FrameLayout frame, String relKey, long startedAt, boolean ignoringLocalCache) {
         io.execute(() -> {
+            Bitmap bitmap = null;
             try {
                 String scope = library.ownerScope();
-                if (scope == null) return;
-                Bitmap bitmap = library.photoImage(scope + relKey, false);
-                if (bitmap == null) return;
-                articlePhotoCache.put(relKey, bitmap);
-                main.post(() -> showLoadedPhoto(frame, bitmap));
+                if (scope != null) {
+                    bitmap = library.photoImage(scope + relKey, ignoringLocalCache);
+                }
             } catch (Exception ignored) {
             }
+            final Bitmap result = bitmap;
+            main.post(() -> {
+                if (!isPhotoLoadActive(frame, startedAt)) return;
+                if (result != null) {
+                    articlePhotoCache.put(relKey, result);
+                    frame.setTag(null);
+                    showLoadedPhoto(frame, result);
+                    return;
+                }
+                long elapsed = System.currentTimeMillis() - startedAt;
+                if (elapsed >= PHOTO_POLL_TIMEOUT_MS) {
+                    frame.setTag(null);
+                    showPhotoUnavailable(frame, relKey);
+                    return;
+                }
+                long nextDelay = Math.min(PHOTO_POLL_INTERVAL_MS, PHOTO_POLL_TIMEOUT_MS - elapsed);
+                main.postDelayed(() -> {
+                    if (isPhotoLoadActive(frame, startedAt)) {
+                        fetchPhotoInto(frame, relKey, startedAt, true);
+                    }
+                }, nextDelay);
+            });
         });
     }
 
-    protected void showLoadedPhoto(FrameLayout frame, Bitmap bitmap) {
+    protected boolean isPhotoFrameActive(FrameLayout frame) {
+        return !activityDestroyed && frame.getParent() != null;
+    }
+
+    protected boolean isPhotoLoadActive(FrameLayout frame, long startedAt) {
+        return isPhotoFrameActive(frame) && Long.valueOf(startedAt).equals(frame.getTag());
+    }
+
+    protected void showPhotoLoading(FrameLayout frame) {
+        removePhotoState(frame);
+        ProgressBar spinner = new ProgressBar(this);
+        spinner.setIndeterminate(true);
+        tintLoadingSpinner(spinner);
+        spinner.setTag("photo_loading");
+        frame.addView(spinner, new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER));
+    }
+
+    protected void showPhotoMaking(FrameLayout frame) {
+        removePhotoState(frame);
+        LinearLayout status = new LinearLayout(this);
+        status.setTag("photo_status");
+        status.setGravity(Gravity.CENTER);
+        status.setOrientation(LinearLayout.VERTICAL);
+
+        ImageView icon = new ImageView(this);
+        AliIconFont.apply(icon, AliIconFont.IMAGE, Theme.SECONDARY);
+        status.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+        TextView title = text("正在制作中", 14, Theme.SECONDARY, Typeface.BOLD);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(-2, -2);
+        titleLp.topMargin = dp(7);
+        status.addView(title, titleLp);
+
+        TextView hint = text("约 1 分钟完成", 12, Theme.SECONDARY, Typeface.NORMAL);
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(-2, -2);
+        hintLp.topMargin = dp(3);
+        status.addView(hint, hintLp);
+        frame.addView(status, match());
+    }
+
+    protected void showPhotoUnavailable(FrameLayout frame, String relKey) {
+        removePhotoState(frame);
+        LinearLayout status = new LinearLayout(this);
+        status.setTag("photo_status");
+        status.setGravity(Gravity.CENTER);
+        status.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = text("暂时无法显示", 14, Theme.SECONDARY, Typeface.BOLD);
+        status.addView(title, new LinearLayout.LayoutParams(-2, -2));
+        TextView retry = text("重试", 13, Theme.RED, Typeface.BOLD);
+        retry.setGravity(Gravity.CENTER);
+        retry.setPadding(dp(12), dp(6), dp(12), dp(6));
+        retry.setBackground(round(0x14e1493d, 8));
+        retry.setOnClickListener(v -> loadPhotoInto(frame, relKey, true));
+        LinearLayout.LayoutParams retryLp = new LinearLayout.LayoutParams(-2, -2);
+        retryLp.topMargin = dp(8);
+        status.addView(retry, retryLp);
+        frame.addView(status, match());
+    }
+
+    protected void removePhotoState(FrameLayout frame) {
         for (int i = frame.getChildCount() - 1; i >= 0; i--) {
-            View child = frame.getChildAt(i);
-            Object tag = child.getTag();
-            if ("photo_loading".equals(tag)) {
+            Object tag = frame.getChildAt(i).getTag();
+            if ("photo_loading".equals(tag) || "photo_status".equals(tag)) {
                 frame.removeViewAt(i);
             }
         }
+    }
+
+    protected void showLoadedPhoto(FrameLayout frame, Bitmap bitmap) {
+        removePhotoState(frame);
         ImageView image = new RoundedImageView(this);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setImageBitmap(bitmap);

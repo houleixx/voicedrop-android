@@ -91,6 +91,20 @@ public final class IosDialog extends Dialog {
         dialog.show();
     }
 
+    /** Required two-way choice that cannot be dismissed without choosing an action. */
+    public static IosDialog showRequiredChoice(Context ctx, String title, View customView,
+                                               String positiveText, Runnable onPositive,
+                                               String neutralText, Runnable onNeutral) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.buildWithView(ctx, title, customView, ViewGroup.LayoutParams.WRAP_CONTENT,
+                positiveText, onPositive, neutralText, onNeutral,
+                false, false, false, false);
+        dialog.show();
+        return dialog;
+    }
+
     /** Dialog with custom view */
     public static void show(Context ctx, String title, View customView,
                             String positiveText, Runnable onPositive) {

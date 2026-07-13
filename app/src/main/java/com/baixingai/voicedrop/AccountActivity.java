@@ -77,7 +77,9 @@ public final class AccountActivity extends Activity {
         backTouch.addView(back, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
         backTouch.setOnClickListener(v -> finishWithPageTransition());
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
-        top.addView(text("账户", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
+        TextView topTitle = text("账户", 24, Theme.INK, Typeface.BOLD);
+        topTitle.setGravity(Gravity.CENTER);
+        top.addView(topTitle, new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);

@@ -1,9 +1,7 @@
 package com.baixingai.voicedrop.ui;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Typeface;
-import android.net.Uri;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextPaint;
@@ -12,7 +10,7 @@ import android.text.style.ClickableSpan;
 import android.view.View;
 import android.widget.TextView;
 
-import com.baixingai.voicedrop.data.PrivacyConsent;
+import com.baixingai.voicedrop.PrivacyPolicyActivity;
 
 public final class PrivacyConsentDialog {
     private static final String POLICY_LABEL = "《隐私政策》";
@@ -33,8 +31,7 @@ public final class PrivacyConsentDialog {
             @Override
             public void onClick(View widget) {
                 try {
-                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                            Uri.parse(PrivacyConsent.POLICY_URL)));
+                    PrivacyPolicyActivity.open(activity);
                 } catch (RuntimeException e) {
                     SimpleToast.show(activity, "暂时无法打开隐私政策");
                 }

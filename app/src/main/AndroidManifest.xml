@@ -135,6 +135,10 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity
+            android:name=".PrivacyPolicyActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
             android:name=".UsageActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />

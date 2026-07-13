@@ -54,7 +54,9 @@ public final class InstructionSettingsActivity extends Activity {
         FrameLayout back = navButton();
         back.setOnClickListener(v -> finishWithTransition());
         top.addView(back, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
-        top.addView(text("提示词", 24, Theme.INK, Typeface.BOLD), new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
+        TextView topTitle = text("提示词", 24, Theme.INK, Typeface.BOLD);
+        topTitle.setGravity(Gravity.CENTER);
+        top.addView(topTitle, new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);

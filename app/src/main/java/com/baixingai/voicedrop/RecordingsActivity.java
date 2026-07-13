@@ -63,6 +63,7 @@ import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingReplyStore;
 import com.baixingai.voicedrop.data.Prefs;
+import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.data.SettingsStore;
@@ -77,6 +78,7 @@ import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.PrivacyConsentDialog;
 import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.SoftCircleShadowFrameLayout;
@@ -172,6 +174,7 @@ public final class RecordingsActivity extends Activity {
     protected boolean loading;
     protected boolean communityLoading;
     protected boolean topLevelUiRendered;
+    private boolean businessInitialized;
     protected ViewPager homePager;
     protected HomePagerAdapter homePagerAdapter;
     protected TextView recordingsTabTitle;
@@ -204,6 +207,22 @@ public final class RecordingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        installRoot();
+        PrivacyConsent consent = new PrivacyConsent(this);
+        if (consent.isAccepted()) {
+            continueAfterPrivacyConsent(savedInstanceState);
+            return;
+        }
+        PrivacyConsentDialog.show(this, () -> {
+            consent.accept();
+            continueAfterPrivacyConsent(savedInstanceState);
+        }, this::finishAndRemoveTask);
+    }
+
+    private void continueAfterPrivacyConsent(Bundle savedInstanceState) {
+        if (businessInitialized) return;
+        businessInitialized = true;
+        ((VoiceDropApplication) getApplication()).activateConsentedServices();
         auth = new AuthStore(this);
         prefs = new Prefs(this);
         http = new HttpClient();
@@ -280,6 +299,10 @@ public final class RecordingsActivity extends Activity {
                 });
             }
         });
+        onPageCreate(getIntent());
+    }
+
+    private void installRoot() {
         root = new FrameLayout(this);
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
@@ -302,7 +325,6 @@ public final class RecordingsActivity extends Activity {
             getWindow().setNavigationBarColor(0x00000000);
         }
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        onPageCreate(getIntent());
     }
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
@@ -315,6 +337,7 @@ public final class RecordingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (!businessInitialized) return;
         if (!isDetailActivity()) {
             if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
                 refreshAndDrain();
@@ -944,6 +967,8 @@ public final class RecordingsActivity extends Activity {
     }
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
+        if (!businessInitialized) return;
         if (handleDeepLink(intent)) return;
         handleShareIntent(intent);
     }

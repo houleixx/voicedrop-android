@@ -20,6 +20,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.share.ShareApi;
@@ -29,6 +30,7 @@ import com.baixingai.voicedrop.share.SharePayload;
 import com.baixingai.voicedrop.share.ShareRouter;
 import com.baixingai.voicedrop.share.SilentAudio;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.PrivacyConsentDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
 
@@ -52,15 +54,31 @@ public final class ShareCollectActivity extends Activity {
     private SharePayload payload;
     private ShareKind kind;
     private boolean busy;
+    private boolean businessInitialized;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        auth = new AuthStore(this);
-        http = new HttpClient();
-        shareApi = new ShareApi(auth, http);
         root = new FrameLayout(this);
         root.setBackgroundColor(0x66000000);
         setContentView(root);
+        PrivacyConsent consent = new PrivacyConsent(this);
+        if (consent.isAccepted()) {
+            continueAfterPrivacyConsent(savedInstanceState);
+            return;
+        }
+        PrivacyConsentDialog.show(this, () -> {
+            consent.accept();
+            continueAfterPrivacyConsent(savedInstanceState);
+        }, this::finishAndRemoveTask);
+    }
+
+    private void continueAfterPrivacyConsent(Bundle savedInstanceState) {
+        if (businessInitialized) return;
+        businessInitialized = true;
+        ((VoiceDropApplication) getApplication()).activateConsentedServices();
+        auth = new AuthStore(this);
+        http = new HttpClient();
+        shareApi = new ShareApi(auth, http);
         payload = loadPayload(getIntent());
         kind = classify(getIntent(), payload);
         render();

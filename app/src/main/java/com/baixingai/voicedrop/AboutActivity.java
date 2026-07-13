@@ -15,6 +15,7 @@ import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.BlockStore;
 import com.baixingai.voicedrop.data.CommunityTerms;
+import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -79,8 +80,7 @@ public final class AboutActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        addSettingRow(content, R.drawable.ic_about_privacy, "隐私说明", null, () -> IosDialog.show(this, "隐私说明",
-                "录音只上传到你自己的云端空间；麦克风仅在录音和语音修改时使用；身份是本机生成的匿名 ID。"));
+        addSettingRow(content, R.drawable.ic_about_privacy, "隐私政策", null, this::openPrivacyPolicy);
         addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
         addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::showBlockedUsers);
         addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
@@ -104,6 +104,14 @@ public final class AboutActivity extends Activity {
             startActivity(intent);
         } catch (Exception e) {
             toast("无法打开邮件客户端");
+        }
+    }
+
+    private void openPrivacyPolicy() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(PrivacyConsent.POLICY_URL)));
+        } catch (RuntimeException e) {
+            toast("暂时无法打开隐私政策");
         }
     }
 

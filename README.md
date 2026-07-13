@@ -190,27 +190,6 @@ ANDROID_KEY_PASSWORD
 
 ---
 
-## 友盟统计
-
-友盟 AppKey 通过构建参数注入，不写入 Git 仓库。
-
-本地开发可以在已被 `.gitignore` 忽略的 `local.properties` 中配置：
-
-```properties
-umeng.appKey=你的友盟 AppKey
-umeng.channel=local
-```
-
-GitHub Actions release 打包需要在仓库 Settings -> Secrets and variables -> Actions 中添加：
-
-```text
-UMENG_APP_KEY
-```
-
-AppKey 会被编译进 APK，这是 Android 客户端统计 SDK 的正常工作方式；它不是服务端私钥，但不应硬编码到公开仓库或输出到日志。
-
----
-
 ## 注意事项
 
 - 真机更适合测试完整录音链路。

@@ -4,6 +4,7 @@ import android.app.Application;
 import android.app.Activity;
 import android.os.Bundle;
 import android.text.TextUtils;
+import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.DialogX;
@@ -12,15 +13,15 @@ import com.umeng.analytics.MobclickAgent;
 import com.umeng.commonsdk.UMConfigure;
 
 public class VoiceDropApplication extends Application {
+    private boolean consentedServicesActivated;
+
     @Override
     public void onCreate() {
         super.onCreate();
-        initUmengAnalytics();
         DialogX.init(this);
         DialogX.globalStyle = IOSStyle.style();
         DialogX.globalTheme = DialogX.THEME.LIGHT;
         DialogX.DEBUGMODE = false;
-        new ReferralManager(this).runOnLaunch();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 applySystemBarDefaults(activity);
@@ -36,6 +37,14 @@ public class VoiceDropApplication extends Application {
             @Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
             @Override public void onActivityDestroyed(Activity activity) {}
         });
+        if (new PrivacyConsent(this).isAccepted()) activateConsentedServices();
+    }
+
+    public synchronized void activateConsentedServices() {
+        if (consentedServicesActivated) return;
+        consentedServicesActivated = true;
+        initUmengAnalytics();
+        new ReferralManager(this).runOnLaunch();
     }
 
     private void initUmengAnalytics() {

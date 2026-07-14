@@ -10,6 +10,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.media.MediaRecorder;
+import android.util.Log;
 
 import androidx.core.content.ContextCompat;
 
@@ -23,9 +24,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class EngineRecorder implements RecordingBackend {
-    private static final int SAMPLE_RATE = 16000;
+    private static final int CAPTURE_SAMPLE_RATE = PcmDownsampler48To16.INPUT_SAMPLE_RATE;
+    private static final int ENCODE_SAMPLE_RATE = PcmDownsampler48To16.OUTPUT_SAMPLE_RATE;
     private static final int BIT_RATE = 32000;
     private static final String MIME = "audio/mp4a-latm";
+    private static final String TAG = "VoiceDropRecorder";
+    private static final long CODEC_POLL_US = 10_000L;
+    private static final long FINALIZE_TIMEOUT_NS = TimeUnit.SECONDS.toNanos(4);
+    private static final long OUTPUT_EOS_TIMEOUT_NS = TimeUnit.SECONDS.toNanos(2);
+    private static final long WORKER_TIMEOUT_SECONDS = 6L;
 
     private final Context context;
     private final AtomicBoolean recording = new AtomicBoolean(false);
@@ -37,6 +44,8 @@ public final class EngineRecorder implements RecordingBackend {
     private volatile int currentAmplitude;
     private volatile PcmListener pcmListener;
     private volatile CountDownLatch finishedLatch;
+    private volatile boolean finalizedSuccessfully;
+    private volatile String failureReason;
 
     public EngineRecorder(Context context) {
         this.context = context.getApplicationContext();
@@ -57,6 +66,8 @@ public final class EngineRecorder implements RecordingBackend {
         startedAtMs = System.currentTimeMillis();
         peakAmplitude = 0;
         currentAmplitude = 0;
+        finalizedSuccessfully = false;
+        failureReason = null;
         CountDownLatch ready = new CountDownLatch(1);
         finishedLatch = new CountDownLatch(1);
         worker = new Thread(() -> captureAndEncode(ready), "voicedrop-engine-recorder");
@@ -73,20 +84,21 @@ public final class EngineRecorder implements RecordingBackend {
 
     @Override public AudioRecorder.Take stop(String place) {
         if (!recording.get() || currentFile == null || start == null) return null;
-        recording.set(false);
-        waitFinished();
         double duration = Math.max(0, (System.currentTimeMillis() - startedAtMs) / 1000.0);
+        recording.set(false);
+        boolean finished = waitFinished();
+        if (!finished || !finalizedSuccessfully || !Uploader.isUploadable(currentFile)) {
+            Log.e(TAG, "Recording finalization failed: " + failureReason);
+            resetTakeState();
+            return null;
+        }
         String finalName = RecordingName.make(start, duration, place);
         File finalFile = new File(AudioRecorder.documentsDir(context), finalName);
         if (!currentFile.renameTo(finalFile)) {
             finalFile = currentFile;
         }
         AudioRecorder.Take take = new AudioRecorder.Take(finalFile, start, duration, peakAmplitude);
-        currentFile = null;
-        start = null;
-        startedAtMs = 0;
-        currentAmplitude = 0;
-        peakAmplitude = 0;
+        resetTakeState();
         return take;
     }
 
@@ -97,11 +109,7 @@ public final class EngineRecorder implements RecordingBackend {
             //noinspection ResultOfMethodCallIgnored
             currentFile.delete();
         }
-        currentFile = null;
-        start = null;
-        startedAtMs = 0;
-        currentAmplitude = 0;
-        peakAmplitude = 0;
+        resetTakeState();
     }
 
     @Override public boolean isRecording() {
@@ -130,11 +138,14 @@ public final class EngineRecorder implements RecordingBackend {
         MediaCodec codec = null;
         MediaMuxer muxer = null;
         boolean muxerStarted = false;
+        boolean outputEosReceived = false;
+        boolean recoverableOutputEosTimeout = false;
         int trackIndex = -1;
         try {
-            int min = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            int bufferSize = Math.max(min, SAMPLE_RATE / 5 * 2);
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
+            int min = AudioRecord.getMinBufferSize(CAPTURE_SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+            int bufferSize = Math.max(min, CAPTURE_SAMPLE_RATE / 5 * 2);
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, CAPTURE_SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize * 2);
             if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
                 recording.set(false);
@@ -142,7 +153,7 @@ public final class EngineRecorder implements RecordingBackend {
                 return;
             }
 
-            MediaFormat format = MediaFormat.createAudioFormat(MIME, SAMPLE_RATE, 1);
+            MediaFormat format = MediaFormat.createAudioFormat(MIME, ENCODE_SAMPLE_RATE, 1);
             format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
             codec = MediaCodec.createEncoderByType(MIME);
@@ -153,47 +164,79 @@ public final class EngineRecorder implements RecordingBackend {
             ready.countDown();
 
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            byte[] pcmBuffer = new byte[bufferSize];
+            byte[] captureBuffer = new byte[bufferSize];
+            byte[] encodedPcmBuffer = new byte[bufferSize];
+            PcmDownsampler48To16 downsampler = new PcmDownsampler48To16();
             long presentationTimeUs = 0;
             boolean inputDone = false;
+            long finalizeDeadlineNs = Long.MAX_VALUE;
             while (!inputDone) {
-                int inputIndex = codec.dequeueInputBuffer(10_000);
+                if (!recording.get() && finalizeDeadlineNs == Long.MAX_VALUE) {
+                    finalizeDeadlineNs = System.nanoTime() + FINALIZE_TIMEOUT_NS;
+                }
+                int inputIndex = codec.dequeueInputBuffer(CODEC_POLL_US);
                 if (inputIndex >= 0) {
                     ByteBuffer input = codec.getInputBuffer(inputIndex);
-                    if (input == null) continue;
+                    if (input == null) {
+                        codec.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs, 0);
+                        throw new IllegalStateException("Codec returned a null input buffer");
+                    }
                     input.clear();
                     if (recording.get()) {
-                        int n = audioRecord.read(pcmBuffer, 0, Math.min(pcmBuffer.length, input.remaining()));
-                        if (n > 0) {
-                            input.put(pcmBuffer, 0, n);
-                            updateAmplitude(pcmBuffer, n);
-                            PcmListener listener = pcmListener;
-                            if (listener != null) {
-                                byte[] copy = new byte[n];
-                                System.arraycopy(pcmBuffer, 0, copy, 0, n);
-                                listener.onPcm16(copy, SAMPLE_RATE);
+                        int outputSampleCapacity = Math.min(input.remaining(), encodedPcmBuffer.length) / 2;
+                        int captureSampleCapacity = outputSampleCapacity * 3 - downsampler.pendingSamples();
+                        int captureBytes = Math.min(captureBuffer.length,
+                                Math.max(0, captureSampleCapacity * 2));
+                        int n = captureBytes == 0 ? 0 : audioRecord.read(captureBuffer, 0, captureBytes);
+                        if (n <= 0) {
+                            codec.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs, 0);
+                            if (n < 0) {
+                                throw new IllegalStateException("AudioRecord.read failed: " + n);
                             }
-                            codec.queueInputBuffer(inputIndex, 0, n, presentationTimeUs, 0);
-                            presentationTimeUs += samplesToUs(n / 2);
+                        } else {
+                            int encodedBytes = downsampler.downsample(
+                                    captureBuffer, n, encodedPcmBuffer);
+                            input.put(encodedPcmBuffer, 0, encodedBytes);
+                            publishPcm(encodedPcmBuffer, encodedBytes);
+                            codec.queueInputBuffer(inputIndex, 0, encodedBytes, presentationTimeUs, 0);
+                            presentationTimeUs += samplesToUs(encodedBytes / 2);
                         }
                     } else {
-                        codec.queueInputBuffer(inputIndex, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        int flushedBytes = downsampler.flush(encodedPcmBuffer);
+                        input.put(encodedPcmBuffer, 0, flushedBytes);
+                        publishPcm(encodedPcmBuffer, flushedBytes);
+                        codec.queueInputBuffer(inputIndex, 0, flushedBytes, presentationTimeUs,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        presentationTimeUs += samplesToUs(flushedBytes / 2);
                         inputDone = true;
                     }
                 }
-                DrainResult drained = drain(codec, muxer, info, muxerStarted, trackIndex);
+                DrainResult drained = drain(codec, muxer, info, muxerStarted, trackIndex, 0);
                 muxerStarted = drained.muxerStarted;
                 trackIndex = drained.trackIndex;
+                if (!inputDone && !recording.get() && System.nanoTime() >= finalizeDeadlineNs) {
+                    throw new IllegalStateException("Codec input EOS timed out");
+                }
             }
 
-            boolean outputDone = false;
-            while (!outputDone) {
-                DrainResult drained = drain(codec, muxer, info, muxerStarted, trackIndex);
+            long outputDeadlineNs = System.nanoTime() + OUTPUT_EOS_TIMEOUT_NS;
+            while (!outputEosReceived) {
+                DrainResult drained = drain(codec, muxer, info, muxerStarted, trackIndex, CODEC_POLL_US);
                 muxerStarted = drained.muxerStarted;
                 trackIndex = drained.trackIndex;
-                outputDone = drained.endOfStream;
+                outputEosReceived = drained.endOfStream;
+                if (!outputEosReceived && System.nanoTime() >= outputDeadlineNs) {
+                    throw new IllegalStateException("Codec output EOS timed out");
+                }
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            failureReason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            recoverableOutputEosTimeout = "Codec output EOS timed out".equals(failureReason);
+            if (recoverableOutputEosTimeout) {
+                Log.w(TAG, "Codec did not emit output EOS; validating muxer fallback", e);
+            } else {
+                Log.e(TAG, "Capture/finalization failed", e);
+            }
             recording.set(false);
         } finally {
             try {
@@ -206,11 +249,18 @@ public final class EngineRecorder implements RecordingBackend {
             } catch (Exception ignored) {
             }
             if (codec != null) codec.release();
+            boolean muxerStopped = false;
             try {
-                if (muxer != null && muxerStarted) muxer.stop();
-            } catch (Exception ignored) {
+                if (muxer != null && muxerStarted) {
+                    muxer.stop();
+                    muxerStopped = true;
+                }
+            } catch (Exception e) {
+                if (failureReason == null) failureReason = "MediaMuxer.stop failed: " + e.getMessage();
+                Log.e(TAG, "MediaMuxer.stop failed", e);
             }
             if (muxer != null) muxer.release();
+            finalizedSuccessfully = muxerStopped && (outputEosReceived || recoverableOutputEosTimeout);
             recording.set(false);
             ready.countDown();
             CountDownLatch latch = finishedLatch;
@@ -219,10 +269,12 @@ public final class EngineRecorder implements RecordingBackend {
     }
 
     private DrainResult drain(MediaCodec codec, MediaMuxer muxer, MediaCodec.BufferInfo info,
-                              boolean muxerStarted, int trackIndex) {
+                              boolean muxerStarted, int trackIndex, long timeoutUs) {
         boolean endOfStream = false;
+        long nextTimeoutUs = timeoutUs;
         while (true) {
-            int outputIndex = codec.dequeueOutputBuffer(info, 0);
+            int outputIndex = codec.dequeueOutputBuffer(info, nextTimeoutUs);
+            nextTimeoutUs = 0;
             if (outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 break;
             } else if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
@@ -256,18 +308,38 @@ public final class EngineRecorder implements RecordingBackend {
         if (max > peakAmplitude) peakAmplitude = max;
     }
 
-    private long samplesToUs(int samples) {
-        return samples * 1_000_000L / SAMPLE_RATE;
+    private void publishPcm(byte[] pcm, int length) {
+        if (length <= 0) return;
+        updateAmplitude(pcm, length);
+        PcmListener listener = pcmListener;
+        if (listener == null) return;
+        byte[] copy = new byte[length];
+        System.arraycopy(pcm, 0, copy, 0, length);
+        listener.onPcm16(copy, ENCODE_SAMPLE_RATE);
     }
 
-    private void waitFinished() {
+    private long samplesToUs(int samples) {
+        return samples * 1_000_000L / ENCODE_SAMPLE_RATE;
+    }
+
+    private boolean waitFinished() {
         CountDownLatch latch = finishedLatch;
-        if (latch == null) return;
+        if (latch == null) return false;
         try {
-            latch.await(5, TimeUnit.SECONDS);
+            return latch.await(WORKER_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return false;
         }
+    }
+
+    private void resetTakeState() {
+        currentFile = null;
+        start = null;
+        startedAtMs = 0;
+        currentAmplitude = 0;
+        peakAmplitude = 0;
+        finishedLatch = null;
     }
 
     private static final class DrainResult {

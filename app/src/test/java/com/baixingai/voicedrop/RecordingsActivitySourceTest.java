@@ -38,6 +38,17 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void homeRecordTouchOnlyRespondsOnRedButton() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String fab = methodBody(source, "protected void addRecordFab");
+
+        assertTrue(fab.contains("fab.setOnTouchListener(commandTouch);"));
+        assertFalse(fab.contains("fabCol.setOnTouchListener(commandTouch);"));
+        assertFalse(fab.contains("fabRing.setOnTouchListener(commandTouch);"));
+        assertFalse(fab.contains("fabLabel.setOnTouchListener(commandTouch);"));
+    }
+
+    @Test
     public void homeDoesNotShowPersistentLibraryCommandConnectionState() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String commandSessionListener = source.substring(source.indexOf("commandSession = new LibraryCommandSession"));
@@ -264,6 +275,22 @@ public class RecordingsActivitySourceTest {
         assertTrue(create.contains("if (prefs.classicRecorder())"));
         assertTrue(create.contains("new AudioRecorder(this)"));
         assertTrue(create.contains("new EngineRecorder(this)"));
+    }
+
+    @Test
+    public void homeRefreshIsDeferredUntilActiveRecordingStops() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String showHome = methodBody(source, "protected void showHome()");
+        String stopRecording = methodBody(source, "protected void stopRecordingFlow()");
+
+        assertTrue(source.contains("protected boolean homeRefreshDeferredWhileRecording;"));
+        assertTrue(showHome.contains("if (recorder != null && recorder.isRecording())"));
+        assertTrue(showHome.contains("homeRefreshDeferredWhileRecording = true;"));
+        assertTrue(showHome.indexOf("homeRefreshDeferredWhileRecording = true;")
+                < showHome.indexOf("root.removeAllViews();"));
+        assertTrue(stopRecording.contains("boolean refreshDeferred = homeRefreshDeferredWhileRecording;"));
+        assertTrue(stopRecording.indexOf("recorder.stop(null)") < stopRecording.indexOf("showHome();"));
+        assertTrue(stopRecording.contains("if (refreshDeferred) refreshHomePages();"));
     }
 
     @Test

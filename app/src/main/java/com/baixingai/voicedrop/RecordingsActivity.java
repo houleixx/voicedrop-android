@@ -174,6 +174,7 @@ public final class RecordingsActivity extends Activity {
     protected boolean loading;
     protected boolean communityLoading;
     protected boolean topLevelUiRendered;
+    protected boolean homeRefreshDeferredWhileRecording;
     private boolean businessInitialized;
     protected ViewPager homePager;
     protected HomePagerAdapter homePagerAdapter;
@@ -1217,6 +1218,11 @@ public final class RecordingsActivity extends Activity {
         });
     }
     protected void showHome() {
+        if (recorder != null && recorder.isRecording()) {
+            homeRefreshDeferredWhileRecording = true;
+            return;
+        }
+        homeRefreshDeferredWhileRecording = false;
         topLevelUiRendered = true;
         closeOpenSwipes();
         if (homePager != null && root.getChildCount() > 0 && !isDetailActivity()) {
@@ -1455,7 +1461,6 @@ public final class RecordingsActivity extends Activity {
         LinearLayout fabCol = new LinearLayout(this);
         fabCol.setOrientation(LinearLayout.VERTICAL);
         fabCol.setGravity(Gravity.CENTER_HORIZONTAL);
-        fabCol.setClickable(true);
         FrameLayout.LayoutParams fabColLp = new FrameLayout.LayoutParams(-1, -2,
                 Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         fabColLp.bottomMargin = dp(22);
@@ -1486,10 +1491,7 @@ public final class RecordingsActivity extends Activity {
         labelLp.setMargins(0, -dp(3), 0, 0);
         fabCol.addView(fabLabel, labelLp);
         View.OnTouchListener commandTouch = createLibraryCommandFabTouchListener(localFabLabel, localFabStatus);
-        fabCol.setOnTouchListener(commandTouch);
-        fabRing.setOnTouchListener(commandTouch);
         fab.setOnTouchListener(commandTouch);
-        fabLabel.setOnTouchListener(commandTouch);
     }
 
     protected String recordFabLabel() {
@@ -2311,6 +2313,7 @@ public final class RecordingsActivity extends Activity {
             interviewer.stop();
             interviewer = null;
         }
+        boolean refreshDeferred = homeRefreshDeferredWhileRecording;
         AudioRecorder.Take take = recorder.stop(null);
         List<CapturedPhoto> photos = new ArrayList<>(capturedPhotos);
         capturedPhotos.clear();
@@ -2328,6 +2331,7 @@ public final class RecordingsActivity extends Activity {
                 uploadTake(take, photos);
             }
         }
+        if (refreshDeferred) refreshHomePages();
     }
 
     protected void toggleInterview() {

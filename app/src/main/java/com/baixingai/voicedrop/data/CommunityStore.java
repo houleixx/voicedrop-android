@@ -7,9 +7,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class CommunityStore {
     private final AuthStore auth;
@@ -29,8 +33,35 @@ public final class CommunityStore {
         return out;
     }
 
+    /**
+     * Load the community card feed from the D1 materialized index. A missing, empty,
+     * unauthorized or temporarily unavailable index falls back to the R2 source and
+     * the legacy ranking endpoint, matching the iOS fail-open behavior.
+     */
+    public Feed feed() throws Exception {
+        try {
+            HttpClient.RequestOptions options = new HttpClient.RequestOptions().readTimeoutMs(5_000);
+            HttpClient.Response response = http.get(Api.recoBase() + "/feed", auth.bearer(), options);
+            if (response.ok()) {
+                Feed parsed = parseFeed(response.text());
+                if (!parsed.latest.isEmpty()) return parsed;
+            }
+        } catch (Exception ignored) {
+            // The display index is expendable. R2 below remains the source of truth.
+        }
+
+        List<Post> latest = list();
+        Ranking ranking;
+        try {
+            ranking = rank(latest);
+        } catch (Exception ignored) {
+            ranking = Ranking.identity(latest);
+        }
+        return Feed.fromLegacy(latest, ranking);
+    }
+
     public Ranking rank(List<Post> posts) throws Exception {
-        if (posts == null || posts.isEmpty()) return new Ranking(new ArrayList<>(), new ArrayList<>());
+        if (posts == null || posts.isEmpty()) return new Ranking(new ArrayList<>(), new ArrayList<>(), new HashMap<>());
         Map<String, Integer> replyCounts = new HashMap<>();
         for (Post post : posts) {
             if (post.replyTo != null && !post.replyTo.isEmpty()) {
@@ -53,14 +84,64 @@ public final class CommunityStore {
                 body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("rank HTTP " + response.code);
 
-        JSONObject root = new JSONObject(response.text());
+        return parseRanking(response.text());
+    }
+
+    public static Ranking parseRanking(String json) throws Exception {
+        JSONObject root = new JSONObject(json);
         List<String> order = new ArrayList<>();
         JSONArray orderArr = root.optJSONArray("order");
         if (orderArr != null) for (int i = 0; i < orderArr.length(); i++) order.add(orderArr.optString(i));
         List<String> liked = new ArrayList<>();
         JSONArray likedArr = root.optJSONArray("liked");
         if (likedArr != null) for (int i = 0; i < likedArr.length(); i++) liked.add(likedArr.optString(i));
-        return new Ranking(order, liked);
+        Map<String, Integer> likes = new HashMap<>();
+        JSONObject likesObject = root.optJSONObject("likes");
+        if (likesObject != null) {
+            JSONArray names = likesObject.names();
+            if (names != null) for (int i = 0; i < names.length(); i++) {
+                String id = names.optString(i);
+                likes.put(id, likesObject.optInt(id, 0));
+            }
+        }
+        return new Ranking(order, liked, likes);
+    }
+
+    public static Feed parseFeed(String json) throws Exception {
+        JSONObject root = new JSONObject(json);
+        JSONArray rows = root.optJSONArray("posts");
+        List<Post> latest = new ArrayList<>();
+        Map<String, Integer> likes = new HashMap<>();
+        Map<String, Integer> replies = new HashMap<>();
+        Set<String> liked = new HashSet<>();
+        if (rows != null) for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            Post post = Post.from(row);
+            latest.add(post);
+            likes.put(post.shareId, row.optInt("likes", 0));
+            if (row.optInt("replies", 0) > 0) replies.put(post.shareId, row.optInt("replies"));
+            if (row.optBoolean("liked", false)) liked.add(post.shareId);
+        }
+
+        List<String> order = new ArrayList<>();
+        JSONArray orderRows = root.optJSONArray("order");
+        if (orderRows != null) for (int i = 0; i < orderRows.length(); i++) {
+            order.add(orderRows.optString(i));
+        }
+        List<Post> recommended = reorder(latest, order);
+        return new Feed(recommended, latest, likes, replies, liked, true);
+    }
+
+    private static List<Post> reorder(List<Post> latest, List<String> order) {
+        if (order == null || order.size() != latest.size()) return new ArrayList<>(latest);
+        Map<String, Post> byId = new LinkedHashMap<>();
+        for (Post post : latest) byId.put(post.shareId, post);
+        List<Post> result = new ArrayList<>();
+        for (String id : order) {
+            Post post = byId.get(id);
+            if (post != null && !result.contains(post)) result.add(post);
+        }
+        return result.size() == latest.size() ? result : new ArrayList<>(latest);
     }
 
     public Post get(String shareId) throws Exception {
@@ -163,9 +244,16 @@ public final class CommunityStore {
         public final String title;
         public final String replyTo;
         public final ArticleDoc doc;
+        public final double updatedAt;
+        public final int count;
+        public final boolean mine;
+        public final boolean hasPhoto;
+        public final String coverPhotoKey;
+        public final String preview;
 
         Post(String shareId, String author, String articleKey, double firstSharedAt, String title, String replyTo,
-             ArticleDoc doc) {
+             ArticleDoc doc, double updatedAt, int count, boolean mine, boolean hasPhoto,
+             String coverPhotoKey, String preview) {
             this.shareId = shareId;
             this.author = author;
             this.articleKey = articleKey;
@@ -173,15 +261,24 @@ public final class CommunityStore {
             this.title = title;
             this.replyTo = replyTo;
             this.doc = doc;
+            this.updatedAt = updatedAt;
+            this.count = count;
+            this.mine = mine;
+            this.hasPhoto = hasPhoto;
+            this.coverPhotoKey = coverPhotoKey;
+            this.preview = preview;
         }
 
-        static Post from(JSONObject obj) {
+        public static Post from(JSONObject obj) {
             return new Post(trim(obj.optString("shareId")),
                     trim(obj.optString("author", obj.optString("authorName"))),
                     trim(obj.optString("articleKey")), obj.optDouble("firstSharedAt", obj.optDouble("sharedAt")),
                     trim(obj.optString("title")),
                     trim(obj.optString("replyTo")),
-                    docFrom(obj));
+                    docFrom(obj),
+                    obj.optDouble("updatedAt", obj.optDouble("firstSharedAt", obj.optDouble("sharedAt"))),
+                    obj.optInt("count", 0), obj.optBoolean("mine", false), obj.optBoolean("hasPhoto", false),
+                    trim(obj.optString("coverPhotoKey")), trim(obj.optString("preview")));
         }
 
         private static ArticleDoc docFrom(JSONObject obj) {
@@ -201,10 +298,77 @@ public final class CommunityStore {
     public static final class Ranking {
         public final List<String> order;
         public final List<String> liked;
+        public final Map<String, Integer> likes;
 
-        Ranking(List<String> order, List<String> liked) {
+        public Ranking(List<String> order, List<String> liked, Map<String, Integer> likes) {
             this.order = order;
             this.liked = liked;
+            this.likes = likes == null ? Collections.emptyMap() : new HashMap<>(likes);
+        }
+
+        static Ranking identity(List<Post> posts) {
+            List<String> order = new ArrayList<>();
+            for (Post post : posts) order.add(post.shareId);
+            return new Ranking(order, Collections.emptyList(), Collections.emptyMap());
+        }
+    }
+
+    public interface PostFilter {
+        boolean keep(Post post);
+    }
+
+    public static final class Feed {
+        public final List<Post> recommended;
+        public final List<Post> latest;
+        public final Map<String, Integer> likes;
+        public final Map<String, Integer> replies;
+        public final Set<String> liked;
+        public final boolean unified;
+
+        Feed(List<Post> recommended, List<Post> latest, Map<String, Integer> likes,
+             Map<String, Integer> replies, Set<String> liked, boolean unified) {
+            this.recommended = Collections.unmodifiableList(new ArrayList<>(recommended));
+            this.latest = Collections.unmodifiableList(new ArrayList<>(latest));
+            this.likes = Collections.unmodifiableMap(new HashMap<>(likes));
+            this.replies = Collections.unmodifiableMap(new HashMap<>(replies));
+            this.liked = Collections.unmodifiableSet(new HashSet<>(liked));
+            this.unified = unified;
+        }
+
+        public static Feed empty() {
+            return new Feed(Collections.emptyList(), Collections.emptyList(), Collections.emptyMap(),
+                    Collections.emptyMap(), Collections.emptySet(), false);
+        }
+
+        public static Feed fromLegacy(List<Post> latest, Ranking ranking) {
+            Map<String, Integer> replies = new HashMap<>();
+            for (Post post : latest) {
+                if (post.replyTo != null && !post.replyTo.isEmpty()) {
+                    replies.put(post.replyTo, replies.containsKey(post.replyTo) ? replies.get(post.replyTo) + 1 : 1);
+                }
+            }
+            return new Feed(reorder(latest, ranking.order), latest, ranking.likes, replies,
+                    new HashSet<>(ranking.liked), false);
+        }
+
+        public Feed filtered(PostFilter filter) {
+            List<Post> filteredLatest = new ArrayList<>();
+            List<Post> filteredRecommended = new ArrayList<>();
+            for (Post post : latest) if (filter.keep(post)) filteredLatest.add(post);
+            for (Post post : recommended) if (filter.keep(post)) filteredRecommended.add(post);
+            return new Feed(filteredRecommended, filteredLatest, likes, replies, liked, unified);
+        }
+
+        public int likeCount(String shareId) { return likes.containsKey(shareId) ? likes.get(shareId) : 0; }
+        public int replyCount(String shareId) { return replies.containsKey(shareId) ? replies.get(shareId) : 0; }
+
+        public List<String> recommendedIds() { return ids(recommended); }
+        public List<String> latestIds() { return ids(latest); }
+
+        private static List<String> ids(List<Post> posts) {
+            List<String> ids = new ArrayList<>();
+            for (Post post : posts) ids.add(post.shareId);
+            return ids;
         }
     }
 

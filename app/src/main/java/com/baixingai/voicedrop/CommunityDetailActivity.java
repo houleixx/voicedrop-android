@@ -1360,7 +1360,7 @@ public final class CommunityDetailActivity extends Activity {
         chip.setClickable(true);
 
         ImageView replyIcon = new ImageView(this);
-        replyIcon.setImageResource(R.drawable.ic_reply_turn_flat);
+        replyIcon.setImageResource(R.drawable.ic_community_reply);
         replyIcon.setColorFilter(Theme.RED);
         chip.addView(replyIcon, new LinearLayout.LayoutParams(dp(16), dp(16)));
 

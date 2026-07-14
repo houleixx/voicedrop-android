@@ -36,9 +36,17 @@ public class PageBouncyScrollSourceTest {
     @Test
     public void refreshListsAndDialogsKeepRegularScrollView() throws Exception {
         assertKeepsRegularScrollInstance("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        assertKeepsRegularScrollInstance("src/main/java/com/baixingai/voicedrop/CommunityActivity.java");
+        assertCommunityUsesRefreshableRecyclerFeed("src/main/java/com/baixingai/voicedrop/CommunityActivity.java");
         assertKeepsRegularScrollInstance("src/main/java/com/baixingai/voicedrop/ui/IosDialog.java");
         assertDoesNotUseBouncyScroll("src/main/java/com/baixingai/voicedrop/update/AppUpdateManager.java");
+    }
+
+    private static void assertCommunityUsesRefreshableRecyclerFeed(String path) throws Exception {
+        String source = readSource(path);
+
+        assertTrue(path, source.contains("new CommunityFeedView"));
+        assertTrue(path, source.contains("PullRefreshLayout refresher"));
+        assertFalse(path, source.contains("import com.baixingai.voicedrop.ui.BouncyScrollView;"));
     }
 
     private static void assertKeepsRegularScrollInstance(String path) throws Exception {

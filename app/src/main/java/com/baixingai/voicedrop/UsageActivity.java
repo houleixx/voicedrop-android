@@ -82,7 +82,7 @@ public final class UsageActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(10), dp(16), dp(40));
+        content.setPadding(dp(16), dp(6), dp(16), dp(40));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 

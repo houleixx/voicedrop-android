@@ -113,9 +113,10 @@ public class SettingsActivity extends Activity {
         top.addView(topTitle, new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
+        scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(4), dp(16), dp(28));
+        content.setPadding(dp(16), dp(6), dp(16), dp(28));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -208,8 +209,10 @@ public class SettingsActivity extends Activity {
     private void addSection(LinearLayout content, String label) {
         TextView section = text(label, 13, Theme.FAINT, Typeface.BOLD);
         section.setLetterSpacing(0.08f);
-        section.setPadding(dp(4), dp(20), 0, dp(8));
-        content.addView(section);
+        section.setPadding(dp(4), 0, 0, dp(8));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        if (content.getChildCount() > 0) lp.setMargins(0, dp(20), 0, 0);
+        content.addView(section, lp);
     }
 
     private void addSettingRow(LinearLayout content, int iconResId, String title, String subtitle, Runnable action) {

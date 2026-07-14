@@ -47,6 +47,21 @@ public class PromptStoreTest {
         assertEquals(before, PromptTree.flattenIds(store.items()));
     }
 
+    @Test public void addAndReplacePersistPromptDrafts() {
+        PromptNode created = new PromptNode();
+        created.id = "p_12345678"; created.type = "action"; created.label = "新提示词"; created.origin = "user";
+        created.prompt = "提示词"; created.appliesTo.add("text");
+        transport.enqueue(200, RESOLVED);
+        assertNull(store.add(created, null));
+        assertEquals("PUT /agent/prompts", transport.lastRequestLine());
+
+        PromptNode changed = store.items().get(0).copy();
+        changed.label = "已修改";
+        transport.enqueue(200, RESOLVED);
+        assertNull(store.replace("sys_concise", changed));
+        assertEquals("PUT /agent/prompts", transport.lastRequestLine());
+    }
+
     @Test public void staleReorderBaselineDoesNotPut() {
         assertEquals(PromptStore.CONFLICT, store.applyReorder(store.items(), Arrays.asList("old")));
         assertEquals(0, transport.putCount);

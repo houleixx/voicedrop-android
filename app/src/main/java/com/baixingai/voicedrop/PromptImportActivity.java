@@ -32,7 +32,7 @@ public final class PromptImportActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         store = new PromptStore(this, new AuthStore(this), new HttpClient());
-        LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(dp(22), dp(32), dp(22), dp(24)); page.setBackgroundColor(Theme.BG);
+        LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(dp(22), dp(10), dp(22), dp(24)); page.setBackgroundColor(Theme.BG);
         TextView title = text("导入提示词", 24); title.setGravity(Gravity.CENTER); page.addView(title);
         page.addView(text("输入 7 位分享码，也可以粘贴包含分享码的链接。", 14));
         codeInput = new EditText(this); codeInput.setTextSize(28); codeInput.setGravity(Gravity.CENTER); codeInput.setInputType(InputType.TYPE_CLASS_NUMBER); page.addView(codeInput, new LinearLayout.LayoutParams(-1, dp(64)));

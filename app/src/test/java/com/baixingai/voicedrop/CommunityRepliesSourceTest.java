@@ -30,6 +30,14 @@ public class CommunityRepliesSourceTest {
         assertFalse(source.contains("final TextView feedIcon = text(\"⚡\""));
     }
 
+    @Test
+    public void replyToChipUsesTheProvidedCommunityReplyArrow() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java");
+
+        assertTrue(source.contains("replyIcon.setImageResource(R.drawable.ic_community_reply)"));
+        assertFalse(source.contains("replyIcon.setImageResource(R.drawable.ic_reply_turn_flat)"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

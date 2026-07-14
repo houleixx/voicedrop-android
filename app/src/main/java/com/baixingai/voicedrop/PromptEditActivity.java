@@ -4,13 +4,17 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -21,6 +25,8 @@ import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
+import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.Theme;
 
 import java.util.Map;
@@ -28,14 +34,23 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class PromptEditActivity extends Activity {
+    private static final int DIVIDER = 0xffefe7d9;
+    private static final int TILE_NEUTRAL = 0xfff2eee7;
+    private static final int INPUT_STROKE = 0xffe5ded2;
+
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private PromptStore store;
     private PromptNode original;
-    private EditText label;
-    private EditText prompt;
-    private CheckBox textAnchor;
-    private CheckBox imageAnchor;
+    private EditText labelInput;
+    private EditText promptInput;
+    private boolean textChecked;
+    private boolean imageChecked;
+    private LinearLayout textCardLayout, imageCardLayout;
+    private TextView textCard, imageCard;
+    private ImageView textCheck, imageCheck;
     private LinearLayout shareArea;
+    private TextView saveButton;
+    private boolean saving;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -45,51 +60,306 @@ public final class PromptEditActivity extends Activity {
         original = id == null ? newNode("group".equals(createType) ? "group" : "action") : find(store.items(), id);
         if (original == null) { finish(); return; }
 
-        LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setPadding(dp(18), dp(20), dp(18), dp(24)); page.setBackgroundColor(Theme.BG);
-        TextView title = text(id == null ? (original.isGroup() ? "新建分组" : "新建提示词") : "编辑提示词", 24); title.setGravity(Gravity.CENTER); page.addView(title);
-        ScrollView scroll = new ScrollView(this); LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); scroll.addView(form); page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        textChecked = original.appliesTo.contains("text");
+        imageChecked = original.appliesTo.contains("image");
 
-        form.addView(text("名称", 14)); label = input(original.label, false); form.addView(label);
-        prompt = input(original.prompt == null ? "" : original.prompt, true);
+        FrameLayout root = new FrameLayout(this);
+        root.setFitsSystemWindows(false);
+        root.setBackgroundColor(Theme.BG);
+        setContentView(root);
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Theme.BG);
+        root.addView(page, new FrameLayout.LayoutParams(-1, -1));
+
+        // Top bar
+        FrameLayout top = new FrameLayout(this);
+        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        top.addView(header(id), new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER_VERTICAL));
+        page.addView(top, new LinearLayout.LayoutParams(-1, -2));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setClipToPadding(false);
+        scroll.setFillViewport(true);
+        LinearLayout form = vertical();
+        form.setPadding(dp(18), 0, dp(18), dp(20));
+        scroll.addView(form, new ScrollView.LayoutParams(-1, -2));
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
         if (!original.isGroup()) {
-            form.addView(text("提示词", 14)); form.addView(prompt, new LinearLayout.LayoutParams(-1, dp(180)));
-            textAnchor = new CheckBox(this); textAnchor.setText("应用于文字"); textAnchor.setChecked(original.appliesTo.contains("text")); form.addView(textAnchor);
-            imageAnchor = new CheckBox(this); imageAnchor.setText("应用于图片"); imageAnchor.setChecked(original.appliesTo.contains("image")); form.addView(imageAnchor);
-            shareArea = new LinearLayout(this); shareArea.setOrientation(LinearLayout.VERTICAL); shareArea.setPadding(0, dp(18), 0, dp(8)); form.addView(shareArea); loadShareState();
+            // 菜单里的名字
+            form.addView(label("菜单里的名字"), margins(-1, -2, 0, 0, 0, 6));
+            labelInput = cardInput(original.label, false);
+            form.addView(labelInput, new LinearLayout.LayoutParams(-1, dp(54)));
+
+            // 提示词
+            form.addView(label("提示词"), margins(-1, -2, 0, 14, 0, 6));
+            promptInput = cardInput(original.prompt == null ? "" : original.prompt, true);
+            form.addView(promptInput, new LinearLayout.LayoutParams(-1, dp(160)));
+
+            // 适用于
+            form.addView(appliesHeader(), margins(-1, -2, 0, 14, 0, 6));
+            form.addView(appliesCards(), new LinearLayout.LayoutParams(-1, -2));
+
+            // 分享仅在提示词已保存后提供；新建时还没有可分享的 ID。
+            if (id != null) {
+                shareArea = vertical();
+                shareArea.setPadding(0, dp(18), 0, dp(8));
+                form.addView(shareArea);
+                loadShareState();
+            }
+        } else {
+            // Group editing: just label
+            form.addView(label("分组名字"), margins(-1, -2, 0, 0, 0, 6));
+            labelInput = cardInput(original.label, false);
+            form.addView(labelInput, new LinearLayout.LayoutParams(-1, dp(54)));
         }
 
-        LinearLayout actions = new LinearLayout(this);
-        Button cancel = button("取消"); cancel.setOnClickListener(v -> finish()); actions.addView(cancel, weighted());
-        Button save = button("保存"); save.setOnClickListener(v -> save()); actions.addView(save, weighted());
-        page.addView(actions);
-        setContentView(page);
+        updateSaveState();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) configureEdgeToEdge();
+    }
+
+    private void configureEdgeToEdge() {
+        int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+            getWindow().setNavigationBarColor(Theme.BG);
+        }
+        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+    }
+
+    private int getStatusBarHeight() {
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
+    }
+
+    private View header(String id) {
+        FrameLayout top = new FrameLayout(this);
+
+        // Back button (identical to InstructionSettingsActivity)
+        FrameLayout backTouch = new FrameLayout(this);
+        backTouch.setClickable(true);
+        FrameLayout back = new FrameLayout(this);
+        GradientDrawable backBg = new GradientDrawable();
+        backBg.setColor(Theme.CARD);
+        backBg.setCornerRadius(dp(11));
+        backBg.setStroke(dp(1), 0xffe0d8cc);
+        back.setBackground(backBg);
+        back.setElevation(dp(2));
+        ImageView backIcon = new ImageView(this);
+        AliIconFont.apply(backIcon, AliIconFont.BACK, Theme.INK);
+        backIcon.setScaleType(ImageView.ScaleType.CENTER);
+        back.addView(backIcon, new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
+        backTouch.addView(back, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
+        backTouch.setOnClickListener(v -> finishWithSlide());
+        top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
+
+        // Title
+        String titleText = id == null
+                ? (original.isGroup() ? "新建分组" : "提示词")
+                : "编辑提示词";
+        TextView title = text(titleText, 24, Typeface.BOLD, Theme.INK);
+        title.setGravity(Gravity.CENTER);
+        top.addView(title, new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
+
+        // Save button
+        saveButton = text("保存", 16, Typeface.BOLD, Theme.SECONDARY);
+        saveButton.setGravity(Gravity.CENTER);
+        saveButton.setBackground(rounded(0xffc2b9a8, 12));
+        saveButton.setPadding(dp(20), dp(10), dp(20), dp(10));
+        saveButton.setOnClickListener(v -> save());
+        top.addView(saveButton, new FrameLayout.LayoutParams(-2, -2, Gravity.RIGHT | Gravity.CENTER_VERTICAL));
+
+        return top;
+    }
+
+    private void finishWithSlide() {
+        finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
     @Override protected void onDestroy() { super.onDestroy(); io.shutdownNow(); }
+    @Override public void onBackPressed() { finishWithSlide(); }
+
+    private void updateSaveState() {
+        if (saving) {
+            saveButton.setText("保存中…");
+            saveButton.setTextColor(Theme.SECONDARY);
+            saveButton.setBackground(rounded(0xffe5ded2, 12));
+            return;
+        }
+        String name = labelInput == null ? "" : labelInput.getText().toString().trim();
+        String prompt = promptInput == null ? "" : promptInput.getText().toString().trim();
+        boolean canSave = !name.isEmpty() && (original.isGroup() || (!prompt.isEmpty() && (textChecked || imageChecked)));
+        saveButton.setTextColor(canSave ? Color.WHITE : Theme.SECONDARY);
+        saveButton.setBackground(rounded(canSave ? Theme.ACCENT : 0xffc2b9a8, 12));
+    }
 
     private void save() {
-        String name = label.getText().toString().trim();
-        if (name.isEmpty()) { label.setError("请输入名称"); return; }
-        PromptNode edited = original.copy(); edited.label = name;
+        String name = labelInput == null ? "" : labelInput.getText().toString().trim();
+        if (name.isEmpty()) { labelInput.setError("请输入名称"); return; }
+        PromptNode edited = original.copy();
+        edited.label = name;
         if (!edited.isGroup()) {
-            String instruction = prompt.getText().toString().trim();
-            if (instruction.isEmpty()) { prompt.setError("请输入提示词"); return; }
-            edited.prompt = instruction; edited.appliesTo.clear();
-            if (textAnchor.isChecked()) edited.appliesTo.add("text");
-            if (imageAnchor.isChecked()) edited.appliesTo.add("image");
-            if (edited.appliesTo.isEmpty()) { textAnchor.setError("至少选择一种应用场景"); return; }
+            String instruction = promptInput == null ? "" : promptInput.getText().toString().trim();
+            if (instruction.isEmpty()) { promptInput.setError("请输入提示词"); return; }
+            edited.prompt = instruction;
+            edited.appliesTo.clear();
+            if (textChecked) edited.appliesTo.add("text");
+            if (imageChecked) edited.appliesTo.add("image");
+            if (edited.appliesTo.isEmpty()) { toast("至少选择一种应用场景"); return; }
         }
         boolean creating = getIntent().getStringExtra("promptId") == null;
         if (!creating && original.isSystem()) edited = PromptTree.fork(edited, PromptTree::newUserId);
         PromptNode result = edited;
+        saving = true;
+        updateSaveState();
         io.execute(() -> {
             String error = creating ? store.add(result, null) : store.replace(original.id, result);
-            runOnUiThread(() -> { if (error == null) finish(); else label.setError(error); });
+            runOnUiThread(() -> {
+                saving = false;
+                updateSaveState();
+                if (error == null) { finishWithSlide(); }
+                else { labelInput.setError(error); }
+            });
         });
     }
 
+    // --- UI building blocks ---
+
+    private TextView label(String value) {
+        TextView v = text(value, 14, Typeface.NORMAL, Theme.SECONDARY);
+        v.setPadding(0, 0, 0, 0);
+        return v;
+    }
+
+    private EditText cardInput(String value, boolean multiline) {
+        EditText v = new EditText(this);
+        v.setText(value);
+        v.setTextSize(16);
+        v.setTextColor(Theme.INK);
+        v.setHintTextColor(0xffc9c6c1);
+        v.setInputType(InputType.TYPE_CLASS_TEXT | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));
+        v.setGravity(multiline ? Gravity.TOP : Gravity.CENTER_VERTICAL);
+        v.setPadding(dp(14), dp(12), dp(14), dp(12));
+        v.setBackground(strokedRound(Theme.CARD, 12, INPUT_STROKE, 1, 0, 0));
+        if (multiline) v.setMinLines(4);
+        v.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateSaveState(); }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        return v;
+    }
+
+    private View appliesHeader() {
+        LinearLayout row = horizontal();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(text("适用于", 14, Typeface.BOLD, Theme.INK));
+        // spacer pushes hint to the right
+        row.addView(new View(this), new LinearLayout.LayoutParams(0, -1, 1));
+        TextView hint = text("决定在哪种长按里出现", 12, Typeface.NORMAL, Theme.FAINT);
+        row.addView(hint, new LinearLayout.LayoutParams(-2, -2));
+        return row;
+    }
+
+    private View appliesCards() {
+        LinearLayout row = horizontal();
+
+        // 文字 card
+        textCardLayout = applyCard("文字", R.drawable.ic_settings_pen, textChecked);
+        Object[] textTag = (Object[]) textCardLayout.getTag();
+        textCard = (TextView) textTag[0];
+        ImageView textIcon = (ImageView) textTag[1];
+        textCheck = textCardLayout.findViewById(android.R.id.text1);
+        textCardLayout.setOnClickListener(v -> {
+            textChecked = !textChecked;
+            updateApplyCard(textCardLayout, textCard, textCheck, textIcon, textChecked);
+            updateSaveState();
+        });
+        row.addView(textCardLayout, new LinearLayout.LayoutParams(0, -2, 1));
+
+        // spacer between cards
+        row.addView(new View(this), new LinearLayout.LayoutParams(dp(16), -1));
+
+        // 图片 card
+        imageCardLayout = applyCard("图片", R.drawable.ic_image, imageChecked);
+        Object[] imageTag = (Object[]) imageCardLayout.getTag();
+        imageCard = (TextView) imageTag[0];
+        ImageView imageIcon = (ImageView) imageTag[1];
+        imageCheck = imageCardLayout.findViewById(android.R.id.text1);
+        imageCardLayout.setOnClickListener(v -> {
+            imageChecked = !imageChecked;
+            updateApplyCard(imageCardLayout, imageCard, imageCheck, imageIcon, imageChecked);
+            updateSaveState();
+        });
+        row.addView(imageCardLayout, new LinearLayout.LayoutParams(0, -2, 1));
+
+        return row;
+    }
+
+    private LinearLayout applyCard(String label, int iconRes, boolean checked) {
+        LinearLayout card = vertical();
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        updateCardBackground(card, checked);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(checked ? Theme.ACCENT : Theme.FAINT, PorterDuff.Mode.SRC_IN);
+        icon.setScaleType(ImageView.ScaleType.CENTER);
+        card.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32)));
+
+        TextView labelView = text(label, 14, Typeface.NORMAL, checked ? Theme.ACCENT : Theme.SECONDARY);
+        labelView.setGravity(Gravity.CENTER);
+        labelView.setPadding(0, dp(6), 0, 0);
+        card.addView(labelView);
+
+        // Checkbox: checked = orange checkmark, unchecked = gray outlined square
+        ImageView check = new ImageView(this);
+        check.setId(android.R.id.text1);
+        check.setImageResource(checked ? R.drawable.ic_checkbox_checked_flat : R.drawable.ic_checkbox_unchecked_flat);
+        check.setScaleType(ImageView.ScaleType.CENTER);
+        card.addView(check, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        check.setPadding(0, dp(2), 0, 0);
+
+        card.setTag(new Object[]{labelView, icon});
+        return card;
+    }
+
+    private void updateCardBackground(LinearLayout card, boolean checked) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Theme.CARD);
+        bg.setCornerRadius(dp(14));
+        if (checked) {
+            bg.setStroke(dp(2), Theme.ACCENT);
+        } else {
+            bg.setStroke(dp(1), INPUT_STROKE);
+        }
+        card.setBackground(bg);
+    }
+
+    private void updateApplyCard(LinearLayout card, TextView labelView, ImageView checkView, ImageView iconView, boolean checked) {
+        updateCardBackground(card, checked);
+        iconView.setColorFilter(checked ? Theme.ACCENT : Theme.FAINT, PorterDuff.Mode.SRC_IN);
+        labelView.setTextColor(checked ? Theme.ACCENT : Theme.SECONDARY);
+        checkView.setImageResource(checked ? R.drawable.ic_checkbox_checked_flat : R.drawable.ic_checkbox_unchecked_flat);
+    }
+
     private void loadShareState() {
-        shareArea.removeAllViews(); shareArea.addView(text("正在加载分享状态…", 13));
+        shareArea.removeAllViews();
+        shareArea.addView(text("正在加载分享状态…", 13, Typeface.NORMAL, Theme.FAINT));
         io.execute(() -> {
             Map<String, PromptStore.ShareState> states = store.shareStates();
             PromptStore.ShareState state = states.get(original.id);
@@ -99,31 +369,65 @@ public final class PromptEditActivity extends Activity {
 
     private void renderShare(PromptStore.ShareState state) {
         shareArea.removeAllViews();
-        Button toggle = button(state.sharing ? "关闭分享" : "分享这条提示词");
-        toggle.setOnClickListener(v -> {
-            toggle.setEnabled(false);
-            io.execute(() -> {
-                PromptStore.ShareState next = store.setSharing(original.id, !state.sharing);
-                runOnUiThread(() -> { if (next.error != null) toggle.setError(next.error); renderShare(next.error == null ? next : state); });
-            });
-        });
-        shareArea.addView(toggle);
+
+        LinearLayout card = vertical();
+        card.setBackground(rounded(Theme.CARD, 14));
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+
+        LinearLayout header = horizontal();
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("分享这条提示词", 15, Typeface.BOLD, Theme.INK), new LinearLayout.LayoutParams(0, -2, 1));
+
+        IosSwitch toggle = new IosSwitch(this);
+        toggle.setChecked(state.sharing);
+        header.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
+        card.addView(header, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView desc = text("开启后，任何人对 VoiceDrop 说出分享码，或打开链接，就能看到并一次性使用这条提示词。",
+                13, Typeface.NORMAL, 0xffc9c2b6);
+        desc.setLineSpacing(0, 1.15f);
+        desc.setPadding(0, dp(6), 0, dp(4));
+        card.addView(desc);
+
+        shareArea.addView(card, new LinearLayout.LayoutParams(-1, -2));
+
         if (!state.code.isEmpty()) {
-            TextView code = text("分享码  " + state.code, 22); code.setGravity(Gravity.CENTER); shareArea.addView(code);
-            String url = Api.sharePage(state.code);
-            Button copyCode = button("复制数字"); copyCode.setOnClickListener(v -> copy(state.code)); shareArea.addView(copyCode);
-            Button copyUrl = button("复制链接"); copyUrl.setOnClickListener(v -> copy(url)); shareArea.addView(copyUrl);
-            Button share = button("分享…"); share.setOnClickListener(v -> {
-                Intent intent = new Intent(Intent.ACTION_SEND); intent.setType("text/plain"); intent.putExtra(Intent.EXTRA_TEXT, Api.sharePage(state.code));
-                startActivity(Intent.createChooser(intent, "分享提示词"));
-            }); shareArea.addView(share);
+            LinearLayout shareCard = vertical();
+            shareCard.setBackground(rounded(Theme.CARD, 14));
+            shareCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+            shareArea.addView(shareCard, margins(-1, -2, 0, 12, 0, 0));
+
+            TextView codeLabel = text("分享码  " + state.code, 22, Typeface.BOLD, Theme.INK);
+            codeLabel.setGravity(Gravity.CENTER);
+            shareCard.addView(codeLabel);
+
+            LinearLayout actions = horizontal();
+            actions.setPadding(0, dp(8), 0, 0);
+            shareCard.addView(actions);
+
+            actions.addView(shareAction("复制数字", () -> copy(state.code)),
+                    new LinearLayout.LayoutParams(0, dp(40), 1));
+            actions.addView(shareAction("复制链接", () -> copy(Api.sharePage(state.code))),
+                    new LinearLayout.LayoutParams(0, dp(40), 1));
         }
+    }
+
+    private TextView shareAction(String label, Runnable action) {
+        TextView v = text(label, 14, Typeface.BOLD, Theme.ACCENT);
+        v.setGravity(Gravity.CENTER);
+        v.setPadding(dp(10), dp(8), dp(10), dp(8));
+        v.setBackground(rounded(Theme.ACCENT_SOFT, 8));
+        v.setOnClickListener(x -> action.run());
+        return v;
     }
 
     private void copy(String value) {
         ClipboardManager manager = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (manager != null) manager.setPrimaryClip(ClipData.newPlainText("VoiceDrop", value));
+        toast("已复制");
     }
+
+    // --- Helpers ---
 
     private static PromptNode find(java.util.List<PromptNode> items, String id) {
         for (PromptNode node : items) { if (id.equals(node.id)) return node; PromptNode child = find(node.children, id); if (child != null) return child; }
@@ -132,12 +436,33 @@ public final class PromptEditActivity extends Activity {
 
     private static PromptNode newNode(String type) {
         PromptNode node = new PromptNode(); node.id = PromptTree.newUserId(); node.type = type; node.label = ""; node.origin = "user";
-        if ("action".equals(type)) node.appliesTo.add("text"); return node;
+        if ("action".equals(type)) { node.appliesTo.add("text"); node.appliesTo.add("image"); } return node;
     }
 
-    private EditText input(String value, boolean multiline) { EditText v = new EditText(this); v.setText(value); v.setTextSize(16); v.setInputType(InputType.TYPE_CLASS_TEXT | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0)); v.setGravity(multiline ? Gravity.TOP : Gravity.CENTER_VERTICAL); return v; }
-    private Button button(String value) { Button b = new Button(this); b.setText(value); b.setAllCaps(false); return b; }
-    private TextView text(String value, int sp) { TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(Theme.INK); v.setPadding(0, dp(8), 0, dp(8)); return v; }
-    private LinearLayout.LayoutParams weighted() { return new LinearLayout.LayoutParams(0, dp(52), 1); }
+    private LinearLayout vertical() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
+    private LinearLayout horizontal() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.HORIZONTAL); return v; }
+    private TextView text(String value, int sp, int style, int color) {
+        TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
+    }
+    private TextView squareButton(String value, boolean accent) {
+        TextView v = text(value, 22, Typeface.NORMAL, accent ? Color.WHITE : Theme.INK);
+        v.setGravity(Gravity.CENTER); v.setIncludeFontPadding(false);
+        v.setBackground(rounded(accent ? Theme.ACCENT : Color.WHITE, 12)); v.setElevation(dp(2)); return v;
+    }
+    private GradientDrawable rounded(int color, int radius) { return strokedRound(color, radius, Color.TRANSPARENT, 0, 0, 0); }
+    private GradientDrawable strokedRound(int color, int radius, int stroke, int width, int dash, int gap) {
+        GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius));
+        if (width > 0) d.setStroke(dp(width), stroke, dp(dash), dp(gap)); return d;
+    }
+    private GradientDrawable outlined(int color, int radius, int stroke, int width, int dash, int gap) {
+        GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius));
+        if (width > 0) d.setStroke(dp(width), stroke, dp(dash), dp(gap)); return d;
+    }
+    private LinearLayout.LayoutParams margins(int w, int h, int l, int t, int r, int b) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(w, h); p.setMargins(dp(l), dp(t), dp(r), dp(b)); return p;
+    }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private void toast(String message) {
+        runOnUiThread(() -> com.baixingai.voicedrop.ui.SimpleToast.show(this, message));
+    }
 }

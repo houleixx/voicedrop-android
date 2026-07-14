@@ -21,6 +21,8 @@ public class PullRefreshLayout extends FrameLayout {
     private final int touchSlop;
     private final float triggerDistance;
     private View content;
+    private View scrollTarget;
+    private View translationTarget;
     private OnRefreshListener listener;
     private boolean refreshing;
     private boolean dragging;
@@ -47,19 +49,32 @@ public class PullRefreshLayout extends FrameLayout {
         this.listener = listener;
     }
 
+    /** Keeps a fixed header outside the pull motion while refreshing a nested scrolling child. */
+    public void setRefreshTarget(View target, int spinnerTopOffsetPx) {
+        scrollTarget = target;
+        translationTarget = target;
+        LayoutParams spinnerLp = (LayoutParams) spinner.getLayoutParams();
+        spinnerLp.topMargin = spinnerTopOffsetPx + dp(10);
+        spinner.setLayoutParams(spinnerLp);
+    }
+
     public void setRefreshing(boolean refreshing) {
         this.refreshing = refreshing;
         if (refreshing) {
             spinner.setVisibility(VISIBLE);
             spinner.setAlpha(1f);
-            if (content != null) content.animate().translationY(dp(54)).setDuration(140).start();
+            if (translationTarget != null) {
+                translationTarget.animate().translationY(dp(54)).setDuration(140).start();
+            }
         } else {
             dragging = false;
             pullDistance = 0f;
             spinner.animate().alpha(0f).setDuration(120).withEndAction(() -> {
                 if (!this.refreshing) spinner.setVisibility(INVISIBLE);
             }).start();
-            if (content != null) content.animate().translationY(0f).setDuration(160).start();
+            if (translationTarget != null) {
+                translationTarget.animate().translationY(0f).setDuration(160).start();
+            }
         }
     }
 
@@ -89,6 +104,8 @@ public class PullRefreshLayout extends FrameLayout {
             return;
         }
         content = child;
+        if (scrollTarget == null) scrollTarget = child;
+        if (translationTarget == null) translationTarget = child;
         super.addView(child, 0, params);
         spinner.bringToFront();
     }
@@ -109,7 +126,7 @@ public class PullRefreshLayout extends FrameLayout {
                     dragging = false;
                     return false;
                 }
-                if (dy > touchSlop && !content.canScrollVertically(-1)) {
+                if (dy > touchSlop && !scrollTarget.canScrollVertically(-1)) {
                     dragging = true;
                     return true;
                 }
@@ -123,14 +140,14 @@ public class PullRefreshLayout extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-        if (refreshing || content == null) return true;
+        if (refreshing || content == null) return false;
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
                 pullDistance = Math.max(0f, (ev.getY() - downY) * 0.48f);
                 if (pullDistance > 0f) {
                     spinner.setVisibility(VISIBLE);
                     spinner.setAlpha(Math.min(1f, pullDistance / triggerDistance));
-                    content.setTranslationY(Math.min(pullDistance, dp(86)));
+                    translationTarget.setTranslationY(Math.min(pullDistance, dp(86)));
                     return true;
                 }
                 break;

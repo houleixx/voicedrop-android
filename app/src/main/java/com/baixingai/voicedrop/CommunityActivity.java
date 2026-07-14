@@ -61,6 +61,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.CommunityFeedView;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -133,6 +134,9 @@ public final class CommunityActivity extends Activity {
     protected FrameLayout root;
     protected List<Recording> recordings = new ArrayList<>();
     protected List<CommunityStore.Post> posts = new ArrayList<>();
+    protected CommunityStore.Feed communityFeed = CommunityStore.Feed.empty();
+    protected com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab communityFeedTab =
+            com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.RECOMMENDED;
     protected final List<CapturedPhoto> capturedPhotos = new ArrayList<>();
     // Currently open swipe-to-delete rows
     protected final List<LinearLayout> openSwipeRows = new ArrayList<>();
@@ -285,13 +289,9 @@ public final class CommunityActivity extends Activity {
         return false;
     }
     protected List<CommunityStore.Post> loadRankedCommunityPosts() throws Exception {
-        List<CommunityStore.Post> all = community.list();
-        List<CommunityStore.Post> visible = new ArrayList<>();
-        for (CommunityStore.Post p : all) {
-            if (!blockStore.isBlocked(p.author)) visible.add(p);
-        }
-        applyCommunityRanking(visible);
-        return visible;
+        communityFeed = community.feed().filtered(post -> !blockStore.isBlocked(post.author));
+        prefs.setLikedCommunityPosts(communityFeed.liked);
+        return new ArrayList<>(communityFeed.recommended);
     }
     protected void applyCommunityRanking(List<CommunityStore.Post> visible) {
         try {
@@ -982,16 +982,42 @@ public final class CommunityActivity extends Activity {
         page.addView(contentArea, new LinearLayout.LayoutParams(-1, 0, 1));
 
         PullRefreshLayout refresher = pullRefreshContainer();
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(14), dp(6), dp(14), dp(16));
-        scroll.addView(list);
-        refresher.addView(scroll, match());
+        View content;
+        if (posts.isEmpty()) {
+            LinearLayout list = new LinearLayout(this);
+            list.setOrientation(LinearLayout.VERTICAL);
+            list.setPadding(dp(14), dp(6), dp(14), dp(16));
+            renderCommunityList(list);
+            content = list;
+        } else {
+            content = new CommunityFeedView(this, communityFeed, new CommunityFeedView.Listener() {
+                @Override public void onSelect(CommunityStore.Post post) { openCommunityPost(post); }
+                @Override public void onUnshare(CommunityStore.Post post) { confirmCommunityUnshare(post); }
+                @Override public void onTabChanged(com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab tab) {
+                    communityFeedTab = tab;
+                }
+            }, communityFeedTab);
+        }
+        refresher.addView(content, match());
+        if (content instanceof CommunityFeedView) {
+            CommunityFeedView feedView = (CommunityFeedView) content;
+            refresher.setRefreshTarget(feedView.refreshTarget(), feedView.refreshSpinnerOffset());
+        }
         refresher.setOnRefreshListener(() -> refreshCommunityFromPull(refresher));
         contentArea.addView(refresher, match());
+    }
 
-        renderCommunityList(list);
+    protected void confirmCommunityUnshare(CommunityStore.Post post) {
+        IosDialog.show(this, "从 VD社区隐藏？", "原文章不受影响，之后仍可再次分享。",
+                "取消分享", () -> io.execute(() -> {
+                    try {
+                        if (!community.unshare(post.shareId)) throw new IllegalStateException("请求失败");
+                        posts = loadRankedCommunityPosts();
+                        main.post(() -> { toast("已从 VD社区隐藏"); showHome(); });
+                    } catch (Exception e) {
+                        toast("取消分享失败：" + e.getMessage());
+                    }
+                }));
     }
 
     protected PullRefreshLayout pullRefreshContainer() {

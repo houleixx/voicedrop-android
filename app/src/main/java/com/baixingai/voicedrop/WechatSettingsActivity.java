@@ -81,7 +81,7 @@ public class WechatSettingsActivity extends Activity {
         scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(10), dp(20), dp(28));
+        content.setPadding(dp(20), dp(6), dp(20), dp(28));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 

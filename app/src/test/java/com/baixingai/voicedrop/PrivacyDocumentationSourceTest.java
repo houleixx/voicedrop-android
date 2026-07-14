@@ -77,7 +77,7 @@ public final class PrivacyDocumentationSourceTest {
     }
 
     @Test
-    public void settingsPageTitlesAreVerticallyCentered() throws Exception {
+    public void standardSettingsPageTitlesAreVerticallyCentered() throws Exception {
         String[] pages = {
                 "SettingsActivity.java",
                 "AccountActivity.java",

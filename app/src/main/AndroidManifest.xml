@@ -123,6 +123,14 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity
+            android:name=".PromptEditActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".PromptImportActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
             android:name=".wxapi.WXEntryActivity"
             android:exported="true"
             android:theme="@style/AppTheme" />

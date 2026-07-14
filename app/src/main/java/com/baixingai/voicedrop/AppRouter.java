@@ -22,7 +22,8 @@ public final class AppRouter {
         List<String> segments = uri.getPathSegments();
         String first = segments.isEmpty() ? "" : segments.get(0);
         String tag = uri.getQueryParameter("tag");
-        return parseParts(uri.getScheme(), route, first, tag);
+        String code = uri.getQueryParameter("code");
+        return parseParts(uri.getScheme(), route, first, tag, code);
     }
 
     public static DeepLink parse(String raw) {
@@ -37,13 +38,15 @@ public final class AppRouter {
             }
             String query = uri.getRawQuery();
             String tag = null;
+            String code = null;
             if (query != null) {
                 for (String part : query.split("&")) {
                     int eq = part.indexOf('=');
                     String name = eq < 0 ? part : part.substring(0, eq);
                     if ("tag".equals(name)) {
                         tag = decode(eq < 0 ? "" : part.substring(eq + 1));
-                        break;
+                    } else if ("code".equals(name)) {
+                        code = decode(eq < 0 ? "" : part.substring(eq + 1));
                     }
                 }
             }
@@ -51,7 +54,7 @@ public final class AppRouter {
             if ("https".equals(scheme) || "http".equals(scheme)) {
                 return parseUniversal(uri.getHost(), pathSegments(path), raw);
             }
-            return parseParts(uri.getScheme(), uri.getHost() == null ? "" : uri.getHost(), first, tag);
+            return parseParts(uri.getScheme(), uri.getHost() == null ? "" : uri.getHost(), first, tag, code);
         } catch (Exception e) {
             return DeepLink.none();
         }
@@ -82,6 +85,9 @@ public final class AppRouter {
         }
         if (segs.isEmpty()) return new DeepLink(Kind.RECORDINGS, "", "", "", rawUrl);
         String first = segs.get(0);
+        if (segs.size() == 1 && PROMPT_CODE.matcher(first).matches()) {
+            return new DeepLink(Kind.PROMPT_IMPORT, "", "", "", rawUrl, first);
+        }
         if (segs.size() == 1 && SHARE_ID.matcher(first).matches() && !isStaticPath(first)) {
             return new DeepLink(Kind.SHARE_LINK, "", "", first, rawUrl);
         }
@@ -89,12 +95,13 @@ public final class AppRouter {
     }
 
     private static final Pattern SHARE_ID = Pattern.compile("^[A-Za-z0-9_-]{6,16}$");
+    private static final Pattern PROMPT_CODE = Pattern.compile("^[1-9][0-9]{6}$");
 
     private static boolean isStaticPath(String path) {
         return "privacy".equals(path) || "welcome".equals(path) || "help".equals(path);
     }
 
-    private static DeepLink parseParts(String scheme, String route, String firstSegment, String tag) {
+    private static DeepLink parseParts(String scheme, String route, String firstSegment, String tag, String code) {
         if (!"voicedrop".equals(scheme)) return DeepLink.none();
         if ("recordings".equals(route) || route.isEmpty()) return new DeepLink(Kind.RECORDINGS, "", "");
         if ("community".equals(route)) return new DeepLink(Kind.COMMUNITY, "", "");
@@ -102,6 +109,9 @@ public final class AppRouter {
         if ("record".equals(route)) return new DeepLink(Kind.RECORD, "", tag == null ? "" : tag.trim());
         if ("article".equals(route) && firstSegment != null && !firstSegment.isEmpty()) {
             return new DeepLink(Kind.ARTICLE, decode(firstSegment), "");
+        }
+        if ("prompt-import".equals(route) && code != null && PROMPT_CODE.matcher(code).matches()) {
+            return new DeepLink(Kind.PROMPT_IMPORT, "", "", "", "", code);
         }
         return DeepLink.none();
     }
@@ -121,6 +131,7 @@ public final class AppRouter {
         SETTINGS,
         RECORD,
         ARTICLE,
+        PROMPT_IMPORT,
         SHARE_LINK,
         WEB
     }
@@ -131,17 +142,23 @@ public final class AppRouter {
         public final String tag;
         public final String id;
         public final String url;
+        public final String shareCode;
 
         DeepLink(Kind kind, String stem, String tag) {
-            this(kind, stem, tag, "", "");
+            this(kind, stem, tag, "", "", "");
         }
 
         DeepLink(Kind kind, String stem, String tag, String id, String url) {
+            this(kind, stem, tag, id, url, "");
+        }
+
+        DeepLink(Kind kind, String stem, String tag, String id, String url, String shareCode) {
             this.kind = kind;
             this.stem = stem == null ? "" : stem;
             this.tag = tag == null ? "" : tag;
             this.id = id == null ? "" : id;
             this.url = url == null ? "" : url;
+            this.shareCode = shareCode == null ? "" : shareCode;
         }
 
         static DeepLink none() {

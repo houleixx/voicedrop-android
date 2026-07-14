@@ -52,4 +52,17 @@ public class AppRouterTest {
 
         assertEquals(AppRouter.Kind.NONE, AppRouter.parse("https://example.com/abc123").kind);
     }
+
+    @Test
+    public void parsesPromptImportMagicNumbersWithoutTakingEightDigitLinks() {
+        AppRouter.DeepLink universal = AppRouter.parse("https://voicedrop.cn/1234567");
+        assertEquals(AppRouter.Kind.PROMPT_IMPORT, universal.kind);
+        assertEquals("1234567", universal.shareCode);
+
+        AppRouter.DeepLink scheme = AppRouter.parse("voicedrop://prompt-import?code=7654321");
+        assertEquals(AppRouter.Kind.PROMPT_IMPORT, scheme.kind);
+        assertEquals("7654321", scheme.shareCode);
+
+        assertEquals(AppRouter.Kind.SHARE_LINK, AppRouter.parse("https://voicedrop.cn/12345678").kind);
+    }
 }

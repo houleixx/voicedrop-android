@@ -1008,6 +1008,12 @@ public final class RecordingsActivity extends Activity {
             openArticleDeepLink(link.stem);
             return true;
         }
+        if (link.kind == AppRouter.Kind.PROMPT_IMPORT) {
+            Intent promptImport = new Intent(this, PromptImportActivity.class);
+            promptImport.putExtra("shareCode", link.shareCode);
+            startActivity(promptImport);
+            return true;
+        }
         if (link.kind == AppRouter.Kind.SHARE_LINK) {
             new ReferralManager(this).noteShareToken(link.id);
             openShareLink(link.id, link.url);

@@ -64,6 +64,7 @@ import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.ReviewPrompter;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
+import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.data.WechatLogin;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -158,7 +159,7 @@ public final class RecordingDetailActivity extends Activity {
     protected CommunityTerms communityTerms;
     protected SettingsStore settingsStore;
     protected UsageStore usageStore;
-    protected UIConfigStore uiConfigStore;
+    protected PromptStore promptStore;
     protected DeviceLinkStore deviceLinkStore;
     protected ExportManager exportManager;
     protected DeviceLinkSession deviceLinkSession;
@@ -249,7 +250,7 @@ public final class RecordingDetailActivity extends Activity {
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
-        uiConfigStore = new UIConfigStore(this, auth, http);
+        promptStore = new PromptStore(this, auth, http);
         deviceLinkStore = new DeviceLinkStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
         uploader = new Uploader(this, auth, prefs, http);
@@ -280,7 +281,7 @@ public final class RecordingDetailActivity extends Activity {
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
         io.execute(() -> {
-            if (uiConfigStore != null) uiConfigStore.refresh();
+            if (promptStore != null) promptStore.refresh();
         });
         // Edge-to-edge: content extends behind status bar and navigation bar
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
@@ -2580,8 +2581,8 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showConfiguredTextMenu(View anchor, Recording rec, int line, String paragraph) {
-        if (rec == null || uiConfigStore == null) return;
-        UIConfigStore.MenuConfig menu = uiConfigStore.textMenu("voice-editor");
+        if (rec == null || promptStore == null) return;
+        UIConfigStore.MenuConfig menu = promptStore.textMenu();
         if (menu == null) return;
         showConfiguredMenu(anchor, menu, instruction ->
                 UIConfigStore.fill(instruction, "LINE", String.valueOf(line), "QUOTE", UIConfigStore.quotePrefix(paragraph)),
@@ -2594,8 +2595,8 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showConfiguredImageMenu(View anchor, Recording rec, String relKey) {
-        if (rec == null || relKey == null || uiConfigStore == null) return;
-        UIConfigStore.MenuConfig menu = uiConfigStore.imageMenu("voice-editor");
+        if (rec == null || relKey == null || promptStore == null) return;
+        UIConfigStore.MenuConfig menu = promptStore.imageMenu();
         if (menu == null) return;
         showConfiguredMenu(anchor, menu,
                 instruction -> UIConfigStore.fill(instruction, "KEY", relKey),

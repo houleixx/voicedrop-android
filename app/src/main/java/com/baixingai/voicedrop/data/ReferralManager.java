@@ -19,6 +19,10 @@ public final class ReferralManager {
     private static final String DONE = "done";
     private static final String FIRST_LAUNCH_AT = "firstLaunchAt";
     private static final long WINDOW_MS = 24L * 60L * 60L * 1000L;
+    // 邀请码链接（voicedrop.cn/i/<码>，2026-07-16 上线的「邀请好友」落地页）比分享
+    // 短链更窄，先判——与 iOS ReferralManager.shareToken 的模式顺序保持一致。
+    private static final Pattern INVITE = Pattern.compile(
+            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn|jianshuo\\.dev/voicedrop)/i/([A-Za-z0-9]{6,16})");
     private static final Pattern TOKEN = Pattern.compile(
             "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)([A-Za-z0-9_-]{6,16})");
 
@@ -26,7 +30,9 @@ public final class ReferralManager {
     private final AuthStore auth;
     private final HttpClient http;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private boolean running;
+    // 跨实例互斥：Application 启动与 Activity 焦点重试各自 new 实例，别并发 claim。
+    private static final java.util.concurrent.atomic.AtomicBoolean RUNNING =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     public ReferralManager(Context context) {
         this(context, new AuthStore(context), new HttpClient());
@@ -38,18 +44,21 @@ public final class ReferralManager {
         this.http = http;
     }
 
-    public void runOnLaunch() {
-        if (done() || !withinWindow() || running) return;
-        running = true;
+    /** @return true = 已处理（终局/过窗/已排队跑），false = 互斥占用中（调用方可稍后再试）。 */
+    public boolean runOnLaunch() {
+        if (done() || !withinWindow()) return true;
+        if (!RUNNING.compareAndSet(false, true)) return false;
         io.execute(() -> {
             try {
                 if (claim("hello", null)) return;
+                if (done()) return;   // hello 被服务端终局否定（not-new 等）→ 不再探剪贴板
                 String token = clipboardToken();
                 if (token != null) claim("clipboard", token);
             } finally {
-                running = false;
+                RUNNING.set(false);
             }
         });
+        return true;
     }
 
     public void noteShareToken(String id) {
@@ -108,6 +117,8 @@ public final class ReferralManager {
 
     public static String shareToken(String text) {
         if (text == null || text.isEmpty()) return null;
+        Matcher invite = INVITE.matcher(text);
+        if (invite.find()) return invite.group(1);
         Matcher matcher = TOKEN.matcher(text);
         while (matcher.find()) {
             String id = matcher.group(1);

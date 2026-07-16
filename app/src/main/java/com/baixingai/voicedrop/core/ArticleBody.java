@@ -96,6 +96,85 @@ public final class ArticleBody {
         return null;
     }
 
+    /**
+     * Replaces one visible body row without touching any surrounding whitespace,
+     * metadata comments, or photo markers. Row numbers match the detail screen:
+     * each non-blank text line and each photo marker consumes one row.
+     */
+    public static String replacingLine(int targetLine, String newText, String body) {
+        if (body == null || targetLine < 1 || newText == null) return body;
+        Matcher photos = MARKER.matcher(body);
+        int cursor = 0;
+        int line = 0;
+        while (photos.find()) {
+            TextLineMatch textMatch = findTextLine(body, cursor, photos.start(), targetLine, line);
+            if (textMatch.rangeStart >= 0) {
+                return body.substring(0, textMatch.rangeStart) + newText + body.substring(textMatch.rangeEnd);
+            }
+            line = textMatch.lineCount;
+            line++;
+            if (line == targetLine) return body; // Images are not editable text rows.
+            cursor = photos.end();
+        }
+        TextLineMatch tail = findTextLine(body, cursor, body.length(), targetLine, line);
+        if (tail.rangeStart < 0) return body;
+        return body.substring(0, tail.rangeStart) + newText + body.substring(tail.rangeEnd);
+    }
+
+    /**
+     * Maps a row rendered from a trimmed/duplicate-title-free body back into the
+     * original stored body, then performs the exact line replacement there.
+     */
+    public static String replacingRenderedLine(int targetLine, String newText,
+                                               String renderedBody, String originalBody) {
+        if (renderedBody == null || originalBody == null) return originalBody;
+        String replaced = replacingLine(targetLine, newText, renderedBody);
+        if (replaced == null || replaced.equals(renderedBody)) return originalBody;
+        int start = originalBody.indexOf(renderedBody);
+        if (start < 0) return originalBody;
+        return originalBody.substring(0, start) + replaced
+                + originalBody.substring(start + renderedBody.length());
+    }
+
+    private static TextLineMatch findTextLine(String body, int start, int end, int targetLine, int initialLine) {
+        int line = initialLine;
+        int lineStart = start;
+        while (lineStart <= end) {
+            int newline = body.indexOf('\n', lineStart);
+            int lineEnd = newline >= 0 && newline < end ? newline : end;
+            String raw = body.substring(lineStart, lineEnd);
+            String visible = ANY_COMMENT.matcher(raw).replaceAll("");
+            if (!visible.trim().isEmpty()) {
+                line++;
+                if (line == targetLine) {
+                    // Metadata comments are expected on their own lines. If one is
+                    // embedded beside visible text, do not risk rewriting it.
+                    if (!visible.equals(raw)) return new TextLineMatch(-1, -1, line);
+                    int leading = 0;
+                    while (leading < raw.length() && Character.isWhitespace(raw.charAt(leading))) leading++;
+                    int trailing = raw.length();
+                    while (trailing > leading && Character.isWhitespace(raw.charAt(trailing - 1))) trailing--;
+                    return new TextLineMatch(lineStart + leading, lineStart + trailing, line);
+                }
+            }
+            if (lineEnd >= end) break;
+            lineStart = lineEnd + 1;
+        }
+        return new TextLineMatch(-1, -1, line);
+    }
+
+    private static final class TextLineMatch {
+        final int rangeStart;
+        final int rangeEnd;
+        final int lineCount;
+
+        TextLineMatch(int rangeStart, int rangeEnd, int lineCount) {
+            this.rangeStart = rangeStart;
+            this.rangeEnd = rangeEnd;
+            this.lineCount = lineCount;
+        }
+    }
+
     public static String shareText(List<Article> articles) {
         boolean multi = articles.size() > 1;
         List<String> parts = new ArrayList<>();

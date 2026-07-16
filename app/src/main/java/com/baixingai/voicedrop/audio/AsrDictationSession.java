@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -26,9 +27,11 @@ import okio.ByteString;
 
 public final class AsrDictationSession {
     private static final String TAG = "AsrDictationSession";
-    private static final int SAMPLE_RATE = 16000;
+    private static final int CAPTURE_SAMPLE_RATE = 48_000;
+    private static final int ASR_SAMPLE_RATE = 16_000;
+    private static final int CAPTURE_CHUNK_MS = 100;
     private static final long FINAL_RESULT_TIMEOUT_MS = 3000;
-    private static final int ASR_WARMUP_SILENCE_MS = 160;
+    private static final long TAIL_CAPTURE_MS = 250;
 
     // Shared OkHttpClient — connection pooling makes reconnects faster.
     private static final OkHttpClient SHARED_CLIENT = new OkHttpClient.Builder()
@@ -43,15 +46,19 @@ public final class AsrDictationSession {
     private final ExecutorService senderThread = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean activated = new AtomicBoolean(false);
+    private final AtomicBoolean terminated = new AtomicBoolean(false);
+    private final Object executorLock = new Object();
+    private boolean executorsShutdown;
     private volatile boolean awaitingFinishResult;
+    private volatile boolean lastAudioSent;
     private volatile ScheduledFuture<?> finishTimeout;
-    private volatile Runnable finishComplete;
+    private volatile ScheduledFuture<?> tailStopFuture;
+    private final AtomicReference<Runnable> finishComplete = new AtomicReference<>();
     private WebSocket socket;
     private volatile int turnGeneration;
     private final Object recorderLock = new Object();
     private AudioRecord recorder;
-    // Used by finish() to know when the mic thread has actually started recording.
-    private volatile CountDownLatch micReady;
     private volatile CountDownLatch socketReady;
     private volatile PendingAudioFrames audioFrames;
 
@@ -83,14 +90,41 @@ public final class AsrDictationSession {
      * ASR config, so short utterances during connection setup are not lost.
      */
     public void start() {
-        Log.d(TAG, "start()");
-        if (!running.compareAndSet(false, true)) return;
-        micReady = new CountDownLatch(1);
-        socketReady = new CountDownLatch(1);
-        audioFrames = new PendingAudioFrames();
-        final int generation = ++turnGeneration;
+        if (!prepareCapture()) return;
+        activate();
+        if (running.get()) startMicLoop(audioFrames);
+    }
+
+    /** Start microphone capture without opening the ASR WebSocket. */
+    public void startCapture() {
+        if (!prepareCapture()) return;
         startMicLoop(audioFrames);
-        startSenderLoop(audioFrames, socketReady);
+    }
+
+    private boolean prepareCapture() {
+        Log.d(TAG, "prepareCapture()");
+        if (!running.compareAndSet(false, true)) return false;
+        cancelTailStop();
+        terminated.set(false);
+        activated.set(false);
+        awaitingFinishResult = false;
+        lastAudioSent = false;
+        audioFrames = new PendingAudioFrames();
+        ++turnGeneration;
+        return true;
+    }
+
+    /** Open the ASR connection and drain audio captured since startCapture(). */
+    public void activate() {
+        if (!running.get() || !activated.compareAndSet(false, true)) return;
+        PendingAudioFrames frames = audioFrames;
+        if (frames == null) {
+            activated.set(false);
+            return;
+        }
+        socketReady = new CountDownLatch(1);
+        final int generation = turnGeneration;
+        startSenderLoop(frames, socketReady);
 
         String token = bearerToken(auth);
         socket = client.newWebSocket(asrRequest(token), new WebSocketListener() {
@@ -98,12 +132,12 @@ public final class AsrDictationSession {
                 if (!isCurrentTurn(webSocket, generation)) return;
                 Log.d(TAG, "WebSocket opened");
                 try {
-                    webSocket.send(ByteString.of(VolcASRProtocol.buildFullClientPayload("voicedrop-android-edit", SAMPLE_RATE)));
+                    webSocket.send(ByteString.of(VolcASRProtocol.buildFullClientPayload(
+                            "voicedrop-android-edit", ASR_SAMPLE_RATE)));
                     onSocketReady(webSocket);
                 } catch (Exception e) {
                     Log.e(TAG, "onOpen error", e);
-                    listener.onError(e.getMessage());
-                    running.set(false);
+                    terminateWithError(e.getMessage());
                 }
             }
 
@@ -141,35 +175,37 @@ public final class AsrDictationSession {
             if (message.isError) listener.onError(message.errorMessage);
             if (message.text != null && !message.text.isEmpty()) listener.onText(message.text, message.isFinal);
             // When finishing, close the WebSocket once the final result arrives.
-            if (awaitingFinishResult && message.isFinal) {
+            if (awaitingFinishResult && lastAudioSent && message.isFinal) {
                 Log.d(TAG, "final result received, closing socket");
+                terminated.set(true);
                 awaitingFinishResult = false;
                 cancelFinishTimeout();
                 notifyFinishComplete();
                 closeSocket();
+                shutdownExecutors();
             }
         } catch (Exception e) {
             Log.e(TAG, "onMessage parse error", e);
-            listener.onError(e.getMessage());
+            terminateWithError(e.getMessage());
         }
     }
 
     private void handleSocketFailure(WebSocket webSocket, int generation, Throwable t) {
         if (!isCurrentTurn(webSocket, generation)) return;
         Log.e(TAG, "WebSocket failure", t);
-        if (running.get()) listener.onError(t.getMessage());
-        awaitingFinishResult = false;
-        cancelFinishTimeout();
-        notifyFinishComplete();
+        terminateWithError(t.getMessage());
     }
 
     private void handleSocketClosed(WebSocket webSocket, int generation, int code, String reason) {
         if (!isCurrentTurn(webSocket, generation)) return;
         Log.d(TAG, "WebSocket closed: code=" + code + " reason=" + reason);
         running.set(false);
+        terminated.set(true);
         awaitingFinishResult = false;
+        cancelTailStop();
         cancelFinishTimeout();
         notifyFinishComplete();
+        shutdownExecutors();
     }
 
     /**
@@ -183,37 +219,64 @@ public final class AsrDictationSession {
 
     public void finish(Runnable onComplete) {
         Log.d(TAG, "finish() called, running=" + running.get());
-        finishComplete = onComplete;
+        finishComplete.set(onComplete);
         if (!running.get()) {
             notifyFinishComplete();
             return;
         }
+        if (!activated.get()) {
+            finishComplete.set(null);
+            stop(onComplete);
+            return;
+        }
         awaitingFinishResult = true;
-
-        // Ensure the mic thread has started recording before we stop it.
-        CountDownLatch latch = micReady;
-        if (latch != null) {
-            try {
-                if (!latch.await(2000, TimeUnit.MILLISECONDS)) {
-                    Log.w(TAG, "mic thread never entered read loop");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+        if (!scheduleTailStop()) {
+            running.set(false);
+            awaitingFinishResult = false;
+            notifyFinishComplete();
+            closeSocket();
         }
 
-        // Signal the mic loop to stop and send isLast=true.
-        running.set(false);
+        // The sender arms the final-result timeout only after it has actually
+        // sent the last audio frame. Connection setup and buffered audio do not
+        // consume the server's response window.
+    }
 
-        // Schedule a safety timeout.
-        finishTimeout = scheduler.schedule(() -> {
-            if (awaitingFinishResult) {
-                Log.w(TAG, "finish timeout, closing socket");
-                awaitingFinishResult = false;
-                notifyFinishComplete();
-                closeSocket();
-            }
-        }, FINAL_RESULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    private boolean scheduleTailStop() {
+        cancelTailStop();
+        synchronized (executorLock) {
+            if (executorsShutdown) return false;
+            tailStopFuture = scheduler.schedule(() -> {
+                tailStopFuture = null;
+                // Keep recording briefly after ACTION_UP so the final spoken
+                // syllable already buffered by AudioRecord is included.
+                running.set(false);
+            }, TAIL_CAPTURE_MS, TimeUnit.MILLISECONDS);
+            return true;
+        }
+    }
+
+    private synchronized void cancelTailStop() {
+        if (tailStopFuture != null) {
+            tailStopFuture.cancel(false);
+            tailStopFuture = null;
+        }
+    }
+
+    private void armFinishTimeout() {
+        synchronized (executorLock) {
+            if (executorsShutdown || !awaitingFinishResult || finishTimeout != null) return;
+            finishTimeout = scheduler.schedule(() -> {
+                if (awaitingFinishResult) {
+                    Log.w(TAG, "finish timeout, closing socket");
+                    terminated.set(true);
+                    awaitingFinishResult = false;
+                    notifyFinishComplete();
+                    closeSocket();
+                    shutdownExecutors();
+                }
+            }, FINAL_RESULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        }
     }
 
     private void cancelFinishTimeout() {
@@ -224,8 +287,7 @@ public final class AsrDictationSession {
     }
 
     private void notifyFinishComplete() {
-        Runnable complete = finishComplete;
-        finishComplete = null;
+        Runnable complete = finishComplete.getAndSet(null);
         if (complete != null) complete.run();
     }
 
@@ -233,12 +295,21 @@ public final class AsrDictationSession {
      * Immediately abort dictation.
      */
     public void stop() {
+        stop(null);
+    }
+
+    public void stop(Runnable onStopped) {
         Log.d(TAG, "stop() called");
         turnGeneration++;
-        if (!running.getAndSet(false)) return;
+        terminated.set(true);
+        running.set(false);
+        activated.set(false);
         awaitingFinishResult = false;
+        cancelTailStop();
         cancelFinishTimeout();
-        finishComplete = null;
+        finishComplete.set(null);
+        PendingAudioFrames frames = audioFrames;
+        if (frames != null) frames.offer(new byte[0], true);
         AudioRecord localRecorder;
         synchronized (recorderLock) {
             localRecorder = recorder;
@@ -246,6 +317,49 @@ public final class AsrDictationSession {
         }
         releaseRecorder(localRecorder);
         closeSocket();
+        boolean runCallbackDirectly = false;
+        synchronized (executorLock) {
+            if (onStopped != null) {
+                if (executorsShutdown) runCallbackDirectly = true;
+                else audioThread.execute(onStopped);
+            }
+            executorsShutdown = true;
+            senderThread.shutdownNow();
+            scheduler.shutdownNow();
+            audioThread.shutdown();
+        }
+        if (runCallbackDirectly) onStopped.run();
+    }
+
+    private void shutdownExecutors() {
+        synchronized (executorLock) {
+            if (executorsShutdown) return;
+            executorsShutdown = true;
+            senderThread.shutdownNow();
+            scheduler.shutdownNow();
+            audioThread.shutdown();
+        }
+    }
+
+    private void terminateWithError(String message) {
+        if (!terminated.compareAndSet(false, true)) return;
+        running.set(false);
+        activated.set(false);
+        awaitingFinishResult = false;
+        cancelTailStop();
+        cancelFinishTimeout();
+        PendingAudioFrames frames = audioFrames;
+        if (frames != null) frames.offer(new byte[0], true);
+        AudioRecord localRecorder;
+        synchronized (recorderLock) {
+            localRecorder = recorder;
+            recorder = null;
+        }
+        releaseRecorder(localRecorder);
+        listener.onError(message == null || message.isEmpty() ? "听写失败" : message);
+        notifyFinishComplete();
+        closeSocket();
+        shutdownExecutors();
     }
 
     private void closeSocket() {
@@ -264,58 +378,72 @@ public final class AsrDictationSession {
     private void startMicLoop(PendingAudioFrames frames) {
         audioThread.execute(() -> {
             AudioRecord localRecorder = null;
-            if (!running.get()) return;
-            int minBuffer = AudioRecord.getMinBufferSize(SAMPLE_RATE,
+            if (!running.get()) {
+                if (awaitingFinishResult) frames.offer(new byte[0], true);
+                return;
+            }
+            int minBuffer = AudioRecord.getMinBufferSize(CAPTURE_SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            int frameSize = Math.max(minBuffer, SAMPLE_RATE / 5 * 2);
-            Log.d(TAG, "mic loop: minBuffer=" + minBuffer + " frameSize=" + frameSize);
-            localRecorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, frameSize * 2);
+            int chunkBytes = captureChunkBytes(CAPTURE_SAMPLE_RATE, CAPTURE_CHUNK_MS);
+            int recorderBufferBytes = Math.max(minBuffer, chunkBytes * 2);
+            Log.d(TAG, "mic loop: captureRate=" + CAPTURE_SAMPLE_RATE
+                    + " asrRate=" + ASR_SAMPLE_RATE + " minBuffer=" + minBuffer
+                    + " chunkBytes=" + chunkBytes + " recorderBuffer=" + recorderBufferBytes);
+            localRecorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    CAPTURE_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, recorderBufferBytes);
             synchronized (recorderLock) {
                 recorder = localRecorder;
             }
             if (localRecorder.getState() != AudioRecord.STATE_INITIALIZED) {
                 Log.e(TAG, "AudioRecord not initialized, state=" + localRecorder.getState());
-                listener.onError("AudioRecord 初始化失败");
-                CountDownLatch latch = micReady;
-                if (latch != null) latch.countDown();
-                synchronized (recorderLock) {
-                    if (recorder == localRecorder) recorder = null;
-                }
-                releaseRecorder(localRecorder);
+                terminateWithError("AudioRecord 初始化失败");
                 return;
             }
-            byte[] buffer = new byte[frameSize];
-            int totalBytes = 0;
+            byte[] captureBuffer = new byte[chunkBytes];
+            byte[] convertedBuffer = new byte[chunkBytes];
+            PcmDownsampler48To16 downsampler = new PcmDownsampler48To16();
+            int capturedBytes = 0;
+            int convertedBytes = 0;
             int maxAmplitude = 0;
             try {
                 localRecorder.startRecording();
-                CountDownLatch latch = micReady;
-                if (latch != null) latch.countDown();
-
-                Log.d(TAG, "recording started");
+                Log.d(TAG, "recording started, actualRate=" + localRecorder.getSampleRate());
                 while (running.get()) {
-                    int n = localRecorder.read(buffer, 0, buffer.length);
+                    int n = localRecorder.read(captureBuffer, 0, captureBuffer.length);
                     if (n > 0) {
-                        totalBytes += n;
-                        int frameRms = computeRms(buffer, n);
+                        int evenBytes = n & ~1;
+                        if (evenBytes == 0) continue;
+                        capturedBytes += evenBytes;
+                        int written = downsampler.downsample(
+                                captureBuffer, evenBytes, convertedBuffer);
+                        if (written == 0) continue;
+                        convertedBytes += written;
+                        int frameRms = computeRms(convertedBuffer, written);
                         maxAmplitude = Math.max(maxAmplitude, frameRms);
-                        if (totalBytes % 16000 < n) {
-                            Log.d(TAG, "audio frame: n=" + n + " rms=" + frameRms + " maxRms=" + maxAmplitude);
+                        if (convertedBytes % ASR_SAMPLE_RATE < written) {
+                            Log.d(TAG, "audio frame: captured=" + evenBytes
+                                    + " converted=" + written + " rms=" + frameRms
+                                    + " maxRms=" + maxAmplitude);
                         }
-                        byte[] pcm = buffer;
-                        if (n != buffer.length) {
-                            pcm = new byte[n];
-                            System.arraycopy(buffer, 0, pcm, 0, n);
-                        }
-                        frames.offer(pcm, false);
+                        byte[] pcm16 = new byte[written];
+                        System.arraycopy(convertedBuffer, 0, pcm16, 0, written);
+                        frames.offer(pcm16, false);
                     }
                 }
-                Log.d(TAG, "mic loop exiting, totalBytes=" + totalBytes + " maxAmplitude=" + maxAmplitude);
+                int flushed = downsampler.flush(convertedBuffer);
+                if (flushed > 0) {
+                    byte[] pcm16 = new byte[flushed];
+                    System.arraycopy(convertedBuffer, 0, pcm16, 0, flushed);
+                    frames.offer(pcm16, false);
+                    convertedBytes += flushed;
+                }
+                Log.d(TAG, "mic loop exiting, capturedBytes=" + capturedBytes
+                        + " convertedBytes=" + convertedBytes + " maxRms=" + maxAmplitude);
                 frames.offer(new byte[0], true);
             } catch (Exception e) {
                 Log.e(TAG, "mic loop exception", e);
-                listener.onError(e.getMessage());
+                terminateWithError(e.getMessage());
             } finally {
                 boolean shouldRelease;
                 synchronized (recorderLock) {
@@ -341,32 +469,36 @@ public final class AsrDictationSession {
             try {
                 if (!ready.await(5000, TimeUnit.MILLISECONDS)) {
                     Log.w(TAG, "WebSocket not ready within 5s");
-                    listener.onError("听写连接超时");
-                    running.set(false);
-                    closeSocket();
+                    terminateWithError("听写连接超时");
                     return;
                 }
                 int sequence = 2;
                 WebSocket ws = socket;
                 if (ws == null) return;
-                ws.send(ByteString.of(VolcASRProtocol.buildAudioPayload(
-                        warmupSilencePcm(SAMPLE_RATE, ASR_WARMUP_SILENCE_MS), sequence++, false)));
-                Thread.sleep(ASR_WARMUP_SILENCE_MS);
                 while (true) {
                     PendingAudioFrames.Frame frame = frames.take();
                     ws = socket;
                     if (ws == null) return;
-                    ws.send(ByteString.of(VolcASRProtocol.buildAudioPayload(frame.data, sequence++, frame.isLast)));
-                    if (frame.isLast) return;
-                    if (frames.queuedCount() > 0) {
-                        Thread.sleep(frameDurationMs(frame.data, SAMPLE_RATE));
+                    boolean sent = ws.send(ByteString.of(VolcASRProtocol.buildAudioPayload(frame.data, sequence++, frame.isLast)));
+                    if (frame.isLast) {
+                        if (sent) {
+                            lastAudioSent = true;
+                            armFinishTimeout();
+                        }
+                        else {
+                            awaitingFinishResult = false;
+                            notifyFinishComplete();
+                            closeSocket();
+                            shutdownExecutors();
+                        }
+                        return;
                     }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 Log.e(TAG, "sender loop exception", e);
-                listener.onError(e.getMessage());
+                terminateWithError(e.getMessage());
             }
         });
     }
@@ -383,9 +515,9 @@ public final class AsrDictationSession {
         return count > 0 ? (int) Math.sqrt(sum / count) : 0;
     }
 
-    static byte[] warmupSilencePcm(int sampleRate, int durationMs) {
-        int samples = Math.max(0, sampleRate * durationMs / 1000);
-        return new byte[samples * 2];
+    static int captureChunkBytes(int sampleRate, int durationMs) {
+        if (sampleRate <= 0 || durationMs <= 0) return 0;
+        return sampleRate * durationMs / 1000 * 2;
     }
 
     static long frameDurationMs(byte[] pcm16Mono, int sampleRate) {

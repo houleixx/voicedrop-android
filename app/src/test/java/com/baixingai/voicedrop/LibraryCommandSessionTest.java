@@ -3,6 +3,7 @@ package com.baixingai.voicedrop;
 import com.baixingai.voicedrop.net.LibraryCommandSession;
 
 import org.junit.Test;
+import org.json.JSONObject;
 
 import java.util.Arrays;
 
@@ -27,5 +28,14 @@ public class LibraryCommandSessionTest {
     public void buildsConfirmAndCancelPayloads() {
         assertEquals("{\"type\":\"confirm\",\"id\":\"abc\"}", LibraryCommandSession.confirmPayload("abc"));
         assertEquals("{\"type\":\"cancel\",\"id\":\"abc\"}", LibraryCommandSession.cancelPayload("abc"));
+    }
+
+    @Test
+    public void readsTheBackendConfirmationSummary() throws Exception {
+        JSONObject message = new JSONObject()
+                .put("type", "confirm")
+                .put("summary", "要删掉《文章2》吗？");
+
+        assertEquals("要删掉《文章2》吗？", LibraryCommandSession.confirmationText(message));
     }
 }

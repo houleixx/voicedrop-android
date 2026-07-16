@@ -164,11 +164,19 @@ public final class AboutActivity extends Activity {
             sub.setPadding(0, dp(4), 0, 0);
             texts.addView(sub);
         }
-        row.addView(text("›", 28, 0xffcfc6b6, Typeface.NORMAL));
+        row.addView(trailingChevron());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(8));
         content.addView(row, lp);
         row.setOnClickListener(v -> action.run());
+    }
+
+    private ImageView trailingChevron() {
+        ImageView chevron = new ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+        chevron.setColorFilter(0xffcfc6b6);
+        chevron.setLayoutParams(new LinearLayout.LayoutParams(dp(16), dp(16)));
+        return chevron;
     }
 
     private ImageView settingIcon(int iconResId) {

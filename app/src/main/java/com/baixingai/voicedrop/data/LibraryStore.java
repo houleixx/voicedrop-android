@@ -140,6 +140,37 @@ public final class LibraryStore {
         }
     }
 
+    /** Saves exact article text without involving the AI edit pipeline. */
+    public boolean saveArticles(Recording rec, List<MinedArticle> articles) {
+        if (rec == null || !rec.hasArticles || articles == null) return false;
+        try {
+            String url = Api.filesBase() + "/articles/" + Api.path(rec.stem());
+            HttpClient.Response current = http.get(url, auth.bearer());
+            if (!current.ok()) return false;
+            String merged = mergeArticlesJson(current.text(), articles);
+            HttpClient.Response saved = http.putBytes(
+                    url, auth.bearer(), "application/json", merged.getBytes("UTF-8"));
+            return saved.ok();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static String mergeArticlesJson(String rawJson, List<MinedArticle> articles) throws Exception {
+        JSONObject root = new JSONObject(rawJson);
+        JSONArray encoded = new JSONArray();
+        for (MinedArticle article : articles) {
+            JSONObject item = new JSONObject()
+                    .put("title", article.title)
+                    .put("body", article.body);
+            if (article.style != null) item.put("style", article.style);
+            if (article.wechatMediaId != null) item.put("wechatMediaId", article.wechatMediaId);
+            encoded.put(item);
+        }
+        root.put("articles", encoded);
+        return root.toString();
+    }
+
     public boolean delete(Recording rec) {
         boolean audioDeleted = deleteKey(rec.audioName);
         boolean articleDeleted = deleteKey(rec.articleKey());

@@ -91,6 +91,20 @@ public final class IosDialog extends Dialog {
         dialog.show();
     }
 
+    /** Required destructive confirmation that can only finish through one of its two actions. */
+    public static IosDialog showConfirmation(Context ctx, String title, String message,
+                                             String positiveText, Runnable onPositive,
+                                             String cancelText, Runnable onCancel) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.build(ctx, title, message, ViewGroup.LayoutParams.WRAP_CONTENT,
+                positiveText, onPositive, cancelText, onCancel,
+                false, false, false, false);
+        dialog.show();
+        return dialog;
+    }
+
     /** Required two-way choice that cannot be dismissed without choosing an action. */
     public static IosDialog showRequiredChoice(Context ctx, String title, View customView,
                                                String positiveText, Runnable onPositive,

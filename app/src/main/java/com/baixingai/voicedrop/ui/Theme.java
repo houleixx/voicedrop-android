@@ -3,6 +3,7 @@ package com.baixingai.voicedrop.ui;
 public final class Theme {
     public static final int BG = 0xfffaf6ef;
     public static final int CARD = 0xffffffff;
+    public static final int BORDER_CHROME = 0xffece3d5;
     public static final int INK = 0xff2a2521;
     public static final int SECONDARY = 0xff8a8175;
     public static final int FAINT = 0xffb8ae9e;

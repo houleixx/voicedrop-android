@@ -4,6 +4,7 @@ import com.baixingai.voicedrop.core.ArticleBody;
 
 import org.junit.Test;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -61,5 +62,39 @@ public class ArticleBodyTest {
                 new ArticleBody.Article("第二篇", "正文二")));
 
         assertEquals("【第一篇】\n\n正文一\n\n---\n\n【第二篇】\n\n正文二", share);
+    }
+
+    @Test
+    public void replacingLineOnlyChangesTheSelectedVisibleParagraph() throws Exception {
+        Method replacingLine = ArticleBody.class.getMethod(
+                "replacingLine", int.class, String.class, String.class);
+        String body = "<!-- style: 风格 v3 -->\n  第一段  \n\n[[photo:photos/s/1-a.jpg]]\n\n第三段";
+
+        String result = (String) replacingLine.invoke(null, 3, "第三段（已修改）", body);
+
+        assertEquals("<!-- style: 风格 v3 -->\n  第一段  \n\n[[photo:photos/s/1-a.jpg]]\n\n第三段（已修改）", result);
+    }
+
+    @Test
+    public void replacingLineDoesNotReplacePhotoRowsOrOutOfRangeRows() throws Exception {
+        Method replacingLine = ArticleBody.class.getMethod(
+                "replacingLine", int.class, String.class, String.class);
+        String body = "第一段\n[[photo:photos/s/1-a.jpg]]\n第三段";
+
+        assertEquals(body, replacingLine.invoke(null, 2, "不能替换图片", body));
+        assertEquals(body, replacingLine.invoke(null, 9, "越界", body));
+    }
+
+    @Test
+    public void replacingRenderedLineSkipsTheDuplicateTitleHiddenByTheDetailScreen() throws Exception {
+        Method replacingRenderedLine = ArticleBody.class.getMethod(
+                "replacingRenderedLine", int.class, String.class, String.class, String.class);
+        String original = "<!-- style: 风格 v2 -->\n标题\n\n第一段\n[[photo:photos/s/1-a.jpg]]\n第二段";
+        String rendered = "第一段\n[[photo:photos/s/1-a.jpg]]\n第二段";
+
+        String result = (String) replacingRenderedLine.invoke(
+                null, 1, "第一段（已修改）", rendered, original);
+
+        assertEquals("<!-- style: 风格 v2 -->\n标题\n\n第一段（已修改）\n[[photo:photos/s/1-a.jpg]]\n第二段", result);
     }
 }

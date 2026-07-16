@@ -25,10 +25,14 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -61,7 +65,6 @@ import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.Recording;
-import com.baixingai.voicedrop.data.ReviewPrompter;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.data.PromptStore;
@@ -207,6 +210,23 @@ public final class RecordingDetailActivity extends Activity {
     protected int articleHistoryHead = -1;
     protected int articleHistoryCount = 0;
     protected boolean activityDestroyed;
+    protected View articleToolbarBack;
+    protected Space articleToolbarSpacer;
+    protected LinearLayout articleToolbarActions;
+    protected LinearLayout articleInlineEditActions;
+    protected TextView articleInlineEditDone;
+    protected View articleEditPanel;
+    protected EditText inlineEditingInput;
+    protected FrameLayout inlineEditingRow;
+    protected TextView inlineEditingReadView;
+    protected ViewGroup.LayoutParams inlineEditingReadLayoutParams;
+    protected Recording inlineEditingRecording;
+    protected String inlineEditingOriginal;
+    protected String inlineEditingRenderedBody;
+    protected int inlineEditingLine = -1;
+    protected int inlineEditingArticleIndex = -1;
+    protected int inlineEditingViewIndex = -1;
+    protected boolean inlineEditingSaving;
     protected JSONArray articleHistoryVersions = new JSONArray();
     protected ZonedDateTime recordingStart;
     protected Recording insertPhotoTarget;
@@ -346,6 +366,10 @@ public final class RecordingDetailActivity extends Activity {
     }
     @Override
     public void onBackPressed() {
+        if (inlineEditingInput != null) {
+            cancelInlineParagraphEdit();
+            return;
+        }
         if (isDetailActivity()) {
             finishDetailActivity();
         } else {
@@ -533,6 +557,8 @@ public final class RecordingDetailActivity extends Activity {
         holdEditPromptText = null;
         holdEditCanceled = false;
         holdEditFinishing = false;
+        dismissInlineKeyboard();
+        clearInlineParagraphEditReferences();
         setArticleLocatorsVisible(false);
         articleLocatorViews.clear();
         currentArticleDoc = null;
@@ -870,7 +896,6 @@ public final class RecordingDetailActivity extends Activity {
         }
         currentArticleStem = rec.stem();
         currentArticleDoc = doc;
-        if (firstOpenForStem) ReviewPrompter.articleOpened(this);
         ensureArticleEditSession(rec);
         refreshCommunityShareState(rec);
 
@@ -888,14 +913,17 @@ public final class RecordingDetailActivity extends Activity {
         bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
+        articleToolbarBack = bar.getChildAt(bar.getChildCount() - 1);
 
         Space titleSpacer = new Space(this);
         bar.addView(titleSpacer, new LinearLayout.LayoutParams(0, 1, 1));
+        articleToolbarSpacer = titleSpacer;
 
         LinearLayout iconRow = new LinearLayout(this);
         iconRow.setOrientation(LinearLayout.HORIZONTAL);
         iconRow.setGravity(Gravity.CENTER_VERTICAL);
         bar.addView(iconRow, new LinearLayout.LayoutParams(-2, dp(48)));
+        articleToolbarActions = iconRow;
 
         addPlaybackButton(iconRow, rec);
         toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.IMAGE_UPLOAD_FLAT, Theme.INK, dp(25), dp(40), dp(2), true, () -> pickArticlePhoto(rec));
@@ -904,6 +932,10 @@ public final class RecordingDetailActivity extends Activity {
         if (refreshHistory) refreshArticleHistoryState(rec);
 
         toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY, dp(18), dp(38), dp(2), true, v -> showMoreMenu(rec, v));
+
+        articleInlineEditActions = buildInlineEditToolbar();
+        articleInlineEditActions.setVisibility(View.GONE);
+        bar.addView(articleInlineEditActions, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         scroll.setClipChildren(false);
@@ -1216,6 +1248,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showStyleVersions(Recording rec, Integer currentStyleVersion) {
+        if (inlineEditingInput != null) return;
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(14), dp(10), dp(14), dp(18));
@@ -2020,6 +2053,7 @@ public final class RecordingDetailActivity extends Activity {
             lp.setMargins(0, 0, dp(8), 0);
             chipRow.addView(chip, lp);
             chip.setOnClickListener(v -> {
+                if (inlineEditingInput != null) return;
                 articleIndex = idx;
                 showArticle(rec, doc);
             });
@@ -2127,7 +2161,7 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void renderArticleOrDefer(Recording rec, ArticleDoc doc) {
         if (!isActivityActive()) return;
-        if (isHoldArticleEditActiveFor(rec)) {
+        if (isHoldArticleEditActiveFor(rec) || isInlineParagraphEditingFor(rec)) {
             deferredArticleRenderRecording = rec;
             deferredArticleRenderDoc = doc;
             return;
@@ -2141,8 +2175,13 @@ public final class RecordingDetailActivity extends Activity {
                 && (holdEditButton != null || holdEditFinishing);
     }
 
+    protected boolean isInlineParagraphEditingFor(Recording rec) {
+        return inlineEditingInput != null && inlineEditingRecording != null && rec != null
+                && inlineEditingRecording.stem().equals(rec.stem());
+    }
+
     protected void applyDeferredArticleRenderIfIdle() {
-        if (holdEditButton != null || holdEditFinishing) return;
+        if (holdEditButton != null || holdEditFinishing || inlineEditingInput != null) return;
         if (deferredArticleRenderRecording == null || deferredArticleRenderDoc == null) return;
         if (!deferredArticleRenderRecording.stem().equals(currentArticleStem)) {
             deferredArticleRenderRecording = null;
@@ -2158,6 +2197,7 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void renderArticleEditBar(FrameLayout page, Recording rec) {
         LinearLayout panel = new LinearLayout(this);
+        articleEditPanel = panel;
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(20), dp(8), dp(20), dp(18));
 
@@ -2368,7 +2408,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void updateHoldArticleEditLiveText() {
-        if (holdEditButton == null || holdEditCanceled || holdEditFinishing) return;
+        if (holdEditButton == null || holdEditCanceled) return;
         updateHoldArticleEditTranscriptBubble();
     }
 
@@ -2411,6 +2451,8 @@ public final class RecordingDetailActivity extends Activity {
         }
         // Normal release: gracefully finish — the session will wait for the ASR
         // server's final result and close the WebSocket asynchronously.
+        holdEditPromptText = "正在识别…";
+        updateHoldArticleEditTranscriptBubble();
         updateHoldArticleEditButton(holdEditButton, "正在整理…", Theme.AMBER_BG, Theme.INK);
         dictationIo.execute(() -> session.finish(() -> main.post(() -> completeHoldArticleEdit(rec, session))));
     }
@@ -2566,12 +2608,12 @@ public final class RecordingDetailActivity extends Activity {
                     row.addView(body, new FrameLayout.LayoutParams(-1, -2));
                     row.setOnLongClickListener(v -> {
                         Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
-                        showConfiguredTextMenu(v, rec, paragraphLine, paragraphText);
+                        showConfiguredTextMenu(v, rec, paragraphLine, paragraphText, bodyText, row, body);
                         return true;
                     });
                     body.setOnLongClickListener(v -> {
                         Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
-                        showConfiguredTextMenu(row, rec, paragraphLine, paragraphText);
+                        showConfiguredTextMenu(row, rec, paragraphLine, paragraphText, bodyText, row, body);
                         return true;
                     });
                     content.addView(row, new LinearLayout.LayoutParams(-1, -2));
@@ -2580,7 +2622,9 @@ public final class RecordingDetailActivity extends Activity {
         }
     }
 
-    protected void showConfiguredTextMenu(View anchor, Recording rec, int line, String paragraph) {
+    protected void showConfiguredTextMenu(View anchor, Recording rec, int line, String paragraph,
+                                          String renderedBody,
+                                          FrameLayout paragraphRow, TextView paragraphView) {
         if (rec == null || promptStore == null) return;
         UIConfigStore.MenuConfig menu = promptStore.textMenu();
         if (menu == null) return;
@@ -2591,7 +2635,194 @@ public final class RecordingDetailActivity extends Activity {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", paragraph));
                     toast("已拷贝");
-                }));
+                }),
+                new LocalMenuRow("编辑", AliIconFont.EDIT,
+                        () -> startInlineParagraphEdit(
+                                rec, paragraphRow, paragraphView, line, paragraph, renderedBody)));
+    }
+
+    protected LinearLayout buildInlineEditToolbar() {
+        LinearLayout controls = new LinearLayout(this);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView cancel = text("取消", 15, Theme.SECONDARY, Typeface.NORMAL);
+        cancel.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        cancel.setOnClickListener(v -> cancelInlineParagraphEdit());
+        controls.addView(cancel, new LinearLayout.LayoutParams(0, -1, 1));
+
+        articleInlineEditDone = text("完成", 15, Theme.RED, Typeface.BOLD);
+        articleInlineEditDone.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        articleInlineEditDone.setOnClickListener(v -> finishInlineParagraphEdit());
+        controls.addView(articleInlineEditDone, new LinearLayout.LayoutParams(0, -1, 1));
+        return controls;
+    }
+
+    protected void startInlineParagraphEdit(Recording rec, FrameLayout row, TextView readView,
+                                            int line, String paragraph, String renderedBody) {
+        if (inlineEditingInput != null || rec == null || row == null || readView == null
+                || currentArticleDoc == null || !rec.stem().equals(currentArticleStem)) return;
+        if (holdEditButton != null || holdEditFinishing || !editQueue.isEmpty()) {
+            toast("当前修改完成后再精修");
+            return;
+        }
+
+        EditText input = new EditText(this);
+        input.setText(paragraph);
+        input.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16);
+        input.setTextColor(0xff5d574f);
+        input.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        input.setBackgroundColor(Color.TRANSPARENT);
+        input.setIncludeFontPadding(readView.getIncludeFontPadding());
+        input.setPadding(readView.getPaddingLeft(), readView.getPaddingTop(),
+                readView.getPaddingRight(), readView.getPaddingBottom());
+        input.setLineSpacing(dp(9), 1.0f);
+        input.setSingleLine(false);
+        input.setMaxLines(Integer.MAX_VALUE);
+        input.setHorizontallyScrolling(false);
+        input.setRawInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        input.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                finishInlineParagraphEdit();
+                return true;
+            }
+            return false;
+        });
+        input.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN) {
+                finishInlineParagraphEdit();
+                return true;
+            }
+            return false;
+        });
+
+        inlineEditingInput = input;
+        inlineEditingRow = row;
+        inlineEditingReadView = readView;
+        inlineEditingReadLayoutParams = readView.getLayoutParams();
+        inlineEditingViewIndex = row.indexOfChild(readView);
+        inlineEditingRecording = rec;
+        inlineEditingOriginal = paragraph;
+        inlineEditingRenderedBody = renderedBody;
+        inlineEditingLine = line;
+        inlineEditingArticleIndex = articleIndex;
+        inlineEditingSaving = false;
+
+        row.removeView(readView);
+        row.addView(input, Math.max(0, inlineEditingViewIndex), inlineEditingReadLayoutParams);
+        setInlineParagraphEditChrome(true);
+        input.requestFocus();
+        input.setSelection(input.length());
+        main.post(() -> {
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    protected void finishInlineParagraphEdit() {
+        if (inlineEditingInput == null || inlineEditingSaving) return;
+        String edited = inlineEditingInput.getText().toString().trim();
+        if (edited.isEmpty() || edited.equals(inlineEditingOriginal)) {
+            cancelInlineParagraphEdit();
+            return;
+        }
+        Recording rec = inlineEditingRecording;
+        int index = inlineEditingArticleIndex;
+        if (rec == null || currentArticleDoc == null || index < 0 || index >= currentArticleDoc.articles.size()) {
+            toast("文章状态已变化，请重试");
+            cancelInlineParagraphEdit();
+            return;
+        }
+
+        MinedArticle article = currentArticleDoc.articles.get(index);
+        String newBody = ArticleBody.replacingRenderedLine(
+                inlineEditingLine, edited, inlineEditingRenderedBody, article.body);
+        if (newBody.equals(article.body)) {
+            cancelInlineParagraphEdit();
+            return;
+        }
+        List<MinedArticle> newArticles = new ArrayList<>(currentArticleDoc.articles);
+        newArticles.set(index, new MinedArticle(
+                article.title, newBody, article.style, article.wechatMediaId));
+        ArticleDoc next = new ArticleDoc(
+                currentArticleDoc.id, currentArticleDoc.transcript, newArticles,
+                currentArticleDoc.tags, currentArticleDoc.questions,
+                currentArticleDoc.photos, currentArticleDoc.ownerScope);
+
+        inlineEditingSaving = true;
+        inlineEditingInput.setEnabled(false);
+        if (articleInlineEditDone != null) {
+            articleInlineEditDone.setText("保存中…");
+            articleInlineEditDone.setEnabled(false);
+            articleInlineEditDone.setAlpha(0.55f);
+        }
+        io.execute(() -> {
+            boolean ok = library.saveArticles(rec, newArticles);
+            ArticleDoc saved = ok ? library.fetchDoc(rec) : null;
+            main.post(() -> {
+                if (!isActivityActive() || inlineEditingRecording != rec) return;
+                if (!ok) {
+                    inlineEditingSaving = false;
+                    inlineEditingInput.setEnabled(true);
+                    if (articleInlineEditDone != null) {
+                        articleInlineEditDone.setText("完成");
+                        articleInlineEditDone.setEnabled(true);
+                        articleInlineEditDone.setAlpha(1f);
+                    }
+                    toast("保存失败，请重试");
+                    inlineEditingInput.requestFocus();
+                    return;
+                }
+                dismissInlineKeyboard();
+                clearInlineParagraphEditReferences();
+                deferredArticleRenderRecording = null;
+                deferredArticleRenderDoc = null;
+                showArticle(rec, saved == null ? next : saved, false, true);
+            });
+        });
+    }
+
+    protected void cancelInlineParagraphEdit() {
+        if (inlineEditingInput == null || inlineEditingSaving) return;
+        dismissInlineKeyboard();
+        if (inlineEditingRow != null && inlineEditingReadView != null) {
+            inlineEditingRow.removeView(inlineEditingInput);
+            inlineEditingRow.addView(inlineEditingReadView,
+                    Math.max(0, inlineEditingViewIndex), inlineEditingReadLayoutParams);
+        }
+        setInlineParagraphEditChrome(false);
+        clearInlineParagraphEditReferences();
+        applyDeferredArticleRenderIfIdle();
+    }
+
+    protected void setInlineParagraphEditChrome(boolean editing) {
+        if (articleToolbarBack != null) articleToolbarBack.setVisibility(editing ? View.GONE : View.VISIBLE);
+        if (articleToolbarSpacer != null) articleToolbarSpacer.setVisibility(editing ? View.GONE : View.VISIBLE);
+        if (articleToolbarActions != null) articleToolbarActions.setVisibility(editing ? View.GONE : View.VISIBLE);
+        if (articleInlineEditActions != null) articleInlineEditActions.setVisibility(editing ? View.VISIBLE : View.GONE);
+        if (articleEditPanel != null) articleEditPanel.setVisibility(editing ? View.GONE : View.VISIBLE);
+    }
+
+    protected void dismissInlineKeyboard() {
+        if (inlineEditingInput == null) return;
+        InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(inlineEditingInput.getWindowToken(), 0);
+        inlineEditingInput.clearFocus();
+    }
+
+    protected void clearInlineParagraphEditReferences() {
+        inlineEditingInput = null;
+        inlineEditingRow = null;
+        inlineEditingReadView = null;
+        inlineEditingReadLayoutParams = null;
+        inlineEditingRecording = null;
+        inlineEditingOriginal = null;
+        inlineEditingRenderedBody = null;
+        inlineEditingLine = -1;
+        inlineEditingArticleIndex = -1;
+        inlineEditingViewIndex = -1;
+        inlineEditingSaving = false;
     }
 
     protected void showConfiguredImageMenu(View anchor, Recording rec, String relKey) {

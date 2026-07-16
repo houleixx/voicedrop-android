@@ -3,8 +3,10 @@ package com.baixingai.voicedrop.net;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.baixingai.voicedrop.data.CommandQueueStore;
+import com.baixingai.voicedrop.data.CommandStateStore;
 import com.baixingai.voicedrop.data.AuthStore;
 
 import org.json.JSONArray;
@@ -22,6 +24,7 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 
 public final class LibraryCommandSession {
+    private static final String TAG = "LibraryCommandSession";
     public interface Listener {
         void onQueueChanged(List<CommandRequest> queue);
         void onReply(String text, boolean ok);
@@ -36,8 +39,15 @@ public final class LibraryCommandSession {
     private final Listener listener;
     private final OkHttpClient client = new OkHttpClient();
     private final List<CommandRequest> queue = new ArrayList<>();
+    private final List<CommandStateStore.Control> controls = new ArrayList<>();
+    private final List<CommandStateStore.Confirmation> confirmations = new ArrayList<>();
     private WebSocket socket;
     private boolean closed;
+    private boolean opened;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable reconnectRunnable = () -> {
+        if (!closed && socket == null) connect();
+    };
     private List<CommandRef> refs = new ArrayList<>();
 
     public LibraryCommandSession(Context context, AuthStore auth, Listener listener) {
@@ -45,6 +55,8 @@ public final class LibraryCommandSession {
         this.auth = auth;
         this.listener = listener;
         queue.addAll(CommandQueueStore.load(this.context));
+        controls.addAll(CommandStateStore.loadControls(this.context));
+        confirmations.addAll(CommandStateStore.loadConfirmations(this.context));
     }
 
     public void setRefs(List<CommandRef> refs) {
@@ -54,33 +66,34 @@ public final class LibraryCommandSession {
     public void connect() {
         closed = false;
         if (socket != null) return;
+        main.removeCallbacks(reconnectRunnable);
         listener.onQueueChanged(queueSnapshot());
         listener.onState(queue.isEmpty() ? "已连接图库指令" : "正在恢复图库指令…");
+        notifyConfirmations();
         Request request = new Request.Builder()
                 .url(Api.agentWs() + "/command")
                 .header("Authorization", "Bearer " + auth.bearer())
                 .build();
         socket = client.newWebSocket(request, new WebSocketListener() {
             @Override public void onOpen(WebSocket webSocket, Response response) {
+                if (closed || webSocket != socket) return;
+                opened = true;
                 listener.onState("已连接图库指令");
                 resubmitAll();
+                flushControls();
             }
 
             @Override public void onMessage(WebSocket webSocket, String text) {
+                if (closed || webSocket != socket) return;
                 handle(text);
             }
 
             @Override public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                socket = null;
-                if (!closed) {
-                    listener.onState("图库指令连接断开，稍后重试");
-                    reconnectLater();
-                }
+                scheduleReconnect(webSocket);
             }
 
             @Override public void onClosed(WebSocket webSocket, int code, String reason) {
-                socket = null;
-                if (!closed) reconnectLater();
+                scheduleReconnect(webSocket);
             }
         });
     }
@@ -97,11 +110,11 @@ public final class LibraryCommandSession {
     }
 
     public void confirm(String id) {
-        if (socket != null && id != null && !id.isEmpty()) socket.send(confirmPayload(id));
+        queueControl("confirm", id);
     }
 
     public void cancel(String id) {
-        if (socket != null && id != null && !id.isEmpty()) socket.send(cancelPayload(id));
+        queueControl("cancel", id);
     }
 
     private void resubmitAll() {
@@ -109,7 +122,7 @@ public final class LibraryCommandSession {
     }
 
     private void send(CommandRequest request) {
-        if (socket == null) return;
+        if (socket == null || !opened) return;
         socket.send(payloadFor(request.id, request.text, refs));
     }
 
@@ -118,19 +131,26 @@ public final class LibraryCommandSession {
             JSONObject obj = new JSONObject(text);
             String type = obj.optString("type");
             String id = obj.optString("id", "");
+            Log.d(TAG, "message type=" + type + " id=" + (id.isEmpty() ? "-" : id));
             if ("status".equals(type)) {
                 listener.onState("working".equals(obj.optString("state")) ? "正在执行图库指令" : obj.optString("state", "已连接图库指令"));
                 return;
             }
             if ("reply".equals(type)) {
                 listener.onReply(obj.optString("text", ""), obj.optBoolean("ok", true));
+                clearCommandState(id);
+                if (!id.isEmpty()) resolve(id);
                 return;
             }
             if ("confirm".equals(type)) {
-                listener.onConfirm(id, obj.optString("text", obj.optString("message", "确认执行这条图库指令？")));
+                if (hasControl(id)) return;
+                String confirmationText = confirmationText(obj);
+                rememberConfirmation(id, confirmationText);
+                listener.onConfirm(id, confirmationText);
                 return;
             }
             if ("updated".equals(type)) {
+                clearCommandState(id);
                 listener.onUpdate(strings(obj.optJSONArray("stems")));
                 resolve(id);
                 return;
@@ -139,6 +159,7 @@ public final class LibraryCommandSession {
                 String message = obj.optString("message", "图库指令执行失败");
                 listener.onReply(message, false);
                 listener.onError(message);
+                clearCommandState(id);
                 resolve(id);
                 return;
             }
@@ -165,6 +186,7 @@ public final class LibraryCommandSession {
             if (!id.isEmpty()) known.add(id);
             if ("done".equals(status) || "error".equals(status)) done.add(id);
         }
+        for (String id : done) clearCommandState(id);
         for (String id : done) remove(id);
         for (CommandRequest request : queue) if (!known.contains(request.id)) send(request);
         persist();
@@ -203,9 +225,79 @@ public final class LibraryCommandSession {
     }
 
     private void reconnectLater() {
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!closed && socket == null) connect();
-        }, 1500);
+        main.removeCallbacks(reconnectRunnable);
+        main.postDelayed(reconnectRunnable, 1500);
+    }
+
+    private void scheduleReconnect(WebSocket current) {
+        if (socket != current) return;
+        socket = null;
+        opened = false;
+        if (closed) return;
+        listener.onState("图库指令连接断开，稍后重试");
+        reconnectLater();
+    }
+
+    private void notifyConfirmations() {
+        for (CommandStateStore.Confirmation confirmation : new ArrayList<>(confirmations)) {
+            listener.onConfirm(confirmation.id, confirmation.text);
+        }
+    }
+
+    private void queueControl(String type, String id) {
+        if (id == null || id.isEmpty()) return;
+        clearConfirmation(id);
+        for (Iterator<CommandStateStore.Control> it = controls.iterator(); it.hasNext();) {
+            if (it.next().id.equals(id)) it.remove();
+        }
+        controls.add(new CommandStateStore.Control(type, id));
+        CommandStateStore.saveControls(context, controls);
+        flushControls();
+    }
+
+    private void flushControls() {
+        if (socket == null || !opened) return;
+        for (CommandStateStore.Control control : new ArrayList<>(controls)) {
+            socket.send("confirm".equals(control.type) ? confirmPayload(control.id) : cancelPayload(control.id));
+        }
+    }
+
+    private boolean hasControl(String id) {
+        if (id == null || id.isEmpty()) return false;
+        for (CommandStateStore.Control control : controls) if (id.equals(control.id)) return true;
+        return false;
+    }
+
+    private void rememberConfirmation(String id, String text) {
+        if (id == null || id.isEmpty()) return;
+        clearConfirmation(id);
+        confirmations.add(new CommandStateStore.Confirmation(id, text));
+        CommandStateStore.saveConfirmations(context, confirmations);
+    }
+
+    private void clearConfirmation(String id) {
+        if (id == null || id.isEmpty()) return;
+        boolean changed = false;
+        for (Iterator<CommandStateStore.Confirmation> it = confirmations.iterator(); it.hasNext();) {
+            if (it.next().id.equals(id)) {
+                it.remove();
+                changed = true;
+            }
+        }
+        if (changed) CommandStateStore.saveConfirmations(context, confirmations);
+    }
+
+    private void clearCommandState(String id) {
+        clearConfirmation(id);
+        if (id == null || id.isEmpty()) return;
+        boolean changed = false;
+        for (Iterator<CommandStateStore.Control> it = controls.iterator(); it.hasNext();) {
+            if (it.next().id.equals(id)) {
+                it.remove();
+                changed = true;
+            }
+        }
+        if (changed) CommandStateStore.saveControls(context, controls);
     }
 
     private void persist() {
@@ -218,8 +310,20 @@ public final class LibraryCommandSession {
 
     public void close() {
         closed = true;
-        if (socket != null) socket.close(1000, "bye");
+        opened = false;
+        main.removeCallbacks(reconnectRunnable);
+        WebSocket current = socket;
         socket = null;
+        if (current != null) current.close(1000, "bye");
+    }
+
+    public static String confirmationText(JSONObject obj) {
+        if (obj == null) return "确认执行这条图库指令？";
+        String summary = obj.optString("summary", "");
+        if (!summary.isEmpty()) return summary;
+        String text = obj.optString("text", "");
+        if (!text.isEmpty()) return text;
+        return obj.optString("message", "确认执行这条图库指令？");
     }
 
     public static String payloadFor(String id, String text, List<CommandRef> refs) {

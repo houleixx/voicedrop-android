@@ -9,6 +9,7 @@ public final class AliIconFont {
     public static final int CAMERA = R.drawable.ic_camera;
     public static final int CHEVRON_RIGHT_FLAT = R.drawable.ic_chevron_right_flat;
     public static final int DOC = R.drawable.ic_doc;
+    public static final int EDIT = R.drawable.ic_settings_pen;
     public static final int FLAG = R.drawable.ic_flag;
     public static final int HAND = R.drawable.ic_hand;
     public static final int HEART = R.drawable.ic_heart;

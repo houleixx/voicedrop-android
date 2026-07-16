@@ -1,5 +1,8 @@
 package com.baixingai.voicedrop.net;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import com.baixingai.voicedrop.data.AuthStore;
 
 import okhttp3.OkHttpClient;
@@ -21,6 +24,11 @@ public final class StatusSession {
     private final Listener listener;
     private final OkHttpClient client = new OkHttpClient();
     private WebSocket socket;
+    private boolean closed;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable reconnectRunnable = () -> {
+        if (!closed && socket == null) connect();
+    };
 
     public StatusSession(AuthStore auth, Listener listener) {
         this.auth = auth;
@@ -28,13 +36,16 @@ public final class StatusSession {
     }
 
     public void connect() {
+        closed = false;
         if (socket != null) return;
+        main.removeCallbacks(reconnectRunnable);
         Request request = new Request.Builder()
                 .url(Api.agentWs() + "/status")
                 .header("Authorization", "Bearer " + auth.bearer())
                 .build();
         socket = client.newWebSocket(request, new WebSocketListener() {
             @Override public void onMessage(WebSocket webSocket, String text) {
+                if (webSocket != socket || closed) return;
                 try {
                     AgentMessage.LinkRequest request = AgentMessage.linkRequest(text);
                     if (request != null) {
@@ -58,18 +69,30 @@ public final class StatusSession {
             }
 
             @Override public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                socket = null;
+                if (webSocket != socket || closed) return;
                 listener.onError(t.getMessage());
+                scheduleReconnect(webSocket);
             }
 
             @Override public void onClosed(WebSocket webSocket, int code, String reason) {
-                socket = null;
+                scheduleReconnect(webSocket);
             }
         });
     }
 
-    public void close() {
-        if (socket != null) socket.close(1000, "bye");
+    private void scheduleReconnect(WebSocket current) {
+        if (socket != current) return;
         socket = null;
+        if (closed) return;
+        main.removeCallbacks(reconnectRunnable);
+        main.postDelayed(reconnectRunnable, 1500);
+    }
+
+    public void close() {
+        closed = true;
+        main.removeCallbacks(reconnectRunnable);
+        WebSocket current = socket;
+        socket = null;
+        if (current != null) current.close(1000, "bye");
     }
 }

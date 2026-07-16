@@ -21,6 +21,7 @@ import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
+import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
@@ -42,6 +43,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SettingsActivity extends Activity {
+    private interface CardBuilder {
+        void build(LinearLayout card);
+    }
+
     public static final String EXTRA_SHOW_WECHAT = "showWechat";
     private static final int REQ_CREATE_EXPORT_ZIP = 301;
     static final int[] SETTING_ROW_ICON_RES_IDS = {
@@ -58,20 +63,25 @@ public class SettingsActivity extends Activity {
             R.drawable.ic_settings_export
     };
 
+    private AuthStore auth;
     private LibraryStore library;
     private SettingsStore settingsStore;
+    private UsageStore usageStore;
     private ExportManager exportManager;
     private File pendingExportZip;
     private TextView nameValueText;
+    private TextView usageBalanceText;
+    private TextView usageCapacityText;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        AuthStore auth = new AuthStore(this);
+        auth = new AuthStore(this);
         HttpClient http = new HttpClient();
         library = new LibraryStore(auth, http);
         settingsStore = new SettingsStore(auth, http);
+        usageStore = new UsageStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
 
         configureEdgeToEdge();
@@ -147,28 +157,271 @@ public class SettingsActivity extends Activity {
     }
 
     private void rebuildPrimarySettings(LinearLayout content) {
-        addSection(content, "账户");
-        addSettingRow(content, R.drawable.ic_settings_account, "账户", "匿名身份、数据与转移", this::openAccount);
+        // 顶部卡片：账户、算力
+        addPrimaryCard(content);
 
-        addSection(content, "创作");
-        nameValueText = addSettingRowWithValue(content, R.drawable.ic_settings_account, "名字",
-                "文章署名，以及挖文章时对你的称呼", "", this::showNameEditor);
-        loadNameRowValue();
-        addSettingRow(content, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
-        addSettingRow(content, R.drawable.ic_settings_ai_instruction, "提示词", "自定义长按菜单里的每个动作", this::openInstructionSettings);
-        addSettingRow(content, R.drawable.ic_settings_broadcast, "公众号", "配置 AppID / Secret，发布草稿", this::openWechatSettings);
-        addSettingRow(content, R.drawable.ic_settings_bolt, "算力", "余额、消耗明细、约可成文篇数", this::openUsage);
+        // 写作
+        addSection(content, "写作");
+        addCard(content, card -> {
+            nameValueText = addCardRowWithValue(card, R.drawable.ic_settings_name_card, "名字",
+                    "署名和挖文章时对你的称呼", "", this::showNameEditor);
+            loadNameRowValue();
+            addCardDivider(card);
+            addCardRow(card, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
+            addCardDivider(card);
+            addCardRow(card, R.drawable.ic_settings_ai_instruction, "提示词", "自定义长按菜单里的每个动作", this::openInstructionSettings);
+        });
 
-        addSection(content, "同步与社区");
-        addAutoShareSwitchRow(content, R.drawable.ic_settings_community);
+        // 发布
+        addSection(content, "发布");
+        addCard(content, card -> {
+            addCardRow(card, R.drawable.ic_settings_broadcast, "微信公众号", "成文一键推送到草稿箱", this::openWechatSettings);
+            addCardDivider(card);
+            addCardSwitchRow(card, R.drawable.ic_settings_community);
+        });
 
-        addSection(content, "存储");
-        addSettingRow(content, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
+        // 其他
+        addSection(content, "其他");
+        addCard(content, card -> {
+            addCardRow(card, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
+            addCardDivider(card);
+            addCardRowWithValue(card, R.drawable.ic_settings_update, "检查更新", "", appVersionName(), () -> AppUpdateManager.checkManually(this));
+            addCardDivider(card);
+            addCardRow(card, R.drawable.ic_settings_info, "关于", null, this::openAbout);
+        });
+    }
 
-        addSection(content, "关于");
-        addSettingRow(content, R.drawable.ic_settings_info, "关于", null, this::openAbout);
-        addSettingRow(content, R.drawable.ic_settings_update, "检查更新", null, () -> AppUpdateManager.checkManually(this));
-        addInfoRow(content, R.drawable.ic_settings_version, "版本", appVersionName());
+    private void addPrimaryCard(LinearLayout content) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(settingsCardBackground());
+
+        LinearLayout accountRow = new LinearLayout(this);
+        accountRow.setOrientation(LinearLayout.HORIZONTAL);
+        accountRow.setGravity(Gravity.CENTER_VERTICAL);
+        accountRow.setPadding(dp(16), dp(13), dp(16), dp(13));
+        accountRow.addView(settingIcon(R.drawable.ic_settings_account));
+        LinearLayout accountTexts = new LinearLayout(this);
+        accountTexts.setOrientation(LinearLayout.VERTICAL);
+        accountTexts.setGravity(Gravity.CENTER_VERTICAL);
+        accountRow.addView(accountTexts, new LinearLayout.LayoutParams(0, -2, 1));
+        accountTexts.addView(text("账户", 16, Theme.INK, Typeface.BOLD));
+        accountTexts.addView(text("无需登录 · ID 已随 iCloud 钥匙串备份", 12, Theme.SECONDARY, Typeface.NORMAL));
+        String anonId = auth.anonId();
+        String shortId = anonId != null && anonId.length() >= 6 ? anonId.substring(anonId.length() - 6).toUpperCase() : "";
+        TextView idText = text(shortId, 13, Theme.FAINT, Typeface.NORMAL);
+        idText.setTypeface(Typeface.MONOSPACE);
+        LinearLayout.LayoutParams idLp = new LinearLayout.LayoutParams(-2, -2);
+        idLp.gravity = Gravity.CENTER_VERTICAL;
+        idLp.setMargins(0, 0, dp(8), 0);
+        accountRow.addView(idText, idLp);
+        accountRow.addView(settingsChevron());
+        accountRow.setOnClickListener(v -> openAccount());
+        card.addView(accountRow);
+
+        View divider = new View(this);
+        divider.setBackgroundColor(0xfff0e8da);
+        card.addView(divider, cardDividerLayoutParams());
+
+        LinearLayout usageRow = new LinearLayout(this);
+        usageRow.setOrientation(LinearLayout.HORIZONTAL);
+        usageRow.setGravity(Gravity.CENTER_VERTICAL);
+        usageRow.setPadding(dp(16), dp(13), dp(16), dp(13));
+        usageRow.addView(settingIcon(R.drawable.ic_settings_bolt));
+        LinearLayout usageTexts = new LinearLayout(this);
+        usageTexts.setOrientation(LinearLayout.VERTICAL);
+        usageRow.addView(usageTexts, new LinearLayout.LayoutParams(0, -2, 1));
+        usageTexts.addView(text("算力", 16, Theme.INK, Typeface.BOLD));
+        usageCapacityText = text("余额与消耗明细", 12, Theme.SECONDARY, Typeface.NORMAL);
+        usageTexts.addView(usageCapacityText);
+        usageBalanceText = text("", 15, Theme.AMBER, Typeface.BOLD);
+        usageBalanceText.setVisibility(View.GONE);
+        LinearLayout.LayoutParams balanceLp = new LinearLayout.LayoutParams(-2, -2);
+        balanceLp.gravity = Gravity.CENTER_VERTICAL;
+        balanceLp.setMargins(0, 0, dp(8), 0);
+        usageRow.addView(usageBalanceText, balanceLp);
+        usageRow.addView(settingsChevron());
+        usageRow.setOnClickListener(v -> openUsage());
+        card.addView(usageRow);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, 0);
+        content.addView(card, lp);
+        loadPrimaryUsageBalance();
+    }
+
+    private void loadPrimaryUsageBalance() {
+        io.execute(() -> {
+            try {
+                UsageStore.Balance balance = usageStore.balance();
+                runOnUiThread(() -> {
+                    if (usageBalanceText == null || usageCapacityText == null) return;
+                    usageBalanceText.setText(String.valueOf((int) Math.round(balance.suanli)));
+                    usageBalanceText.setVisibility(View.VISIBLE);
+                    usageCapacityText.setText("约可成文 " + UsageStore.articleCapacity(balance.suanli) + " 篇");
+                });
+            } catch (Exception ignored) {
+                // Best-effort summary. The detail page reports load failures itself.
+            }
+        });
+    }
+
+    private void addCard(LinearLayout content, CardBuilder buildRows) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(settingsCardBackground());
+        buildRows.build(card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        content.addView(card, lp);
+    }
+
+    private ImageView settingsChevron() {
+        ImageView chevron = new ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+        chevron.setColorFilter(0xffcfc6b6);
+        chevron.setLayoutParams(new LinearLayout.LayoutParams(dp(16), dp(16)));
+        return chevron;
+    }
+
+    private void addCardRow(LinearLayout card, int iconResId, String title, String subtitle, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.addView(settingIcon(iconResId));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        texts.addView(text(title, 16, Theme.INK, Typeface.BOLD));
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView sub = text(subtitle, 12, Theme.SECONDARY, Typeface.NORMAL);
+            sub.setPadding(0, dp(4), 0, 0);
+            texts.addView(sub);
+        }
+        row.addView(settingsChevron());
+        card.addView(row);
+        if (action != null) row.setOnClickListener(v -> action.run());
+    }
+
+    private TextView addCardRowWithValue(LinearLayout card, int iconResId, String title, String subtitle, String value, Runnable action) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBaselineAligned(false);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.addView(settingIcon(iconResId));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        texts.addView(text(title, 16, Theme.INK, Typeface.BOLD));
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView sub = text(subtitle, 12, Theme.SECONDARY, Typeface.NORMAL);
+            sub.setPadding(0, dp(4), 0, 0);
+            texts.addView(sub);
+        }
+        TextView valueText = text(value == null ? "" : value, 15, Theme.SECONDARY, Typeface.NORMAL);
+        valueText.setSingleLine(true);
+        valueText.setEllipsize(TextUtils.TruncateAt.END);
+        valueText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        valueText.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams valueLp = new LinearLayout.LayoutParams(-2, -2);
+        valueLp.gravity = Gravity.CENTER_VERTICAL;
+        valueLp.setMargins(0, 0, dp(4), 0);
+        row.addView(valueText, valueLp);
+        row.addView(settingsChevron());
+        card.addView(row);
+        row.setOnClickListener(v -> action.run());
+        return valueText;
+    }
+
+    private void addCardDivider(LinearLayout card) {
+        View divider = new View(this);
+        divider.setBackgroundColor(0xfff0e8da);
+        card.addView(divider, cardDividerLayoutParams());
+    }
+
+    private LinearLayout.LayoutParams cardDividerLayoutParams() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+        lp.setMargins(dp(56), 0, 0, 0);
+        return lp;
+    }
+
+    private void addCardSwitchRow(LinearLayout card, int iconResId) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.addView(settingIcon(iconResId));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        texts.addView(text("自动分享到 VD 社区", 16, Theme.INK, Typeface.BOLD));
+        TextView sub = text("挖出新文章后自动发到社区", 12, Theme.SECONDARY, Typeface.NORMAL);
+        sub.setPadding(0, dp(4), 0, 0);
+        texts.addView(sub);
+
+        IosSwitch autoShare = new IosSwitch(this);
+        row.addView(autoShare, new LinearLayout.LayoutParams(-2, -2));
+
+        card.addView(row);
+
+        final boolean[] ready = {false};
+        autoShare.setEnabled(false);
+        io.execute(() -> {
+            try {
+                JSONObject cfg = settingsStore.loadConfig();
+                boolean enabled = cfg.optBoolean("autoShareCommunity", false);
+                runOnUiThread(() -> {
+                    ready[0] = false;
+                    autoShare.setChecked(enabled);
+                    ready[0] = true;
+                    autoShare.setEnabled(true);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    ready[0] = true;
+                    autoShare.setEnabled(true);
+                    toast("配置读取失败：" + e.getMessage());
+                });
+            }
+        });
+
+        autoShare.setOnCheckedChangeListener((button, checked) -> {
+            if (!ready[0]) return;
+            button.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    settingsStore.saveConfig(checked);
+                    toast(checked ? "已开启自动分享到社区" : "已关闭自动分享到社区");
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        ready[0] = false;
+                        autoShare.setChecked(!checked);
+                        ready[0] = true;
+                        toast("配置保存失败：" + e.getMessage());
+                    });
+                } finally {
+                    runOnUiThread(() -> button.setEnabled(true));
+                }
+            });
+        });
+        row.setOnClickListener(v -> {
+            if (autoShare.isEnabled()) {
+                autoShare.setChecked(!autoShare.isChecked());
+            }
+        });
+    }
+
+    private void addInfoRowToCard(LinearLayout card, int iconResId, String title, String value) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.addView(settingIcon(iconResId));
+        row.addView(text(title, 16, Theme.INK, Typeface.BOLD), new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text(value, 15, Theme.SECONDARY, Typeface.NORMAL));
+        card.addView(row);
     }
 
     private void finishWithPageTransition() {
@@ -231,7 +484,7 @@ public class SettingsActivity extends Activity {
             sub.setPadding(0, dp(4), 0, 0);
             texts.addView(sub);
         }
-        row.addView(text("›", 28, 0xffcfc6b6, Typeface.NORMAL));
+        row.addView(settingsChevron());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(8));
         content.addView(row, lp);
@@ -261,7 +514,7 @@ public class SettingsActivity extends Activity {
         LinearLayout.LayoutParams valueLp = new LinearLayout.LayoutParams(dp(96), -2);
         valueLp.setMargins(dp(12), 0, dp(8), 0);
         row.addView(valueText, valueLp);
-        row.addView(text("›", 28, 0xffcfc6b6, Typeface.NORMAL));
+        row.addView(settingsChevron());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(8));
         content.addView(row, lp);
@@ -853,6 +1106,12 @@ public class SettingsActivity extends Activity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private GradientDrawable settingsCardBackground() {
+        GradientDrawable drawable = round(Theme.CARD, 12);
+        drawable.setStroke(dp(1), Theme.BORDER_CHROME);
         return drawable;
     }
 

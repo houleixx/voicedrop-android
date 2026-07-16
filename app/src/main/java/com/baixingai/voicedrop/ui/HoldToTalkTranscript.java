@@ -1,31 +1,22 @@
 package com.baixingai.voicedrop.ui;
 
 public final class HoldToTalkTranscript {
-    private final StringBuilder finalText = new StringBuilder();
-    private String partialText = "";
+    private String latestText = "";
 
     public synchronized void clear() {
-        finalText.setLength(0);
-        partialText = "";
+        latestText = "";
     }
 
     public synchronized void accept(String text, boolean isFinal) {
         String trimmed = text == null ? "" : text.trim();
         if (trimmed.isEmpty()) return;
-        if (isFinal) {
-            if (finalText.length() > 0 && finalText.charAt(finalText.length() - 1) != ' ') {
-                finalText.append(' ');
-            }
-            finalText.append(trimmed);
-            partialText = "";
-        } else {
-            partialText = trimmed;
-        }
+        // Volc ASR sends cumulative transcript snapshots. Always keep the
+        // newest snapshot, even when a late partial follows an early final.
+        latestText = trimmed;
     }
 
     public synchronized String bestText() {
-        String text = finalText.toString().trim();
-        return text.isEmpty() ? partialText.trim() : text;
+        return latestText;
     }
 
     public synchronized String bubbleText() {

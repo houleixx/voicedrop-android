@@ -208,8 +208,8 @@ public final class InstructionSettingsActivity extends Activity {
     private View promptRow(PromptListPresentation.Row row) {
         LinearLayout line = horizontal();
         line.setGravity(Gravity.CENTER_VERTICAL);
-        line.setPadding(dp(14 + row.depth * 18), dp(5), dp(14), dp(5));
-        line.setMinimumHeight(dp(row.group ? 46 : 44));
+        line.setPadding(dp(14 + row.depth * 18), dp(8), dp(14), dp(8));
+        line.setMinimumHeight(dp(row.group ? 52 : 56));
 
         ImageView icon = iconTile(row.group ? R.drawable.ic_prompt_folder
                 : ("仅图片".equals(row.appliesLabel) ? R.drawable.ic_image : R.drawable.ic_doc),
@@ -248,9 +248,7 @@ public final class InstructionSettingsActivity extends Activity {
             chevron.setScaleType(ImageView.ScaleType.CENTER);
             line.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(40)));
         } else {
-            TextView chevron = text("›", 28, Typeface.NORMAL, Theme.FAINT);
-            chevron.setGravity(Gravity.CENTER);
-            line.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(40)));
+            line.addView(trailingChevron());
         }
 
         line.setOnClickListener(v -> {
@@ -331,10 +329,17 @@ public final class InstructionSettingsActivity extends Activity {
         copy.addView(text("输入魔法数字导入", 16, Typeface.BOLD, Theme.INK));
         copy.addView(text("把别人分享的提示词存进你的菜单", 13, Typeface.NORMAL, Theme.SECONDARY));
         box.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView arrow = text("›", 28, Typeface.NORMAL, Theme.FAINT); arrow.setGravity(Gravity.CENTER);
-        box.addView(arrow, new LinearLayout.LayoutParams(dp(30), dp(40)));
+        box.addView(trailingChevron());
         box.setOnClickListener(v -> showImportSheet());
         return box;
+    }
+
+    private ImageView trailingChevron() {
+        ImageView chevron = new ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+        chevron.setColorFilter(Theme.FAINT);
+        chevron.setLayoutParams(new LinearLayout.LayoutParams(dp(16), dp(16)));
+        return chevron;
     }
 
     private void showImportSheet() {
@@ -525,7 +530,7 @@ public final class InstructionSettingsActivity extends Activity {
         ImageView icon = iconTile("✎".equals(symbol) ? R.drawable.ic_settings_pen : R.drawable.ic_prompt_folder, "✎".equals(symbol)); addIconWithSpacing(row, icon, 48);
         LinearLayout copy = vertical(); copy.addView(text(title, 17, Typeface.BOLD, Theme.INK)); copy.addView(text(subtitle, 13, Typeface.NORMAL, Theme.SECONDARY));
         row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView arrow = text("›", 28, Typeface.NORMAL, Theme.FAINT); arrow.setGravity(Gravity.CENTER); row.addView(arrow, new LinearLayout.LayoutParams(dp(30), dp(40)));
+        row.addView(trailingChevron());
         row.setOnClickListener(v -> action.run()); return row;
     }
 
@@ -579,7 +584,7 @@ public final class InstructionSettingsActivity extends Activity {
     private View divider(int left) { View view = new View(this); view.setBackgroundColor(DIVIDER); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(1)); p.leftMargin = dp(left); view.setLayoutParams(p); return view; }
     private TextView text(String value, int sp, int style, int color) { TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v; }
     private TextView squareButton(String value, boolean accent) { TextView v = text(value, 22, Typeface.NORMAL, accent ? Color.WHITE : Theme.INK); v.setGravity(Gravity.CENTER); v.setIncludeFontPadding(false); v.setBackground(rounded(accent ? Theme.ACCENT : Color.WHITE, 12)); v.setElevation(dp(2)); return v; }
-    private void addIconWithSpacing(LinearLayout parent, ImageView icon, int size) { LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(size), dp(size)); iconLp.rightMargin = dp(8); parent.addView(icon, iconLp); }
+    private void addIconWithSpacing(LinearLayout parent, ImageView icon, int size) { LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(size), dp(size)); iconLp.rightMargin = dp(12); parent.addView(icon, iconLp); }
     private ImageView iconTile(int iconResId, boolean accent) { ImageView v = new ImageView(this); v.setImageResource(iconResId); v.setColorFilter(accent ? Theme.ACCENT : Theme.SECONDARY); v.setScaleType(ImageView.ScaleType.CENTER); v.setPadding(dp(8), dp(8), dp(8), dp(8)); v.setBackground(rounded(accent ? Theme.ACCENT_SOFT : TILE_NEUTRAL, 10)); return v; }
     private GradientDrawable rounded(int color, int radius) { return outlined(color, radius, Color.TRANSPARENT, 0, 0, 0); }
     private GradientDrawable outlined(int color, int radius, int stroke, int width, int dash, int gap) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); if (width > 0) d.setStroke(dp(width), stroke, dp(dash), dp(gap)); return d; }

@@ -95,7 +95,7 @@ public class SettingsActivitySourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
 
         assertTrue(source.contains("private TextView nameValueText"));
-        assertTrue(source.contains("addSettingRowWithValue(content, R.drawable.ic_settings_account, \"名字\""));
+        assertTrue(source.contains("addCardRowWithValue(card, R.drawable.ic_settings_name_card, \"名字\""));
         assertTrue(source.contains("loadNameRowValue()"));
         assertTrue(source.contains("nameValueText.setText(style.name"));
         assertTrue(source.contains("nameValueText.setText(name)"));

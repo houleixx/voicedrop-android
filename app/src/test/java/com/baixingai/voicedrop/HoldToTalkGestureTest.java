@@ -30,13 +30,22 @@ public class HoldToTalkGestureTest {
         Assert.assertEquals("把标题改得更温柔", transcript.bestText());
     }
 
-    @Test public void multipleFinalSegmentsAreJoinedWithSpaces() {
+    @Test public void eachAsrMessageReplacesThePreviousCumulativeSnapshot() {
         HoldToTalkTranscript transcript = new HoldToTalkTranscript();
 
         transcript.accept("第一句", true);
         transcript.accept("第二句", true);
 
-        Assert.assertEquals("第一句 第二句", transcript.bestText());
+        Assert.assertEquals("第二句", transcript.bestText());
+    }
+
+    @Test public void aLaterPartialSnapshotCanRestoreWordsMissingFromAnEarlyFinal() {
+        HoldToTalkTranscript transcript = new HoldToTalkTranscript();
+
+        transcript.accept("帮我删除", true);
+        transcript.accept("帮我删除第三篇", false);
+
+        Assert.assertEquals("帮我删除第三篇", transcript.bestText());
     }
 
     @Test public void bubbleTextShowsListeningHintUntilRecognitionArrives() {

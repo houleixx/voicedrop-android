@@ -24,6 +24,19 @@ public class PromptShareSourceTest {
         assertTrue(activity.contains("分享这条提示词"));
         assertTrue(activity.contains("Api.sharePage"));
         assertTrue(activity.contains("Intent.ACTION_SEND"));
+        assertTrue(activity.contains("setOnCheckedChangeListener"));
+        assertTrue(activity.contains("分享中，关闭后分享码立即失效"));
+        assertTrue(activity.contains("分享的始终是已保存的版本"));
+        assertTrue(activity.contains("updateShareVersionWarning"));
+        assertTrue(activity.contains("state.sharing && !state.code.isEmpty()"));
+        assertTrue(activity.contains("shareAction(\"复制数字\", R.drawable.ic_copy_flat"));
+        assertTrue(activity.contains("shareAction(\"复制链接\", R.drawable.ic_link_flat"));
+        assertTrue(activity.contains("shareAction(\"分享…\", R.drawable.ic_share_up"));
+        assertTrue(activity.contains("labelParams.leftMargin = dp(4)"));
+        assertFalse(activity.contains("setCompoundDrawablePadding"));
+        assertTrue(activity.contains("setIncludeFontPadding(false)"));
+        assertTrue(readSource("src/main/res/drawable/ic_copy_flat.xml").contains("<vector"));
+        assertTrue(readSource("src/main/res/drawable/ic_link_flat.xml").contains("<vector"));
         assertFalse(legacyStore.contains("/ui-config"));
         assertTrue(detail.contains("PromptStore"));
     }

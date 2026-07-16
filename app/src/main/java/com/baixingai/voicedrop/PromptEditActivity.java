@@ -49,6 +49,7 @@ public final class PromptEditActivity extends Activity {
     private TextView textCard, imageCard;
     private ImageView textCheck, imageCheck;
     private LinearLayout shareArea;
+    private TextView shareVersionWarning;
     private TextView saveButton;
     private boolean saving;
 
@@ -257,7 +258,10 @@ public final class PromptEditActivity extends Activity {
         if (multiline) v.setMinLines(4);
         v.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateSaveState(); }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                updateSaveState();
+                updateShareVersionWarning();
+            }
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
         return v;
@@ -287,6 +291,7 @@ public final class PromptEditActivity extends Activity {
             textChecked = !textChecked;
             updateApplyCard(textCardLayout, textCard, textCheck, textIcon, textChecked);
             updateSaveState();
+            updateShareVersionWarning();
         });
         row.addView(textCardLayout, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -303,6 +308,7 @@ public final class PromptEditActivity extends Activity {
             imageChecked = !imageChecked;
             updateApplyCard(imageCardLayout, imageCard, imageCheck, imageIcon, imageChecked);
             updateSaveState();
+            updateShareVersionWarning();
         });
         row.addView(imageCardLayout, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -368,7 +374,12 @@ public final class PromptEditActivity extends Activity {
     }
 
     private void renderShare(PromptStore.ShareState state) {
+        renderShare(state, null);
+    }
+
+    private void renderShare(PromptStore.ShareState state, String error) {
         shareArea.removeAllViews();
+        shareVersionWarning = null;
 
         LinearLayout card = vertical();
         card.setBackground(rounded(Theme.CARD, 14));
@@ -376,55 +387,121 @@ public final class PromptEditActivity extends Activity {
 
         LinearLayout header = horizontal();
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(text("分享这条提示词", 15, Typeface.BOLD, Theme.INK), new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout heading = vertical();
+        heading.addView(text("分享这条提示词", 15, Typeface.NORMAL, Theme.INK));
+        TextView desc = text(state.sharing
+                        ? "分享中，关闭后分享码立即失效"
+                        : "开启后，任何人对 VoiceDrop 说出分享码，或打开链接，就能看到并一次性使用这条提示词",
+                12, Typeface.NORMAL, Theme.FAINT);
+        desc.setLineSpacing(0, 1.15f);
+        desc.setPadding(0, dp(2), dp(8), 0);
+        heading.addView(desc);
+        header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
 
         IosSwitch toggle = new IosSwitch(this);
         toggle.setChecked(state.sharing);
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            button.setEnabled(false);
+            io.execute(() -> {
+                PromptStore.ShareState next = store.setSharing(original.id, checked);
+                runOnUiThread(() -> {
+                    if (next.error == null) renderShare(next);
+                    else renderShare(state, next.error);
+                });
+            });
+        });
         header.addView(toggle, new LinearLayout.LayoutParams(-2, -2));
         card.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView desc = text("开启后，任何人对 VoiceDrop 说出分享码，或打开链接，就能看到并一次性使用这条提示词。",
-                13, Typeface.NORMAL, 0xffc9c2b6);
-        desc.setLineSpacing(0, 1.15f);
-        desc.setPadding(0, dp(6), 0, dp(4));
-        card.addView(desc);
+        if (error != null) {
+            TextView errorView = text(error, 12, Typeface.NORMAL, Theme.ACCENT);
+            errorView.setPadding(0, dp(8), 0, 0);
+            card.addView(errorView);
+        }
 
-        shareArea.addView(card, new LinearLayout.LayoutParams(-1, -2));
-
-        if (!state.code.isEmpty()) {
-            LinearLayout shareCard = vertical();
-            shareCard.setBackground(rounded(Theme.CARD, 14));
-            shareCard.setPadding(dp(16), dp(14), dp(16), dp(14));
-            shareArea.addView(shareCard, margins(-1, -2, 0, 12, 0, 0));
-
-            TextView codeLabel = text("分享码  " + state.code, 22, Typeface.BOLD, Theme.INK);
+        if (state.sharing && !state.code.isEmpty()) {
+            TextView codeLabel = text(state.code, 34, Typeface.BOLD, Theme.INK);
+            codeLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            codeLabel.setLetterSpacing(0.18f);
             codeLabel.setGravity(Gravity.CENTER);
-            shareCard.addView(codeLabel);
+            codeLabel.setPadding(0, dp(12), 0, 0);
+            card.addView(codeLabel);
+
+            TextView linkLabel = text("voicedrop.cn/" + state.code, 13, Typeface.NORMAL, Theme.SECONDARY);
+            linkLabel.setGravity(Gravity.CENTER);
+            linkLabel.setPadding(0, dp(4), 0, 0);
+            card.addView(linkLabel);
 
             LinearLayout actions = horizontal();
-            actions.setPadding(0, dp(8), 0, 0);
-            shareCard.addView(actions);
+            actions.setPadding(0, dp(12), 0, 0);
+            card.addView(actions);
 
-            actions.addView(shareAction("复制数字", () -> copy(state.code)),
+            actions.addView(shareAction("复制数字", R.drawable.ic_copy_flat, () -> copy(state.code)),
                     new LinearLayout.LayoutParams(0, dp(40), 1));
-            actions.addView(shareAction("复制链接", () -> copy(Api.sharePage(state.code))),
+            actions.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+            actions.addView(shareAction("复制链接", R.drawable.ic_link_flat, () -> copy(Api.sharePage(state.code))),
                     new LinearLayout.LayoutParams(0, dp(40), 1));
+            actions.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+            actions.addView(shareAction("分享…", R.drawable.ic_share_up, () -> sharePrompt(state.code)),
+                    new LinearLayout.LayoutParams(0, dp(40), 1));
+
+            shareVersionWarning = text("分享的始终是已保存的版本", 12, Typeface.NORMAL, Theme.FAINT);
+            shareVersionWarning.setGravity(Gravity.CENTER);
+            shareVersionWarning.setPadding(0, dp(8), 0, 0);
+            card.addView(shareVersionWarning);
+            updateShareVersionWarning();
         }
+
+        shareArea.addView(card, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private TextView shareAction(String label, Runnable action) {
-        TextView v = text(label, 14, Typeface.BOLD, Theme.ACCENT);
-        v.setGravity(Gravity.CENTER);
-        v.setPadding(dp(10), dp(8), dp(10), dp(8));
-        v.setBackground(rounded(Theme.ACCENT_SOFT, 8));
-        v.setOnClickListener(x -> action.run());
-        return v;
+    private View shareAction(String label, int iconRes, Runnable action) {
+        LinearLayout button = horizontal();
+        button.setGravity(Gravity.CENTER);
+        button.setPadding(dp(6), dp(8), dp(6), dp(8));
+        button.setBackground(rounded(Theme.ACCENT_SOFT, 8));
+
+        ImageView icon = new ImageView(this);
+        AliIconFont.apply(icon, iconRes, Theme.ACCENT);
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.addView(icon, new LinearLayout.LayoutParams(dp(16), dp(16)));
+
+        TextView labelView = text(label, 13, Typeface.BOLD, Theme.ACCENT);
+        labelView.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-2, -2);
+        labelParams.leftMargin = dp(4);
+        button.addView(labelView, labelParams);
+
+        button.setOnClickListener(x -> action.run());
+        return button;
     }
 
     private void copy(String value) {
         ClipboardManager manager = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (manager != null) manager.setPrimaryClip(ClipData.newPlainText("VoiceDrop", value));
         toast("已复制");
+    }
+
+    private void sharePrompt(String code) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, Api.sharePage(code));
+        startActivity(Intent.createChooser(intent, "分享提示词"));
+    }
+
+    private boolean hasUnsavedChanges() {
+        String name = labelInput == null ? "" : labelInput.getText().toString().trim();
+        String instruction = promptInput == null ? "" : promptInput.getText().toString().trim();
+        return !name.equals(original.label == null ? "" : original.label.trim())
+                || !instruction.equals(original.prompt == null ? "" : original.prompt.trim())
+                || textChecked != original.appliesTo.contains("text")
+                || imageChecked != original.appliesTo.contains("image");
+    }
+
+    private void updateShareVersionWarning() {
+        if (shareVersionWarning != null) {
+            shareVersionWarning.setVisibility(hasUnsavedChanges() ? View.VISIBLE : View.GONE);
+        }
     }
 
     // --- Helpers ---

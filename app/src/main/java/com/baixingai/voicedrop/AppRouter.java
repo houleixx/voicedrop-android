@@ -91,10 +91,16 @@ public final class AppRouter {
         if (segs.size() == 1 && SHARE_ID.matcher(first).matches() && !isStaticPath(first)) {
             return new DeepLink(Kind.SHARE_LINK, "", "", first, rawUrl);
         }
+        // 邀请落地页 /i/<码>：已装用户点邀请链接直接进 App（归因第 1 层），
+        // 不开下载页——与 iOS 的 DeepLink.invite 同款。
+        if (segs.size() == 2 && "i".equals(first) && INVITE_CODE.matcher(segs.get(1)).matches()) {
+            return new DeepLink(Kind.INVITE, "", "", segs.get(1), rawUrl);
+        }
         return new DeepLink(Kind.WEB, "", "", "", rawUrl);
     }
 
     private static final Pattern SHARE_ID = Pattern.compile("^[A-Za-z0-9_-]{6,16}$");
+    private static final Pattern INVITE_CODE = Pattern.compile("^[A-Za-z0-9]{6,16}$");
     private static final Pattern PROMPT_CODE = Pattern.compile("^[1-9][0-9]{6}$");
 
     private static boolean isStaticPath(String path) {
@@ -133,6 +139,7 @@ public final class AppRouter {
         ARTICLE,
         PROMPT_IMPORT,
         SHARE_LINK,
+        INVITE,
         WEB
     }
 

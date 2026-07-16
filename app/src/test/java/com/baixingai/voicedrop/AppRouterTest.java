@@ -43,6 +43,22 @@ public class AppRouterTest {
     }
 
     @Test
+    public void parsesInviteLandingLinks() {
+        // 已装用户点邀请链接 → 进 App 记归因，不开下载页（与 iOS DeepLink.invite 同款）
+        AppRouter.DeepLink invite = AppRouter.parse("https://voicedrop.cn/i/ABC123");
+        assertEquals(AppRouter.Kind.INVITE, invite.kind);
+        assertEquals("ABC123", invite.id);
+
+        AppRouter.DeepLink direct = AppRouter.parse("https://jianshuo.dev/voicedrop/i/ABCDEF0123");
+        assertEquals(AppRouter.Kind.INVITE, direct.kind);
+        assertEquals("ABCDEF0123", direct.id);
+
+        // /i/ 下不是合法码 → 网页兜底，不误吞
+        assertEquals(AppRouter.Kind.WEB, AppRouter.parse("https://voicedrop.cn/i/ab").kind);
+        assertEquals(AppRouter.Kind.WEB, AppRouter.parse("https://voicedrop.cn/i/ABC123/extra").kind);
+    }
+
+    @Test
     public void parsesUniversalRootAndWebFallbacks() {
         assertEquals(AppRouter.Kind.RECORDINGS, AppRouter.parse("https://voicedrop.cn/").kind);
 

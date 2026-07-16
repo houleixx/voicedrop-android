@@ -371,6 +371,21 @@ public final class RecordingsActivity extends Activity {
         }
         showNextLibraryCommandConfirm();
     }
+
+    // 邀请归因的剪贴板层要求 App 持有窗口焦点（Android 10+ 才允许读剪贴板）。
+    // Application.onCreate 里那次 runOnLaunch 拿不到焦点、剪贴板静默读不到——
+    // 这里在首页真正获得焦点后补一次（done/24h 窗口/互斥都在 runOnLaunch 里挡，
+    // 每进程只补一回）。
+    private static boolean referralFocusRetried;
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || referralFocusRetried) return;
+        if (!new PrivacyConsent(this).isAccepted()) return;
+        // runOnLaunch 返回 false = 首启那次还在跑（互斥占用），别消耗这次性重试机会
+        referralFocusRetried = new ReferralManager(this).runOnLaunch();
+    }
+
     @Override
     protected void onPause() {
         activityResumed = false;
@@ -1049,6 +1064,15 @@ public final class RecordingsActivity extends Activity {
             Intent promptImport = new Intent(this, PromptImportActivity.class);
             promptImport.putExtra("shareCode", link.shareCode);
             startActivity(promptImport);
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.INVITE) {
+            // 已装用户点邀请链接：记归因（新账号才会真入账，服务端判定）+ 干净落首页
+            new ReferralManager(this).noteShareToken(link.id);
+            communityTab = false;
+            showHome();
+            refreshAndDrain();
+            if (statusSession != null) statusSession.connect();
             return true;
         }
         if (link.kind == AppRouter.Kind.SHARE_LINK) {

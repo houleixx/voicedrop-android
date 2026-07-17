@@ -39,6 +39,21 @@ public class ArticleEditSessionTest {
     }
 
     @Test
+    public void includesStructuredLineAndImageAnchors() throws Exception {
+        ArticleEditSession.EditRequest line = new ArticleEditSession.EditRequest(
+                "edit-line", "改短一点", 0, ArticleEditSession.EditAnchor.line(7, "完整段落"));
+        org.json.JSONObject linePayload = new org.json.JSONObject(ArticleEditSession.payloadFor(line));
+        assertEquals("line", linePayload.getJSONObject("anchor").getString("type"));
+        assertEquals(7, linePayload.getJSONObject("anchor").getInt("line"));
+        assertEquals("完整段落", linePayload.getJSONObject("anchor").getString("text"));
+
+        ArticleEditSession.EditRequest image = new ArticleEditSession.EditRequest(
+                "edit-image", "改这张图", 0, ArticleEditSession.EditAnchor.image("photos/a.jpg"));
+        assertEquals("photos/a.jpg", new org.json.JSONObject(ArticleEditSession.payloadFor(image))
+                .getJSONObject("anchor").getString("key"));
+    }
+
+    @Test
     public void acceptsStreamingRestylePreviewEvents() throws Exception {
         String source = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
                 "src/main/java/com/baixingai/voicedrop/net/ArticleEditSession.java")),

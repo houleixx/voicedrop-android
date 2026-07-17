@@ -7,7 +7,7 @@ import java.util.List;
 
 /** Pure presentation rules shared by the Android community feed UI and JVM tests. */
 public final class CommunityFeedPresentation {
-    public enum Tab { RECOMMENDED, LATEST, REPLIES }
+    public enum Tab { RECOMMENDED, LATEST, REPLIES, PROMPTS }
 
     private CommunityFeedPresentation() {}
 
@@ -20,6 +20,11 @@ public final class CommunityFeedPresentation {
                 if (post.replyTo != null && !post.replyTo.isEmpty()) replies.add(post);
             }
             return replies;
+        }
+        if (tab == Tab.PROMPTS) {
+            List<CommunityStore.Post> prompts = new ArrayList<>();
+            for (CommunityStore.Post post : feed.recommended) if (post.isPrompt()) prompts.add(post);
+            return prompts;
         }
         return new ArrayList<>(feed.recommended);
     }

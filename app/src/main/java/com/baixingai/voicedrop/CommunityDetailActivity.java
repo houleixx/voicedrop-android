@@ -1003,6 +1003,15 @@ public final class CommunityDetailActivity extends Activity {
 
         TextView title = text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
                 26, Theme.INK, Typeface.BOLD);
+        if (post.isPrompt()) {
+            TextView badge = text("社区提示词", 12, 0xff6f5529, Typeface.BOLD);
+            badge.setGravity(Gravity.CENTER);
+            badge.setPadding(dp(9), dp(4), dp(9), dp(4));
+            badge.setBackground(round(0xfff4dfac, dp(12)));
+            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
+            badgeLp.setMargins(0, 0, 0, dp(10));
+            content.addView(badge, badgeLp);
+        }
         title.setLineSpacing(dp(5), 1.0f);
         content.addView(title);
 
@@ -1014,6 +1023,28 @@ public final class CommunityDetailActivity extends Activity {
         final LinearLayout replyToSection = new LinearLayout(this);
         replyToSection.setOrientation(LinearLayout.VERTICAL);
         content.addView(replyToSection);
+
+        if (post.isPrompt()) {
+            LinearLayout collect = new LinearLayout(this);
+            collect.setOrientation(LinearLayout.VERTICAL);
+            collect.setPadding(dp(16), dp(15), dp(16), dp(15));
+            collect.setBackground(round(Theme.CARD, dp(14)));
+            collect.addView(text("分享码 " + post.promptCode, 13, 0xff6f5529, Typeface.BOLD));
+            TextView usage = text("收下后可在提示词设置中编辑，并用于文字或图片处理。", 13, Theme.SECONDARY, Typeface.NORMAL);
+            usage.setPadding(0, dp(8), 0, dp(10));
+            collect.addView(usage);
+            Button collectButton = new Button(this);
+            collectButton.setText("收下这条提示词");
+            collectButton.setOnClickListener(v -> {
+                Intent intent = new Intent(this, PromptImportActivity.class);
+                intent.putExtra("shareCode", post.promptCode);
+                startActivity(intent);
+            });
+            collect.addView(collectButton, new LinearLayout.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams collectLp = new LinearLayout.LayoutParams(-1, -2);
+            collectLp.setMargins(0, 0, 0, dp(16));
+            content.addView(collect, collectLp);
+        }
 
         if (doc != null && !doc.articles.isEmpty()) {
             for (MinedArticle article : doc.articles) {
@@ -1040,8 +1071,8 @@ public final class CommunityDetailActivity extends Activity {
             // Engagement tracking
             try { community.engage(shareId, "view"); } catch (Exception ignored) {}
 
-            // Load replies
-            try {
+            // Prompt cards are collectible resources, not voice-response threads.
+            if (!post.isPrompt()) try {
                 List<CommunityStore.Post> replies = community.replies(shareId);
                 List<CommunityStore.Post> fullReplies = new ArrayList<>();
                 for (CommunityStore.Post reply : replies) {
@@ -1432,13 +1463,15 @@ public final class CommunityDetailActivity extends Activity {
         menu.setElevation(dp(8));
         final PopupWindow[] popupRef = {null};
 
-        LinearLayout replyRow = menuRow("写回应", AliIconFont.MIC, Theme.RED, Theme.INK);
-        replyRow.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            startCommunityReplyRecording(post);
-        });
-        menu.addView(replyRow);
-        menu.addView(divider());
+        if (!post.isPrompt()) {
+            LinearLayout replyRow = menuRow("写回应", AliIconFont.MIC, Theme.RED, Theme.INK);
+            replyRow.setOnClickListener(v -> {
+                if (popupRef[0] != null) popupRef[0].dismiss();
+                startCommunityReplyRecording(post);
+            });
+            menu.addView(replyRow);
+            menu.addView(divider());
+        }
 
         LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED, Theme.INK);
         shareRow.setOnClickListener(v -> {

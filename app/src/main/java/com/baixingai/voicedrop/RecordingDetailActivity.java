@@ -2630,7 +2630,7 @@ public final class RecordingDetailActivity extends Activity {
         if (menu == null) return;
         showConfiguredMenu(anchor, menu, instruction ->
                 UIConfigStore.fill(instruction, "LINE", String.valueOf(line), "QUOTE", UIConfigStore.quotePrefix(paragraph)),
-                filled -> enqueueConfiguredInstruction(rec, filled),
+                filled -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.line(line, paragraph)),
                 new LocalMenuRow("拷贝", AliIconFont.DOC, () -> {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", paragraph));
@@ -2831,14 +2831,18 @@ public final class RecordingDetailActivity extends Activity {
         if (menu == null) return;
         showConfiguredMenu(anchor, menu,
                 instruction -> UIConfigStore.fill(instruction, "KEY", relKey),
-                filled -> enqueueConfiguredInstruction(rec, filled));
+                filled -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.image(relKey)));
     }
 
     protected void enqueueConfiguredInstruction(Recording rec, String instruction) {
+        enqueueConfiguredInstruction(rec, instruction, null);
+    }
+
+    protected void enqueueConfiguredInstruction(Recording rec, String instruction, ArticleEditSession.EditAnchor anchor) {
         if (instruction == null || instruction.trim().isEmpty()) return;
         ensureArticleEditSession(rec);
         if (editSession != null) {
-            editSession.enqueue(instruction.trim(), articleIndex);
+            editSession.enqueue(instruction.trim(), articleIndex, new ArrayList<>(), anchor);
             toast("已加入修改队列");
         }
     }

@@ -185,7 +185,7 @@ public final class PromptStore {
                 PromptNode node = PromptNode.fromResolved(imported);
                 synchronized (lock) {
                     List<PromptNode> next = PromptTree.copy(items);
-                    next.add(node);
+                    if (!PromptTree.flattenIds(next).contains(node.id)) next.add(node);
                     items = next;
                 }
                 return null;
@@ -246,7 +246,13 @@ public final class PromptStore {
                     ? transport.post(baseUrl + "/prompt-share", shareBearer, new JSONObject().put("id", id).toString().getBytes(StandardCharsets.UTF_8))
                     : transport.delete(baseUrl + "/prompt-share/" + Uri.encode(id), shareBearer);
             if (!response.ok()) {
-                return new ShareState("", false, response.code == 429 ? "今天生成分享码的次数已达上限，明天再试" : "提示词分享操作失败");
+                String remote = "";
+                try { remote = new JSONObject(response.text()).optString("error", ""); } catch (Exception ignored) {}
+                if (response.code == 429) remote = "今天生成分享码的次数已达上限，明天再试";
+                else if ("needs_apple_signin".equals(remote) || "needs_wechat_signin".equals(remote)) remote = "请先登录微信后分享提示词";
+                else if ("content_flagged".equals(remote)) remote = "提示词未通过社区审核，暂时不能分享";
+                else if (remote.isEmpty()) remote = "提示词分享操作失败";
+                return new ShareState("", false, remote);
             }
             JSONObject body = new JSONObject(response.text());
             return new ShareState(body.optString("code", ""), body.optBoolean("sharing", sharing));

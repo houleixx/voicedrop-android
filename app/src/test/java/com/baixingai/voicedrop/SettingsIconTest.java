@@ -14,7 +14,7 @@ import static org.junit.Assert.assertTrue;
 public class SettingsIconTest {
     @Test
     public void everyVisibleSettingsRowHasAnIcon() {
-        assertEquals(11, SettingsActivity.SETTING_ROW_ICON_RES_IDS.length);
+        assertEquals(12, SettingsActivity.SETTING_ROW_ICON_RES_IDS.length);
         for (int resId : SettingsActivity.SETTING_ROW_ICON_RES_IDS) {
             assertTrue("Setting rows should declare a drawable icon", resId != 0);
         }

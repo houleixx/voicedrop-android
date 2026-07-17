@@ -88,6 +88,9 @@ public final class AppRouter {
         if (segs.size() == 1 && PROMPT_CODE.matcher(first).matches()) {
             return new DeepLink(Kind.PROMPT_IMPORT, "", "", "", rawUrl, first);
         }
+        if (segs.size() == 2 && "i".equals(first) && INVITE_CODE.matcher(segs.get(1)).matches()) {
+            return new DeepLink(Kind.INVITE, "", "", segs.get(1), rawUrl);
+        }
         if (segs.size() == 1 && SHARE_ID.matcher(first).matches() && !isStaticPath(first)) {
             return new DeepLink(Kind.SHARE_LINK, "", "", first, rawUrl);
         }
@@ -96,6 +99,7 @@ public final class AppRouter {
 
     private static final Pattern SHARE_ID = Pattern.compile("^[A-Za-z0-9_-]{6,16}$");
     private static final Pattern PROMPT_CODE = Pattern.compile("^[1-9][0-9]{6}$");
+    private static final Pattern INVITE_CODE = Pattern.compile("^[A-Za-z0-9]{6,16}$");
 
     private static boolean isStaticPath(String path) {
         return "privacy".equals(path) || "welcome".equals(path) || "help".equals(path);
@@ -132,6 +136,7 @@ public final class AppRouter {
         RECORD,
         ARTICLE,
         PROMPT_IMPORT,
+        INVITE,
         SHARE_LINK,
         WEB
     }

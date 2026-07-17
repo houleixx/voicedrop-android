@@ -92,6 +92,7 @@ public final class CommunityFeedView extends LinearLayout {
         row.addView(tab("推荐", CommunityFeedPresentation.Tab.RECOMMENDED));
         row.addView(tab("最新", CommunityFeedPresentation.Tab.LATEST));
         row.addView(tab("回应", CommunityFeedPresentation.Tab.REPLIES));
+        row.addView(tab("提示词", CommunityFeedPresentation.Tab.PROMPTS));
         return row;
     }
 
@@ -204,6 +205,18 @@ public final class CommunityFeedView extends LinearLayout {
         LinearLayout body = new LinearLayout(getContext());
         body.setOrientation(VERTICAL);
         body.setPadding(dp(12), dp(11), dp(12), dp(12));
+        if (post.isPrompt()) {
+            TextView promptBadge = text("提示词", 11, 0xff6f5529, Typeface.BOLD);
+            promptBadge.setGravity(Gravity.CENTER);
+            promptBadge.setPadding(dp(8), dp(2), dp(8), dp(2));
+            GradientDrawable promptBackground = new GradientDrawable();
+            promptBackground.setColor(0xfff4dfac);
+            promptBackground.setCornerRadius(dp(10));
+            promptBadge.setBackground(promptBackground);
+            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
+            badgeLp.setMargins(0, 0, 0, dp(7));
+            body.addView(promptBadge, badgeLp);
+        }
         if (post.replyTo != null && !post.replyTo.isEmpty()) {
             body.addView(replyBadge(), new LayoutParams(-2, -2));
         }

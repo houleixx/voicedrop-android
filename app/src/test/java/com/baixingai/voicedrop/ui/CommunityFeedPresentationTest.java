@@ -15,20 +15,24 @@ public class CommunityFeedPresentationTest {
         CommunityStore.Post latest = post("latest", null, 3);
         CommunityStore.Post reply = post("reply", "root", 2);
         CommunityStore.Post root = post("root", null, 1);
+        CommunityStore.Post prompt = prompt("prompt", 0);
         CommunityStore.Feed feed = CommunityStore.Feed.fromLegacy(
-                Arrays.asList(latest, reply, root),
-                new CommunityStore.Ranking(Arrays.asList("root", "latest", "reply"),
+                Arrays.asList(latest, reply, root, prompt),
+                new CommunityStore.Ranking(Arrays.asList("root", "latest", "reply", "prompt"),
                         Arrays.asList(), java.util.Collections.emptyMap()));
 
-        assertEquals(Arrays.asList("root", "latest", "reply"),
+        assertEquals(Arrays.asList("root", "latest", "reply", "prompt"),
                 CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
                         CommunityFeedPresentation.Tab.RECOMMENDED)));
-        assertEquals(Arrays.asList("latest", "reply", "root"),
+        assertEquals(Arrays.asList("latest", "reply", "root", "prompt"),
                 CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
                         CommunityFeedPresentation.Tab.LATEST)));
         assertEquals(Arrays.asList("reply"),
                 CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
                         CommunityFeedPresentation.Tab.REPLIES)));
+        assertEquals(Arrays.asList("prompt"),
+                CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
+                        CommunityFeedPresentation.Tab.PROMPTS)));
     }
 
     @Test
@@ -41,5 +45,10 @@ public class CommunityFeedPresentationTest {
         JSONObject json = new JSONObject().put("shareId", id).put("firstSharedAt", time);
         if (replyTo != null) json.put("replyTo", replyTo);
         return CommunityStore.Post.from(json);
+    }
+
+    private CommunityStore.Post prompt(String id, double time) throws Exception {
+        return CommunityStore.Post.from(new JSONObject().put("shareId", id).put("firstSharedAt", time)
+                .put("kind", "prompt").put("promptCode", "1234567"));
     }
 }

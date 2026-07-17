@@ -105,6 +105,20 @@ public class PromptStoreTest {
         assertEquals("请先登录微信后分享提示词", result.error);
     }
 
+    @Test public void idempotentImportDoesNotAppendDuplicateLocalItem() {
+        transport.enqueue(200, "{\"item\":{\"id\":\"sys_concise\",\"type\":\"action\",\"label\":\"精简\",\"origin\":\"system\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]},\"already\":true}");
+        assertNull(store.importCode("1234567"));
+        assertEquals(1, PromptTree.flattenIds(store.items()).size());
+    }
+
+    @Test public void sharingPreservesServerBusinessError() {
+        PromptStore signedStore = new PromptStore(transport, cache, "anon-token", "wechat.session.token",
+                "https://example.test/agent", new ArrayList<>());
+        transport.enqueue(403, "{\"error\":\"content_flagged\"}");
+        assertEquals("提示词未通过社区审核，暂时不能分享",
+                signedStore.setSharing("p_12345678", true).error);
+    }
+
     private static final class FakeCache implements PromptStore.Cache {
         private final Map<String, String> values = new HashMap<>();
         @Override public String get(String key) { return values.get(key); }

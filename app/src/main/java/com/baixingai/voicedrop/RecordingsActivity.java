@@ -1051,6 +1051,12 @@ public final class RecordingsActivity extends Activity {
             startActivity(promptImport);
             return true;
         }
+        if (link.kind == AppRouter.Kind.INVITE) {
+            new ReferralManager(this).noteShareToken(link.id);
+            communityTab = false;
+            showHome();
+            return true;
+        }
         if (link.kind == AppRouter.Kind.SHARE_LINK) {
             new ReferralManager(this).noteShareToken(link.id);
             openShareLink(link.id, link.url);

@@ -250,10 +250,13 @@ public final class CommunityStore {
         public final boolean hasPhoto;
         public final String coverPhotoKey;
         public final String preview;
+        public final String kind;
+        public final String promptCode;
+        public final List<String> appliesTo;
 
         Post(String shareId, String author, String articleKey, double firstSharedAt, String title, String replyTo,
              ArticleDoc doc, double updatedAt, int count, boolean mine, boolean hasPhoto,
-             String coverPhotoKey, String preview) {
+             String coverPhotoKey, String preview, String kind, String promptCode, List<String> appliesTo) {
             this.shareId = shareId;
             this.author = author;
             this.articleKey = articleKey;
@@ -267,7 +270,12 @@ public final class CommunityStore {
             this.hasPhoto = hasPhoto;
             this.coverPhotoKey = coverPhotoKey;
             this.preview = preview;
+            this.kind = kind;
+            this.promptCode = promptCode;
+            this.appliesTo = Collections.unmodifiableList(new ArrayList<>(appliesTo));
         }
+
+        public boolean isPrompt() { return "prompt".equals(kind) && !promptCode.isEmpty(); }
 
         public static Post from(JSONObject obj) {
             return new Post(trim(obj.optString("shareId")),
@@ -278,7 +286,17 @@ public final class CommunityStore {
                     docFrom(obj),
                     obj.optDouble("updatedAt", obj.optDouble("firstSharedAt", obj.optDouble("sharedAt"))),
                     obj.optInt("count", 0), obj.optBoolean("mine", false), obj.optBoolean("hasPhoto", false),
-                    trim(obj.optString("coverPhotoKey")), trim(obj.optString("preview")));
+                    trim(obj.optString("coverPhotoKey")), trim(obj.optString("preview")),
+                    trim(obj.optString("kind")), trim(obj.optString("promptCode")), stringList(obj.optJSONArray("appliesTo")));
+        }
+
+        private static List<String> stringList(JSONArray values) {
+            List<String> result = new ArrayList<>();
+            if (values != null) for (int i = 0; i < values.length(); i++) {
+                String value = trim(values.optString(i));
+                if (!value.isEmpty()) result.add(value);
+            }
+            return result;
         }
 
         private static ArticleDoc docFrom(JSONObject obj) {

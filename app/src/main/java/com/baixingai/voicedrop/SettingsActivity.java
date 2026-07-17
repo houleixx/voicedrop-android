@@ -20,6 +20,7 @@ import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.Recording;
+import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -55,6 +56,7 @@ public class SettingsActivity extends Activity {
             R.drawable.ic_settings_ai_instruction,
             R.drawable.ic_settings_broadcast,
             R.drawable.ic_settings_bolt,
+            R.drawable.ic_settings_community,
             R.drawable.ic_settings_broadcast,
             R.drawable.ic_settings_community,
             R.drawable.ic_settings_info,
@@ -243,6 +245,11 @@ public class SettingsActivity extends Activity {
         usageRow.addView(settingsChevron());
         usageRow.setOnClickListener(v -> openUsage());
         card.addView(usageRow);
+
+        View inviteDivider = new View(this);
+        inviteDivider.setBackgroundColor(0xfff0e8da);
+        card.addView(inviteDivider, cardDividerLayoutParams());
+        addCardRow(card, R.drawable.ic_settings_community, "邀请好友", "朋友装上，双方都得算力", this::shareInvite);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, 0);
@@ -442,6 +449,26 @@ public class SettingsActivity extends Activity {
     private void openUsage() {
         startActivity(new Intent(this, UsageActivity.class));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    private void shareInvite() {
+        toast("正在准备邀请链接…");
+        io.execute(() -> {
+            try {
+                ReferralManager.InviteLink invite = new ReferralManager(this).inviteLink();
+                String reward = invite.suanliInviter > 0 && invite.suanliInviter == invite.suanliFriend
+                        ? "，咱俩各得 " + invite.suanliInviter + " 算力" : "";
+                String text = "我在用 VoiceDrop，动动嘴就能写出好文章" + reward + "：" + invite.url;
+                runOnUiThread(() -> {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(Intent.EXTRA_TEXT, text);
+                    startActivity(Intent.createChooser(send, "邀请好友"));
+                });
+            } catch (Exception error) {
+                toast("邀请链接获取失败：" + error.getMessage());
+            }
+        });
     }
 
     private void openWechatSettings() {

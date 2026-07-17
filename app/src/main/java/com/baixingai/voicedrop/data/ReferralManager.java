@@ -20,7 +20,7 @@ public final class ReferralManager {
     private static final String FIRST_LAUNCH_AT = "firstLaunchAt";
     private static final long WINDOW_MS = 24L * 60L * 60L * 1000L;
     private static final Pattern TOKEN = Pattern.compile(
-            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)([A-Za-z0-9_-]{6,16})");
+            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)(?:i/)?([A-Za-z0-9_-]{6,16})");
 
     private final Context context;
     private final AuthStore auth;
@@ -55,6 +55,30 @@ public final class ReferralManager {
     public void noteShareToken(String id) {
         if (id == null || id.trim().isEmpty() || done() || !withinWindow()) return;
         io.execute(() -> claim("link", id.trim()));
+    }
+
+    public InviteLink inviteLink() throws Exception {
+        HttpClient.Response response = http.get(Api.agentBase() + "/referral/link", auth.bearer());
+        if (!response.ok()) throw new IllegalStateException("invite link HTTP " + response.code);
+        JSONObject json = new JSONObject(response.text());
+        String url = json.optString("url", "").trim();
+        if (url.isEmpty()) throw new IllegalStateException("邀请链接暂不可用");
+        return new InviteLink(url, json.optString("name", "").trim(),
+                json.optInt("suanliInviter", 0), json.optInt("suanliFriend", 0));
+    }
+
+    public static final class InviteLink {
+        public final String url;
+        public final String name;
+        public final int suanliInviter;
+        public final int suanliFriend;
+
+        InviteLink(String url, String name, int suanliInviter, int suanliFriend) {
+            this.url = url;
+            this.name = name;
+            this.suanliInviter = suanliInviter;
+            this.suanliFriend = suanliFriend;
+        }
     }
 
     private boolean claim(String source, String token) {

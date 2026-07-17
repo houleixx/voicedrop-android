@@ -94,8 +94,12 @@ public final class ArticleEditSession {
     }
 
     public void enqueue(String text, int articleIndex, List<AgentImage> images) {
+        enqueue(text, articleIndex, images, null);
+    }
+
+    public void enqueue(String text, int articleIndex, List<AgentImage> images, EditAnchor anchor) {
         if (text == null || text.trim().isEmpty()) return;
-        EditRequest request = new EditRequest(UUID.randomUUID().toString(), text.trim(), Math.max(0, articleIndex));
+        EditRequest request = new EditRequest(UUID.randomUUID().toString(), text.trim(), Math.max(0, articleIndex), anchor);
         request.images.addAll(images);
         queue.add(request);
         persist();
@@ -232,6 +236,7 @@ public final class ArticleEditSession {
                 obj.put("id", request.id);
                 obj.put("text", request.text);
                 obj.put("articleIndex", request.articleIndex);
+                if (request.anchor != null) obj.put("anchor", request.anchor.toJson());
                 arr.put(obj);
             } catch (Exception ignored) {
             }
@@ -249,7 +254,8 @@ public final class ArticleEditSession {
             JSONArray arr = new JSONArray(raw);
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
-                out.add(new EditRequest(obj.optString("id"), obj.optString("text"), obj.optInt("articleIndex", 0)));
+                out.add(new EditRequest(obj.optString("id"), obj.optString("text"), obj.optInt("articleIndex", 0),
+                        EditAnchor.fromJson(obj.optJSONObject("anchor"))));
             }
         } catch (Exception ignored) {
         }
@@ -285,6 +291,7 @@ public final class ArticleEditSession {
             }
             body.append(']');
         }
+        if (request.anchor != null) body.append(",\"anchor\":").append(request.anchor.toJson());
         body.append('}');
         return body.toString();
     }
@@ -318,11 +325,66 @@ public final class ArticleEditSession {
         public final String text;
         public final int articleIndex;
         public final List<AgentImage> images = new ArrayList<>();
+        public final EditAnchor anchor;
 
         public EditRequest(String id, String text, int articleIndex) {
+            this(id, text, articleIndex, null);
+        }
+
+        public EditRequest(String id, String text, int articleIndex, EditAnchor anchor) {
             this.id = id;
             this.text = text;
             this.articleIndex = articleIndex;
+            this.anchor = anchor;
+        }
+    }
+
+    public static final class EditAnchor {
+        public final String type;
+        public final int line;
+        public final String text;
+        public final String key;
+
+        private EditAnchor(String type, int line, String text, String key) {
+            this.type = type;
+            this.line = line;
+            this.text = text == null ? "" : text;
+            this.key = key == null ? "" : key;
+        }
+
+        public static EditAnchor line(int line, String text) {
+            String value = text == null ? "" : text;
+            if (value.length() > 2000) value = value.substring(0, 2000);
+            return new EditAnchor("line", Math.max(0, line), value, "");
+        }
+
+        public static EditAnchor image(String key) {
+            return new EditAnchor("image", 0, "", key);
+        }
+
+        JSONObject toJson() {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("type", type);
+                if ("line".equals(type)) {
+                    json.put("line", line);
+                    json.put("text", text);
+                } else if ("image".equals(type)) {
+                    json.put("key", key);
+                }
+            } catch (Exception ignored) {}
+            return json;
+        }
+
+        static EditAnchor fromJson(JSONObject json) {
+            if (json == null) return null;
+            if ("line".equals(json.optString("type"))) {
+                return line(json.optInt("line", 0), json.optString("text", ""));
+            }
+            if ("image".equals(json.optString("type")) && !json.optString("key", "").isEmpty()) {
+                return image(json.optString("key"));
+            }
+            return null;
         }
     }
 

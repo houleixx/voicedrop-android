@@ -54,6 +54,15 @@ public class AppRouterTest {
     }
 
     @Test
+    public void parsesInviteLinksWithoutOpeningTheDownloadPage() {
+        AppRouter.DeepLink invite = AppRouter.parse("https://voicedrop.cn/i/AbC123xy");
+        assertEquals(AppRouter.Kind.INVITE, invite.kind);
+        assertEquals("AbC123xy", invite.id);
+        assertEquals(AppRouter.Kind.INVITE,
+                AppRouter.parse("https://jianshuo.dev/voicedrop/i/ZXCVBN").kind);
+    }
+
+    @Test
     public void parsesPromptImportMagicNumbersWithoutTakingEightDigitLinks() {
         AppRouter.DeepLink universal = AppRouter.parse("https://voicedrop.cn/1234567");
         assertEquals(AppRouter.Kind.PROMPT_IMPORT, universal.kind);

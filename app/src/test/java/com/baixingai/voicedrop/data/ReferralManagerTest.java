@@ -10,6 +10,7 @@ public class ReferralManagerTest {
         assertEquals("abc123", ReferralManager.shareToken("https://voicedrop.cn/abc123"));
         assertEquals("AbC_123-xy", ReferralManager.shareToken("打开 https://www.voicedrop.cn/AbC_123-xy?s=1"));
         assertEquals("legacy9", ReferralManager.shareToken("https://jianshuo.dev/voicedrop/legacy9"));
+        assertEquals("Invite77", ReferralManager.shareToken("https://voicedrop.cn/i/Invite77"));
     }
 
     @Test

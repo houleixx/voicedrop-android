@@ -108,6 +108,10 @@ import java.util.List;
 import java.time.ZonedDateTime;
 
 public final class CommunityDetailActivity extends Activity {
+    private static final int COMMUNITY_TOOLBAR_ICON_DP = 24;
+    private static final int COMMUNITY_TOOLBAR_BARE_SLOT_DP = 36;
+    private static final int COMMUNITY_TOOLBAR_MORE_BOX_DP = 34;
+    private static final int COMMUNITY_TOOLBAR_MORE_SLOT_DP = 56;
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
     protected final Handler main = new Handler(Looper.getMainLooper());
@@ -546,6 +550,13 @@ public final class CommunityDetailActivity extends Activity {
     protected void toolbarIconButton(LinearLayout parent, int bgColor, int cornerRadiusDp,
                                    int iconResId, int iconColor, int iconSize, int boxSize,
                                    int leftMargin, boolean elevated, View.OnClickListener action) {
+        toolbarIconButton(parent, bgColor, cornerRadiusDp, iconResId, iconColor, iconSize,
+                boxSize, leftMargin, dp(48), elevated, action);
+    }
+    protected void toolbarIconButton(LinearLayout parent, int bgColor, int cornerRadiusDp,
+                                   int iconResId, int iconColor, int iconSize, int boxSize,
+                                   int leftMargin, int touchWidth, boolean elevated,
+                                   View.OnClickListener action) {
         FrameLayout touch = new FrameLayout(this);
         touch.setClickable(true);
         FrameLayout btn = new FrameLayout(this);
@@ -564,10 +575,14 @@ public final class CommunityDetailActivity extends Activity {
         btn.addView(icon, new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER));
         touch.addView(btn, new FrameLayout.LayoutParams(boxSize, boxSize, Gravity.CENTER));
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(48), dp(48));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(touchWidth, dp(48));
         lp.setMargins(leftMargin, 0, 0, 0);
         parent.addView(touch, lp);
         touch.setOnClickListener(action);
+    }
+    protected void addCommunityToolbarIcon(FrameLayout touch, ImageView icon) {
+        touch.addView(icon, new FrameLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_ICON_DP), dp(COMMUNITY_TOOLBAR_ICON_DP), Gravity.CENTER));
     }
     protected void renderArticleChips(LinearLayout chipRow, ArticleDoc doc, final Recording rec) {
     }
@@ -907,7 +922,9 @@ public final class CommunityDetailActivity extends Activity {
         // Nav bar with like button and more menu
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        // Left: 12dp bar padding + 4dp inset around the back button = 16dp.
+        // Right: 5dp bar padding + 11dp inset around the 34dp more button = 16dp.
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(5), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
         Space toolbarSpace = new Space(this);
@@ -925,8 +942,11 @@ public final class CommunityDetailActivity extends Activity {
         feedIcon.setImageResource(R.drawable.ic_settings_bolt);
         feedIcon.setColorFilter(Theme.INK);
         feedIcon.setScaleType(ImageView.ScaleType.CENTER);
-        feedBtn.addView(feedIcon, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
-        bar.addView(feedBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        feedIcon.setTranslationY(-dp(1));
+        addCommunityToolbarIcon(feedBtn, feedIcon);
+        LinearLayout.LayoutParams feedLp = new LinearLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+        bar.addView(feedBtn, feedLp);
         io.execute(() -> {
             try {
                 List<String> ids = new ArrayList<>();
@@ -983,9 +1003,9 @@ public final class CommunityDetailActivity extends Activity {
         AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
                 liked[0] ? Theme.RED : Theme.INK);
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
-        likeBtn.addView(likeIcon, new FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER));
-        LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(dp(48), dp(48));
-        likeLp.setMargins(0, 0, 0, 0);
+        addCommunityToolbarIcon(likeBtn, likeIcon);
+        LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
         bar.addView(likeBtn, likeLp);
         likeBtn.setOnClickListener(v -> {
             liked[0] = !liked[0];
@@ -1001,7 +1021,9 @@ public final class CommunityDetailActivity extends Activity {
 
         // ... menu
         toolbarIconButton(bar, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY,
-                dp(18), dp(38), dp(2), true, v -> showCommunityPostMenu(post, authorName, v));
+                dp(COMMUNITY_TOOLBAR_ICON_DP), dp(COMMUNITY_TOOLBAR_MORE_BOX_DP),
+                0, dp(COMMUNITY_TOOLBAR_MORE_SLOT_DP), true,
+                v -> showCommunityPostMenu(post, authorName, v));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
@@ -1121,7 +1143,7 @@ public final class CommunityDetailActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(5), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
         bar.addView(new Space(this), new LinearLayout.LayoutParams(0, dp(48), 1));
@@ -1139,8 +1161,11 @@ public final class CommunityDetailActivity extends Activity {
         feedIcon.setImageResource(R.drawable.ic_settings_bolt);
         feedIcon.setColorFilter(Theme.INK);
         feedIcon.setScaleType(ImageView.ScaleType.CENTER);
-        feedBtn.addView(feedIcon, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
-        bar.addView(feedBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        feedIcon.setTranslationY(-dp(1));
+        addCommunityToolbarIcon(feedBtn, feedIcon);
+        LinearLayout.LayoutParams feedLp = new LinearLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+        bar.addView(feedBtn, feedLp);
         io.execute(() -> {
             try {
                 List<String> ids = new ArrayList<>();
@@ -1199,8 +1224,10 @@ public final class CommunityDetailActivity extends Activity {
         AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
                 liked[0] ? Theme.RED : Theme.INK);
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
-        likeBtn.addView(likeIcon, new FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER));
-        bar.addView(likeBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        addCommunityToolbarIcon(likeBtn, likeIcon);
+        LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+        bar.addView(likeBtn, likeLp);
         io.execute(() -> {
             try {
                 List<CommunityStore.Post> singleton = new ArrayList<>();
@@ -1227,7 +1254,9 @@ public final class CommunityDetailActivity extends Activity {
         });
 
         toolbarIconButton(bar, Theme.INK, 11, AliIconFont.MORE, Color.WHITE,
-                dp(18), dp(38), dp(2), true, v -> showCommunityPostMenu(post, authorName, v));
+                dp(COMMUNITY_TOOLBAR_ICON_DP), dp(COMMUNITY_TOOLBAR_MORE_BOX_DP),
+                0, dp(COMMUNITY_TOOLBAR_MORE_SLOT_DP), true,
+                v -> showCommunityPostMenu(post, authorName, v));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);

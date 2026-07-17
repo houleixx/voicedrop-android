@@ -910,7 +910,9 @@ public final class RecordingDetailActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        // The more button's 38dp box sits 5dp inside its 48dp touch target:
+        // 11dp + 5dp matches the back button's 16dp visible edge inset.
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(11), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
         articleToolbarBack = bar.getChildAt(bar.getChildCount() - 1);

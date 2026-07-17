@@ -13,6 +13,7 @@ public final class AuthStore {
     private static final String PREFS = "voicedrop.auth";
     private static final String ANON = "anon";
     private static final String SESSION = "session";
+    private static final String PRE_WECHAT_ANON = "pre_wechat_anon";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SharedPreferences prefs;
@@ -35,7 +36,7 @@ public final class AuthStore {
         String existing = prefs.getString(SESSION, "");
         if (existing == null || existing.isEmpty()) return "";
         if (!isSessionToken(existing) || isJWTExpired(existing)) {
-            prefs.edit().remove(SESSION).apply();
+            signOutWechat();
             return "";
         }
         return existing;
@@ -64,23 +65,40 @@ public final class AuthStore {
     }
 
     public void resetAnonymous() {
-        prefs.edit().putString(ANON, newAnon()).apply();
+        prefs.edit().putString(ANON, newAnon())
+                .remove(SESSION).remove(PRE_WECHAT_ANON).apply();
     }
 
     public boolean adoptToken(String token) {
         if (token == null || !token.startsWith("anon_") || token.length() < 20) return false;
-        prefs.edit().putString(ANON, token).remove(SESSION).apply();
+        prefs.edit().putString(ANON, token).remove(SESSION).remove(PRE_WECHAT_ANON).apply();
         return true;
     }
 
     public boolean storeSession(String token) {
         if (!isSessionToken(token)) return false;
-        prefs.edit().putString(SESSION, token).apply();
+        prefs.edit().putString(SESSION, token).remove(PRE_WECHAT_ANON).apply();
+        return true;
+    }
+
+    public boolean switchToWechatAccount(String token) {
+        if (!isSessionToken(token)) return false;
+        prefs.edit()
+                .putString(PRE_WECHAT_ANON, anonymousBearer())
+                .putString(SESSION, token)
+                .apply();
         return true;
     }
 
     public void signOutWechat() {
-        prefs.edit().remove(SESSION).apply();
+        String previous = prefs.getString(PRE_WECHAT_ANON, "");
+        SharedPreferences.Editor editor = prefs.edit()
+                .remove(SESSION)
+                .remove(PRE_WECHAT_ANON);
+        if (previous != null && previous.startsWith("anon_") && previous.length() >= 20) {
+            editor.putString(ANON, previous);
+        }
+        editor.apply();
     }
 
     private String ensureAnon() {

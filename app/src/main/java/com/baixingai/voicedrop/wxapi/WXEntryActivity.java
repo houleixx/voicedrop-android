@@ -103,11 +103,10 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
     }
 
     private void showAccountSwitchConfirmation(AuthStore auth, WechatAuthStore.Result result) {
-        IosDialog.showAutoHeight(this, "该微信已关联另一个云端空间",
-                "切换后将显示微信账号中的录音和文章。当前匿名账号的数据不会删除，退出微信登录后可以恢复。",
-                "切换到微信账号", () -> completeLogin(auth, result),
-                "保留当前账号", this::keepCurrentAccount,
-                false, false);
+        IosDialog.showConfirmation(this, "该微信已关联另一个云端空间",
+                "是否切换到微信已绑定的云端空间？当前空间会保存在本机，退出微信登录后会恢复当前空间。",
+                "切换到微信空间", () -> completeSwitchedLogin(auth, result),
+                "保留当前空间", this::keepCurrentAccount);
     }
 
     private void completeLogin(AuthStore auth, WechatAuthStore.Result result) {
@@ -120,8 +119,22 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
         boolean fromCommunityShare = new PendingCommunityShareStore(this).peek() != null;
         clearPendingCommunityShare();
         openRecordings(fromCommunityShare
-                ? "已切换到微信账号，请重新选择文章分享"
-                : "已切换到微信账号");
+                ? "已登录微信，请重新选择文章分享"
+                : "已登录微信");
+    }
+
+    private void completeSwitchedLogin(AuthStore auth, WechatAuthStore.Result result) {
+        if (!auth.switchToWechatAccount(result.session)) {
+            clearPendingCommunityShare();
+            toast("微信登录失败：无效会话");
+            keepCurrentAccount();
+            return;
+        }
+        boolean fromCommunityShare = new PendingCommunityShareStore(this).peek() != null;
+        clearPendingCommunityShare();
+        openRecordings(fromCommunityShare
+                ? "已切换到微信空间，请重新选择文章分享"
+                : "已切换到微信空间");
     }
 
     private void openRecordings(String message) {

@@ -46,6 +46,39 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("line.setMinimumHeight(dp(row.group ? 52 : 56))"));
     }
 
+    @Test public void longPressStartsDragAndReorderSaveShowsLoading() throws Exception {
+        String manager = source("InstructionSettingsActivity.java");
+        assertTrue(manager.contains("if (!sorting) enterSort(false)"));
+        assertTrue(manager.contains("startPromptDrag(v, row.node.id)"));
+        assertTrue(manager.contains("store.applyReorder(draft, baseline)"));
+        assertTrue(manager.contains("\"保存中…\""));
+        assertTrue(manager.contains("io.execute(() ->"));
+    }
+
+    @Test public void promptRowsRevealDeleteAndConfirmAfterAHorizontalSwipe() throws Exception {
+        String manager = source("InstructionSettingsActivity.java");
+        assertTrue(manager.contains("MotionEvent.ACTION_MOVE"));
+        assertTrue(manager.contains("touchStart[0] = event.getRawX()"));
+        assertTrue(manager.contains("float dx = event.getRawX() - touchStart[0]"));
+        assertTrue(manager.contains("v.cancelLongPress()"));
+        assertTrue(manager.contains("if (swiping[0]) return true"));
+        assertTrue(manager.contains("if (!row.group)"));
+        assertTrue(manager.contains("text(\"删除\", 14, Typeface.BOLD, Color.WHITE)"));
+        assertTrue(manager.contains("deleteAction.setOnClickListener"));
+        assertTrue(manager.contains("translationX(-dp(88))"));
+        assertFalse(manager.contains("if (shouldDelete) confirmDelete(row.node)"));
+        assertTrue(manager.contains("IosDialog.showConfirmation(this, \"删除提示词\""));
+        assertTrue(manager.contains("Dialog deleteProgress = showDeleteProgress()"));
+        assertTrue(manager.contains("private Dialog showDeleteProgress()"));
+        assertTrue(manager.contains("rounded(0xee1f1f1f, 14)"));
+        assertTrue(manager.contains("LinearLayout box = vertical()"));
+        assertTrue(manager.contains("text(\"正在删除…\", 14, Typeface.BOLD, Color.WHITE)"));
+        assertTrue(manager.contains("box.addView(status, margins(-2, -2, 0, 10, 0, 0))"));
+        assertFalse(manager.contains("IosDialog.showProgress(this, \"正在删除提示词\""));
+        assertTrue(manager.contains("deleteProgress.dismiss()"));
+        assertFalse(manager.contains("new AlertDialog.Builder(this)"));
+    }
+
     @Test public void managerUsesAnIconForTheExpandedGroupChevron() throws Exception {
         String manager = source("InstructionSettingsActivity.java");
         assertTrue(manager.contains("R.drawable.ic_prompt_chevron_down"));

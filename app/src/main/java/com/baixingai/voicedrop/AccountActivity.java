@@ -36,6 +36,7 @@ public final class AccountActivity extends Activity {
     private AuthStore auth;
     private LibraryStore library;
     private LinearLayout content;
+    private String currentAccountId = "";
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 
     @Override
@@ -114,7 +115,9 @@ public final class AccountActivity extends Activity {
         io.execute(() -> {
             int recordings = 0;
             int mined = 0;
+            String accountId = "";
             try {
+                accountId = accountIdFromScope(library.ownerScope());
                 List<Recording> list = library.load(new ArrayList<>());
                 recordings = list.size();
                 for (Recording r : list) if (r.hasArticles) mined++;
@@ -122,7 +125,11 @@ public final class AccountActivity extends Activity {
             }
             int finalRecordings = recordings;
             int finalMined = mined;
-            runOnUiThread(() -> render(finalRecordings, finalMined, true));
+            String finalAccountId = accountId;
+            runOnUiThread(() -> {
+                currentAccountId = finalAccountId;
+                render(finalRecordings, finalMined, true);
+            });
         });
     }
 
@@ -154,8 +161,9 @@ public final class AccountActivity extends Activity {
         card.addView(header);
         card.addView(dividerWide(dp(16), dp(16)));
 
-        card.addView(keyField("你的 ID", auth.anonId(), false, auth.anonId()));
-        card.addView(keyField("访问令牌", maskedToken(), true, auth.bearer()));
+        String idDisplay = currentAccountId.isEmpty() ? "读取失败" : currentAccountId;
+        card.addView(keyField("你的 ID", idDisplay, false, currentAccountId));
+        card.addView(keyField("访问令牌", maskedToken(), true, auth.anonymousBearer()));
         card.addView(dividerWide(dp(16), dp(10)));
 
         card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, dp(28)));
@@ -248,6 +256,14 @@ public final class AccountActivity extends Activity {
         rowLp.setMargins(0, dp(7), 0, dp(16));
         wrap.addView(row, rowLp);
         return wrap;
+    }
+
+    static String accountIdFromScope(String scope) {
+        if (scope == null) return "";
+        String value = scope.trim();
+        if (value.startsWith("users/")) value = value.substring("users/".length());
+        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
+        return value;
     }
 
     private View dataCard(int recordingCount, int minedCount, boolean loaded) {
@@ -361,7 +377,7 @@ public final class AccountActivity extends Activity {
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), dp(8), dp(18), dp(6));
 
-        TextView intro = text("在另一台设备的「账户」页面复制“访问令牌”，粘贴到这里。访问令牌以 anon_ 开头；页面上显示的 anon-xxxx 只是识别用 ID，不能用来登录。", 14, Theme.SECONDARY, Typeface.NORMAL);
+        TextView intro = text("在另一台设备的「账户」页面复制“访问令牌”，粘贴到这里。访问令牌以 anon_ 开头；页面上显示的账户 ID 只用于识别，不能用来登录。", 14, Theme.SECONDARY, Typeface.NORMAL);
         intro.setLineSpacing(dp(4), 1.0f);
         form.addView(intro);
 
@@ -402,12 +418,16 @@ public final class AccountActivity extends Activity {
     }
 
     private String maskedToken() {
-        String token = auth.bearer();
+        String token = auth.anonymousBearer();
         if (token.length() <= 16) return token;
         return token.substring(0, 10) + "••••••" + token.substring(token.length() - 4);
     }
 
     private void copy(String value, String message) {
+        if (value == null || value.isEmpty()) {
+            toast("账户信息尚未加载");
+            return;
+        }
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", value));
         toast(message);

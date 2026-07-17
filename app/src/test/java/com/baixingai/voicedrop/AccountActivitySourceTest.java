@@ -46,6 +46,19 @@ public class AccountActivitySourceTest {
     }
 
     @Test
+    public void accountIdentityUsesTheCurrentServerScopeAndCredential() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/AccountActivity.java");
+
+        assertTrue(source.contains("library.ownerScope()"));
+        assertTrue(source.contains("currentAccountId"));
+        assertTrue(source.contains("keyField(\"你的 ID\", idDisplay, false, currentAccountId)"));
+        assertTrue(source.contains("keyField(\"访问令牌\", maskedToken(), true, auth.anonymousBearer())"));
+        assertFalse(source.contains("keyField(\"你的 ID\", auth.anonId()"));
+        assertTrue(source.contains("auth.adoptToken"));
+        assertEquals("wechat-current", AccountActivity.accountIdFromScope("users/wechat-current/"));
+    }
+
+    @Test
     public void existingAccountIconUsesProvidedLoginSvg() throws Exception {
         String icon = readSource("src/main/res/drawable/ic_login_existing.xml");
 

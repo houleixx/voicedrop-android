@@ -27,6 +27,36 @@ public class PromptDragControllerTest {
         assertEquals("a", controller.draft().get(0).id);
     }
 
+    @Test public void relativeMovesUseThePostRemovalIndex() {
+        PromptDragController controller = new PromptDragController();
+        controller.begin(Arrays.asList(action("a"), action("b"), action("c")));
+
+        assertTrue(controller.moveRelative("a", null, "b", false));
+        assertEquals(Arrays.asList("a", "b", "c"), ids(controller));
+        assertTrue(controller.moveRelative("a", null, "b", true));
+        assertEquals(Arrays.asList("b", "a", "c"), ids(controller));
+        assertTrue(controller.moveRelative("c", null, "b", false));
+        assertEquals(Arrays.asList("c", "b", "a"), ids(controller));
+        assertFalse(controller.moveRelative("c", null, "c", true));
+    }
+
+    @Test public void twoItemsSwapRegardlessOfWhichHalfOfTheTargetReceivesTheDrop() {
+        PromptDragController controller = new PromptDragController();
+        controller.begin(Arrays.asList(action("a"), action("b")));
+        assertTrue(controller.moveOnto("a", null, "b", false));
+        assertEquals(Arrays.asList("b", "a"), ids(controller));
+
+        controller.begin(Arrays.asList(action("a"), action("b")));
+        assertTrue(controller.moveOnto("b", null, "a", true));
+        assertEquals(Arrays.asList("b", "a"), ids(controller));
+    }
+
+    private static java.util.List<String> ids(PromptDragController controller) {
+        java.util.List<String> result = new java.util.ArrayList<>();
+        for (PromptNode node : controller.draft()) result.add(node.id);
+        return result;
+    }
+
     private static PromptNode action(String id) {
         PromptNode n = new PromptNode(); n.id = id; n.type = "action"; n.label = id; n.origin = "user"; n.prompt = id; n.appliesTo.add("text"); return n;
     }

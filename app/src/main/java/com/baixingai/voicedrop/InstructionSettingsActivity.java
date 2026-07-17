@@ -1,7 +1,6 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ClipData;
 import android.content.Intent;
@@ -24,6 +23,7 @@ import android.widget.FrameLayout;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -60,6 +60,9 @@ public final class InstructionSettingsActivity extends Activity {
     private FrameLayout leftHeaderButton;
     private TextView rightHeaderButton;
     private boolean sorting;
+    private boolean savingSort;
+    private boolean dragRenderPosted;
+    private View openSwipeRow;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -114,7 +117,10 @@ public final class InstructionSettingsActivity extends Activity {
         if (hasFocus) configureEdgeToEdge();
     }
 
-    @Override public void onBackPressed() { finishWithPageTransition(); }
+    @Override public void onBackPressed() {
+        if (savingSort) return;
+        if (sorting) exitSort(false); else finishWithPageTransition();
+    }
 
     private View header() {
         FrameLayout top = new FrameLayout(this);
@@ -160,6 +166,22 @@ public final class InstructionSettingsActivity extends Activity {
         leftHeaderButton.setOnClickListener(v -> exitSort(false));
     }
 
+    private void showSortSaveAction(boolean loading) {
+        showSortCancelAction();
+        leftHeaderButton.setEnabled(!loading);
+        leftHeaderButton.setAlpha(loading ? 0.45f : 1f);
+        rightHeaderButton.setText(loading ? "保存中…" : "完成");
+        rightHeaderButton.setTextSize(14);
+        rightHeaderButton.setTextColor(Theme.ACCENT);
+        rightHeaderButton.setBackgroundColor(Color.TRANSPARENT);
+        rightHeaderButton.setEnabled(!loading);
+        rightHeaderButton.setAlpha(loading ? 0.65f : 1f);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) rightHeaderButton.getLayoutParams();
+        params.width = dp(loading ? 72 : 48);
+        rightHeaderButton.setLayoutParams(params);
+        rightHeaderButton.setOnClickListener(v -> exitSort(true));
+    }
+
     private void refresh() {
         io.execute(() -> {
             String error = store.refresh();
@@ -172,6 +194,7 @@ public final class InstructionSettingsActivity extends Activity {
     }
 
     private void render(List<PromptNode> items) {
+        openSwipeRow = null;
         content.removeAllViews();
         content.addView(intro, margins(-1, -2, 0, 0, 0, 10));
         if (errorBanner.getVisibility() == View.VISIBLE) {
@@ -185,6 +208,7 @@ public final class InstructionSettingsActivity extends Activity {
         } else {
             LinearLayout card = vertical();
             card.setBackground(rounded(Color.WHITE, 14));
+            card.setClipToOutline(true);
             for (int i = 0; i < rows.size(); i++) {
                 card.addView(promptRow(rows.get(i)));
                 if (i < rows.size() - 1) card.addView(divider(rows.get(i + 1).depth == 1 ? 66 : 0));
@@ -206,10 +230,24 @@ public final class InstructionSettingsActivity extends Activity {
     }
 
     private View promptRow(PromptListPresentation.Row row) {
+        final FrameLayout swipeContainer;
+        final TextView deleteAction;
+        if (!row.group) {
+            swipeContainer = new FrameLayout(this);
+            swipeContainer.setBackgroundColor(0xffd94b3d);
+            deleteAction = text("删除", 14, Typeface.BOLD, Color.WHITE);
+            deleteAction.setGravity(Gravity.CENTER);
+            swipeContainer.addView(deleteAction, new FrameLayout.LayoutParams(dp(88), -1, Gravity.RIGHT));
+        } else {
+            swipeContainer = null;
+            deleteAction = null;
+        }
+
         LinearLayout line = horizontal();
         line.setGravity(Gravity.CENTER_VERTICAL);
         line.setPadding(dp(14 + row.depth * 18), dp(8), dp(14), dp(8));
         line.setMinimumHeight(dp(row.group ? 52 : 56));
+        line.setBackgroundColor(Color.WHITE);
 
         ImageView icon = iconTile(row.group ? R.drawable.ic_prompt_folder
                 : ("仅图片".equals(row.appliesLabel) ? R.drawable.ic_image : R.drawable.ic_doc),
@@ -252,6 +290,10 @@ public final class InstructionSettingsActivity extends Activity {
         }
 
         line.setOnClickListener(v -> {
+            if (openSwipeRow == v) {
+                closeOpenSwipeRow();
+                return;
+            }
             if (row.group) {
                 if (row.expanded) expandedGroups.remove(row.node.id); else expandedGroups.add(row.node.id);
                 render(sorting ? drag.draft() : store.items());
@@ -259,62 +301,181 @@ public final class InstructionSettingsActivity extends Activity {
                 openEditor(row.node.id);
             }
         });
+        final float[] touchStart = new float[2];
+        final boolean[] swiping = {false};
+        final int touchSlop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
         line.setOnLongClickListener(v -> {
-            if (!sorting) { enterSort(); return true; }
-            v.startDragAndDrop(ClipData.newPlainText("prompt-id", row.node.id), new View.DragShadowBuilder(v), row.node.id, 0);
+            if (swiping[0]) return true;
+            if (savingSort) return true;
+            if (!sorting) enterSort(false);
+            startPromptDrag(v, row.node.id);
             return true;
         });
-        final float[] touchStart = new float[2];
-        line.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                touchStart[0] = event.getX(); touchStart[1] = event.getY();
-            } else if (!sorting && event.getAction() == MotionEvent.ACTION_UP) {
-                float dx = event.getX() - touchStart[0];
-                float dy = Math.abs(event.getY() - touchStart[1]);
-                if (dx < -dp(60) && dy < dp(40)) { confirmDelete(row.node); return true; }
-            }
-            return false;
-        });
-        if (sorting) line.setOnDragListener((v, event) -> handleDrop(event, row));
-        return line;
-    }
-
-    private boolean handleDrop(DragEvent event, PromptListPresentation.Row target) {
-        if (event.getAction() != DragEvent.ACTION_DROP) return true;
-        Object state = event.getLocalState();
-        if (!(state instanceof String)) return true;
-        String id = (String) state;
-        PromptNode moving = find(drag.draft(), id);
-        String groupId = target.node.isGroup() && moving != null && !moving.isGroup() ? target.node.id : parentOf(drag.draft(), target.node.id);
-        int index = target.node.isGroup() && moving != null && !moving.isGroup() ? target.node.children.size() : indexIn(drag.draft(), groupId, target.node.id);
-        if (drag.move(id, groupId, Math.max(0, index))) {
-            if (groupId != null) expandedGroups.add(groupId);
-            render(drag.draft());
+        if (!row.group) {
+            final float[] startTranslation = new float[1];
+            line.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    if (openSwipeRow != null && openSwipeRow != v) closeOpenSwipeRow();
+                    touchStart[0] = event.getRawX();
+                    touchStart[1] = event.getRawY();
+                    startTranslation[0] = v.getTranslationX();
+                    swiping[0] = false;
+                } else if (!sorting && event.getAction() == MotionEvent.ACTION_MOVE) {
+                    float dx = event.getRawX() - touchStart[0];
+                    float dy = event.getRawY() - touchStart[1];
+                    if (!swiping[0] && Math.abs(dx) > touchSlop && Math.abs(dx) > Math.abs(dy) * 1.2f) {
+                        swiping[0] = true;
+                        v.cancelLongPress();
+                        v.setPressed(false);
+                        v.getParent().requestDisallowInterceptTouchEvent(true);
+                    }
+                    if (swiping[0]) {
+                        float translation = startTranslation[0] + dx;
+                        v.setTranslationX(Math.max(-dp(88), Math.min(0, translation)));
+                        return true;
+                    }
+                } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                    if (swiping[0]) {
+                        boolean revealDelete = !sorting && event.getAction() == MotionEvent.ACTION_UP
+                                && v.getTranslationX() <= -dp(44);
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                        if (revealDelete) {
+                            v.animate().translationX(-dp(88)).setDuration(160).start();
+                            openSwipeRow = v;
+                        } else {
+                            v.animate().translationX(0f).setDuration(160).start();
+                            openSwipeRow = null;
+                        }
+                        swiping[0] = false;
+                        return true;
+                    }
+                }
+                return false;
+            });
+            deleteAction.setOnClickListener(v -> {
+                closeOpenSwipeRow();
+                confirmDelete(row.node);
+            });
         }
-        return true;
+        line.setOnDragListener((v, event) -> handleDrag(event, row, v));
+        if (swipeContainer == null) return line;
+        swipeContainer.addView(line, new FrameLayout.LayoutParams(-1, -2));
+        return swipeContainer;
     }
 
-    private void enterSort() {
+    private void closeOpenSwipeRow() {
+        if (openSwipeRow == null) return;
+        openSwipeRow.animate().translationX(0f).setDuration(160).start();
+        openSwipeRow = null;
+    }
+
+    private boolean handleDrag(DragEvent event, PromptListPresentation.Row target, View targetView) {
+        Object state = event.getLocalState();
+        if (!sorting || !(state instanceof String)) return false;
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED:
+                return true;
+            case DragEvent.ACTION_DRAG_ENTERED:
+                targetView.setAlpha(0.58f);
+                return true;
+            case DragEvent.ACTION_DRAG_EXITED:
+                targetView.setAlpha(1f);
+                return true;
+            case DragEvent.ACTION_DROP:
+                targetView.setAlpha(1f);
+                String id = (String) state;
+                PromptNode moving = find(drag.draft(), id);
+                boolean changed;
+                if (target.node.isGroup() && moving != null && !moving.isGroup()) {
+                    changed = drag.move(id, target.node.id, target.node.children.size());
+                    if (changed) expandedGroups.add(target.node.id);
+                } else {
+                    String groupId = parentOf(drag.draft(), target.node.id);
+                    boolean after = event.getY() >= targetView.getHeight() / 2f;
+                    changed = drag.moveOnto(id, groupId, target.node.id, after);
+                }
+                return true;
+            case DragEvent.ACTION_DRAG_ENDED:
+                targetView.setAlpha(1f);
+                postDragRender();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void startPromptDrag(View source, String id) {
+        ClipData data = ClipData.newPlainText("prompt-id", id);
+        View.DragShadowBuilder shadow = new View.DragShadowBuilder(source);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            source.startDragAndDrop(data, shadow, id, 0);
+        } else {
+            source.startDrag(data, shadow, id, 0);
+        }
+    }
+
+    private void postDragRender() {
+        if (dragRenderPosted) return;
+        dragRenderPosted = true;
+        content.post(() -> {
+            dragRenderPosted = false;
+            if (sorting && !savingSort) render(drag.draft());
+        });
+    }
+
+    private void enterSort(boolean rerender) {
+        closeOpenSwipeRow();
         sorting = true;
         drag.begin(store.items());
         intro.setText("长按提示词并拖动排序；拖到分组行可收进该组。");
-        showSortCancelAction();
-        rightHeaderButton.setText("完成"); rightHeaderButton.setTextSize(14); rightHeaderButton.setTextColor(Theme.ACCENT);
-        rightHeaderButton.setBackgroundColor(Color.TRANSPARENT); rightHeaderButton.setOnClickListener(v -> exitSort(true));
-        render(drag.draft());
+        showSortSaveAction(false);
+        if (rerender) render(drag.draft());
     }
 
     private void exitSort(boolean save) {
         if (save) {
-            String error = store.applyReorder(drag.draft(), drag.baseline());
-            if (error != null) showError(error);
-        } else {
-            drag.cancel();
+            saveSort();
+            return;
         }
+        if (savingSort) return;
+        drag.cancel();
+        finishSort();
+    }
+
+    private void saveSort() {
+        if (savingSort) return;
+        savingSort = true;
+        showSortSaveAction(true);
+        List<PromptNode> draft = drag.draft();
+        List<String> baseline = drag.baseline();
+        io.execute(() -> {
+            String error = store.applyReorder(draft, baseline);
+            runOnUiThread(() -> {
+                savingSort = false;
+                if (error != null) {
+                    showError(error);
+                    showSortSaveAction(false);
+                    render(drag.draft());
+                } else {
+                    finishSort();
+                }
+            });
+        });
+    }
+
+    private void finishSort() {
         sorting = false;
         intro.setText(normalIntro());
         showBackAction();
+        leftHeaderButton.setEnabled(true);
+        leftHeaderButton.setAlpha(1f);
         rightHeaderButton.setText("+"); rightHeaderButton.setTextSize(26); rightHeaderButton.setTextColor(Color.WHITE); rightHeaderButton.setBackground(rounded(Theme.ACCENT, 12)); rightHeaderButton.setOnClickListener(v -> showNewSheet());
+        rightHeaderButton.setEnabled(true);
+        rightHeaderButton.setAlpha(1f);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) rightHeaderButton.getLayoutParams();
+        params.width = dp(40);
+        rightHeaderButton.setLayoutParams(params);
         render(store.items());
     }
 
@@ -543,12 +704,53 @@ public final class InstructionSettingsActivity extends Activity {
     }
 
     private void confirmDelete(PromptNode node) {
-        new AlertDialog.Builder(this).setTitle("删除提示词")
-                .setMessage(node.isGroup() ? "删除分组会同时删除组内提示词，确定继续吗？" : "确定删除“" + node.label + "”吗？")
-                .setNegativeButton("取消", null).setPositiveButton("删除", (d, w) -> io.execute(() -> {
+        if (node == null || node.isGroup()) return;
+        String message = "删除『" + node.label + "』？此操作不可恢复（可用底部「恢复默认提示词」找回系统项）";
+        IosDialog.showConfirmation(this, "删除提示词", message, "删除", () -> {
+            Dialog deleteProgress = showDeleteProgress();
+            io.execute(() -> {
                     String error = store.remove(node.id);
-                    runOnUiThread(() -> { if (error != null) showError(error); render(store.items()); });
-                })).show();
+                    runOnUiThread(() -> {
+                        deleteProgress.dismiss();
+                        if (error != null) showError(error);
+                        render(store.items());
+                    });
+                });
+        }, "取消", null);
+    }
+
+    private Dialog showDeleteProgress() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
+
+        LinearLayout box = vertical();
+        box.setGravity(Gravity.CENTER);
+        box.setPadding(dp(20), dp(16), dp(20), dp(16));
+        box.setBackground(rounded(0xee1f1f1f, 14));
+        box.setElevation(dp(8));
+
+        ProgressBar spinner = new ProgressBar(this);
+        spinner.setIndeterminate(true);
+        spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(dp(26), dp(26));
+        box.addView(spinner, spinnerParams);
+        TextView status = text("正在删除…", 14, Typeface.BOLD, Color.WHITE);
+        status.setGravity(Gravity.CENTER);
+        box.addView(status, margins(-2, -2, 0, 10, 0, 0));
+
+        dialog.setContentView(box);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setDimAmount(0.16f);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setGravity(Gravity.CENTER);
+        }
+        dialog.show();
+        if (window != null) window.setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        return dialog;
     }
 
     private void confirmRestore() {
@@ -570,13 +772,6 @@ public final class InstructionSettingsActivity extends Activity {
     private static String parentOf(List<PromptNode> items, String id) {
         for (PromptNode node : items) for (PromptNode child : node.children) if (id.equals(child.id)) return node.id;
         return null;
-    }
-
-    private static int indexIn(List<PromptNode> items, String parentId, String id) {
-        List<PromptNode> list = items;
-        if (parentId != null) { PromptNode parent = find(items, parentId); if (parent != null) list = parent.children; }
-        for (int i = 0; i < list.size(); i++) if (id.equals(list.get(i).id)) return i;
-        return list.size();
     }
 
     private LinearLayout vertical() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }

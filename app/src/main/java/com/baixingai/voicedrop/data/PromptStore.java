@@ -40,6 +40,7 @@ public final class PromptStore {
     private final Transport transport;
     private final Cache cache;
     private final String bearer;
+    private final String shareBearer;
     private final String baseUrl;
     private final List<PromptNode> builtin;
     private List<PromptNode> items;
@@ -59,15 +60,22 @@ public final class PromptStore {
             @Override public void put(String key, String value) { prefs.edit().putString(key, value).apply(); }
         };
         this.bearer = auth.bearer();
+        this.shareBearer = auth.session();
         this.baseUrl = Api.agentBase();
         this.builtin = PromptDefaults.items();
         this.items = loadCached();
     }
 
     public PromptStore(Transport transport, Cache cache, String bearer, String baseUrl, List<PromptNode> builtin) {
+        this(transport, cache, bearer, bearer, baseUrl, builtin);
+    }
+
+    public PromptStore(Transport transport, Cache cache, String bearer, String shareBearer,
+                       String baseUrl, List<PromptNode> builtin) {
         this.transport = transport;
         this.cache = cache;
         this.bearer = bearer;
+        this.shareBearer = shareBearer;
         this.baseUrl = baseUrl;
         this.builtin = PromptTree.copy(builtin);
         this.items = loadCached();
@@ -230,10 +238,13 @@ public final class PromptStore {
     }
 
     public ShareState setSharing(String id, boolean sharing) {
+        if (shareBearer == null || shareBearer.isEmpty()) {
+            return new ShareState("", false, "请先登录微信后分享提示词");
+        }
         try {
             HttpClient.Response response = sharing
-                    ? transport.post(baseUrl + "/prompt-share", bearer, new JSONObject().put("id", id).toString().getBytes(StandardCharsets.UTF_8))
-                    : transport.delete(baseUrl + "/prompt-share/" + Uri.encode(id), bearer);
+                    ? transport.post(baseUrl + "/prompt-share", shareBearer, new JSONObject().put("id", id).toString().getBytes(StandardCharsets.UTF_8))
+                    : transport.delete(baseUrl + "/prompt-share/" + Uri.encode(id), shareBearer);
             if (!response.ok()) {
                 return new ShareState("", false, response.code == 429 ? "今天生成分享码的次数已达上限，明天再试" : "提示词分享操作失败");
             }

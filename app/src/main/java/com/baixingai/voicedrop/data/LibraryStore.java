@@ -23,6 +23,7 @@ public final class LibraryStore {
     private final Map<String, String> titleCache = new HashMap<>();
     private final Map<String, List<String>> tagsCache = new HashMap<>();
     private String cachedScope;
+    private String cachedScopeToken;
 
     public LibraryStore(AuthStore auth, HttpClient http) {
         this.auth = auth;
@@ -393,10 +394,12 @@ public final class LibraryStore {
     }
 
     public String ownerScope() throws Exception {
-        if (cachedScope != null && !cachedScope.isEmpty()) return cachedScope;
-        HttpClient.Response response = http.get(Api.filesBase() + "/whoami", auth.bearer());
+        String token = auth.bearer();
+        if (token.equals(cachedScopeToken) && cachedScope != null && !cachedScope.isEmpty()) return cachedScope;
+        HttpClient.Response response = http.get(Api.filesBase() + "/whoami", token);
         if (!response.ok()) return null;
         cachedScope = new JSONObject(response.text()).optString("scope", null);
+        cachedScopeToken = token;
         return cachedScope;
     }
 

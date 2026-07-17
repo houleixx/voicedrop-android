@@ -86,6 +86,25 @@ public class PromptStoreTest {
         assertEquals("POST /agent/prompt-share", transport.lastRequestLine());
     }
 
+    @Test public void sharingUsesSignedSessionWhilePromptDataKeepsAnonymousBearer() {
+        PromptStore signedStore = new PromptStore(transport, cache, "anon-token", "wechat.session.token",
+                "https://example.test/agent", new ArrayList<>());
+        transport.enqueue(200, RESOLVED);
+        assertNull(signedStore.refresh());
+        assertEquals("anon-token", transport.lastBearer);
+
+        transport.enqueue(200, "{\"code\":\"1234567\",\"sharing\":true}");
+        assertNull(signedStore.setSharing("p_12345678", true).error);
+        assertEquals("wechat.session.token", transport.lastBearer);
+    }
+
+    @Test public void sharingWithoutSignedSessionShowsWechatLoginGuidance() {
+        PromptStore unsignedStore = new PromptStore(transport, cache, "anon-token", "",
+                "https://example.test/agent", new ArrayList<>());
+        PromptStore.ShareState result = unsignedStore.setSharing("p_12345678", true);
+        assertEquals("请先登录微信后分享提示词", result.error);
+    }
+
     private static final class FakeCache implements PromptStore.Cache {
         private final Map<String, String> values = new HashMap<>();
         @Override public String get(String key) { return values.get(key); }
@@ -96,15 +115,17 @@ public class PromptStoreTest {
         private final ArrayDeque<HttpClient.Response> responses = new ArrayDeque<>();
         private final List<String> requests = new ArrayList<>();
         int putCount;
+        String lastBearer;
         void enqueue(int status, String body) { responses.add(new HttpClient.Response(status, body.getBytes(StandardCharsets.UTF_8))); }
         String lastRequestLine() { return requests.get(requests.size() - 1); }
-        private HttpClient.Response response(String method, String url) {
+        private HttpClient.Response response(String method, String url, String bearer) {
+            lastBearer = bearer;
             requests.add(method + " " + url.substring(url.indexOf("/agent")));
             return responses.remove();
         }
-        @Override public HttpClient.Response get(String url, String bearer) { return response("GET", url); }
-        @Override public HttpClient.Response put(String url, String bearer, byte[] json) { putCount++; return response("PUT", url); }
-        @Override public HttpClient.Response post(String url, String bearer, byte[] json) { return response("POST", url); }
-        @Override public HttpClient.Response delete(String url, String bearer) { return response("DELETE", url); }
+        @Override public HttpClient.Response get(String url, String bearer) { return response("GET", url, bearer); }
+        @Override public HttpClient.Response put(String url, String bearer, byte[] json) { putCount++; return response("PUT", url, bearer); }
+        @Override public HttpClient.Response post(String url, String bearer, byte[] json) { return response("POST", url, bearer); }
+        @Override public HttpClient.Response delete(String url, String bearer) { return response("DELETE", url, bearer); }
     }
 }

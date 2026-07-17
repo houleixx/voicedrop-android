@@ -187,6 +187,7 @@ public final class PromptStore {
                     List<PromptNode> next = PromptTree.copy(items);
                     if (!PromptTree.flattenIds(next).contains(node.id)) next.add(node);
                     items = next;
+                    cache.put(CACHE_KEY, PromptTree.encodeResolved(items));
                 }
                 return null;
             }

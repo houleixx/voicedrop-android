@@ -77,10 +77,11 @@ public class CommunityStoreTest {
     @Test
     public void promptPostKeepsCollectibleMetadata() throws Exception {
         CommunityStore.Post post = CommunityStore.Post.from(new JSONObject(
-                "{\"shareId\":\"prompt\",\"kind\":\"prompt\",\"promptCode\":\"1234567\",\"appliesTo\":[\"text\",\"image\"]}"));
+                "{\"shareId\":\"prompt\",\"owner\":\"users/u/\",\"kind\":\"prompt\",\"promptCode\":\"1234567\",\"appliesTo\":[\"text\",\"image\"]}"));
 
         assertTrue(post.isPrompt());
         assertEquals("1234567", post.promptCode);
+        assertEquals("users/u/", post.owner);
         assertEquals(Arrays.asList("text", "image"), post.appliesTo);
     }
 

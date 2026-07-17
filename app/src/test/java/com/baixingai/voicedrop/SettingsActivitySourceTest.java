@@ -101,6 +101,19 @@ public class SettingsActivitySourceTest {
         assertTrue(source.contains("nameValueText.setText(name)"));
     }
 
+    @Test
+    public void inviteFriendsUsesItsOwnCard() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String primary = methodBody(source, "private void addPrimaryCard");
+        String invite = methodBody(source, "private void addInviteCard");
+
+        assertTrue(source.contains("addPrimaryCard(content);\n        addInviteCard(content);"));
+        assertFalse(primary.contains("邀请好友"));
+        assertTrue(invite.contains("card.setBackground(settingsCardBackground())"));
+        assertTrue(invite.contains("\"邀请好友\", \"朋友装上，双方都得算力\", this::shareInvite"));
+        assertTrue(invite.contains("lp.setMargins(0, dp(12), 0, 0)"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

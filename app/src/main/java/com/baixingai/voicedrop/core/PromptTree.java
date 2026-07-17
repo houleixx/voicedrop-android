@@ -64,6 +64,9 @@ public final class PromptTree {
                     if (node.kind != null) {
                         item.put("kind", node.kind);
                     }
+                    if (node.importedFrom != null) {
+                        item.put("importedFrom", node.importedFrom);
+                    }
                 }
             }
             out.put(item);
@@ -73,6 +76,32 @@ public final class PromptTree {
 
     public static String encodeRaw(List<PromptNode> nodes) throws JSONException {
         return new JSONObject().put("items", rawItems(nodes)).toString();
+    }
+
+    public static String encodeResolved(List<PromptNode> nodes) throws JSONException {
+        return new JSONObject().put("schema", 1).put("items", resolvedItems(nodes)).toString();
+    }
+
+    private static JSONArray resolvedItems(List<PromptNode> nodes) throws JSONException {
+        JSONArray out = new JSONArray();
+        for (PromptNode node : nodes) {
+            JSONObject item = new JSONObject()
+                    .put("id", node.id)
+                    .put("type", node.type)
+                    .put("label", node.label)
+                    .put("origin", node.origin);
+            if (node.forkedFrom != null) item.put("forkedFrom", node.forkedFrom);
+            if (node.importedFrom != null) item.put("importedFrom", node.importedFrom);
+            if (node.isGroup()) {
+                item.put("children", resolvedItems(node.children));
+            } else {
+                item.put("prompt", node.prompt);
+                item.put("appliesTo", new JSONArray(node.appliesTo));
+                if (node.kind != null) item.put("kind", node.kind);
+            }
+            out.put(item);
+        }
+        return out;
     }
 
     public static PromptNode fork(PromptNode node, Supplier<String> ids) {
@@ -86,6 +115,14 @@ public final class PromptTree {
     public static String newUserId() {
         String compact = UUID.randomUUID().toString().replace("-", "").toLowerCase(Locale.ROOT);
         return "p_" + compact.substring(0, 8);
+    }
+
+    public static boolean containsImport(List<PromptNode> nodes, String code) {
+        if (code == null || code.isEmpty()) return false;
+        for (PromptNode node : nodes) {
+            if (code.equals(node.importedFrom) || containsImport(node.children, code)) return true;
+        }
+        return false;
     }
 
     public static final class MutationResult {

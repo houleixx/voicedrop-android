@@ -73,6 +73,23 @@ public class PromptTreeTest {
     }
 
     @Test
+    public void importedShareCodeSurvivesResolvedAndRawTrees() throws Exception {
+        PromptNode imported = PromptNode.fromResolved(new JSONObject(
+                "{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\","
+                        + "\"prompt\":\"P\",\"appliesTo\":[\"text\"],\"importedFrom\":\"3295225\"}"));
+        PromptNode nested = group("g", imported);
+
+        assertEquals("3295225", imported.importedFrom);
+        assertTrue(PromptTree.containsImport(java.util.Collections.singletonList(nested), "3295225"));
+        JSONObject rawItem = new JSONObject(PromptTree.encodeRaw(java.util.Collections.singletonList(imported)))
+                .getJSONArray("items").getJSONObject(0);
+        assertEquals("3295225", rawItem.getString("importedFrom"));
+        PromptNode restored = PromptTree.decode(PromptTree.encodeResolved(
+                java.util.Collections.singletonList(imported))).get(0);
+        assertEquals("3295225", restored.importedFrom);
+    }
+
+    @Test
     public void imageMenuContainsOnlyImageActions() {
         PromptNode style = group("style",
                 action("sys_cartoon", "卡通", "system", "image"),

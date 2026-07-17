@@ -15,6 +15,7 @@ public final class PromptNode {
     public String prompt;
     public String kind;
     public String forkedFrom;
+    public String importedFrom;
     public final List<String> appliesTo = new ArrayList<>();
     public final List<PromptNode> children = new ArrayList<>();
 
@@ -35,6 +36,7 @@ public final class PromptNode {
         out.prompt = prompt;
         out.kind = kind;
         out.forkedFrom = forkedFrom;
+        out.importedFrom = importedFrom;
         out.appliesTo.addAll(appliesTo);
         for (PromptNode child : children) {
             out.children.add(child.copy());
@@ -51,6 +53,7 @@ public final class PromptNode {
         out.prompt = nullableString(json, "prompt");
         out.kind = nullableString(json, "kind");
         out.forkedFrom = nullableString(json, "forkedFrom");
+        out.importedFrom = nullableString(json, "importedFrom");
 
         JSONArray applies = json.optJSONArray("appliesTo");
         if (applies != null) {

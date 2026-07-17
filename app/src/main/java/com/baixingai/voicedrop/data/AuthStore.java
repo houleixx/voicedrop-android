@@ -64,6 +64,20 @@ public final class AuthStore {
         }
     }
 
+    /** Bucket prefix used by the backend's community owner field. */
+    public String storageScope() {
+        String signed = session();
+        if (!signed.isEmpty()) {
+            try {
+                String[] parts = signed.split("\\.");
+                byte[] data = Base64.decode(parts[1], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+                String scope = new JSONObject(new String(data, "UTF-8")).optString("scope", "");
+                if (scope.startsWith("users/") && scope.endsWith("/")) return scope;
+            } catch (Exception ignored) {}
+        }
+        return "users/" + anonId() + "/";
+    }
+
     public void resetAnonymous() {
         prefs.edit().putString(ANON, newAnon())
                 .remove(SESSION).remove(PRE_WECHAT_ANON).apply();

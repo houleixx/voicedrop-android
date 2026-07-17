@@ -41,6 +41,7 @@ import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.PromptTree;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -55,6 +56,7 @@ import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingReplyStore;
 import com.baixingai.voicedrop.data.Prefs;
+import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
@@ -886,6 +888,13 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void showCommunityPost(CommunityStore.Post post, ArticleDoc doc, boolean animateOpen) {
+        // Prompt posts have their own collectible-resource detail layout. Keep the
+        // article renderer below unchanged so prompt presentation cannot regress
+        // article bodies, photos, replies, or reply recording.
+        if (post.isPrompt()) {
+            showCommunityPromptPost(post, doc, animateOpen);
+            return;
+        }
         FrameLayout communityFrame = new FrameLayout(this);
         communityFrame.setBackgroundColor(Theme.BG);
         attachPage(communityFrame, animateOpen);
@@ -1098,6 +1107,239 @@ public final class CommunityDetailActivity extends Activity {
         // Store references for the recording bar
         final CommunityStore.Post finalPost = post;
         root.setTag(new Object[]{post, recordingBarContainer, scroll, content});
+    }
+
+    protected void showCommunityPromptPost(CommunityStore.Post post, ArticleDoc doc, boolean animateOpen) {
+        FrameLayout communityFrame = new FrameLayout(this);
+        communityFrame.setBackgroundColor(Theme.BG);
+        attachPage(communityFrame, animateOpen);
+
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Theme.BG);
+        communityFrame.addView(page, match());
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        addNavBackButton(bar, this::leaveDetailPage);
+        bar.addView(new Space(this), new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        final String shareId = post.shareId;
+        final String authorName = communityAuthorName(post);
+        final boolean ownPrompt = post.mine || (!post.owner.isEmpty() && post.owner.equals(auth.storageScope()));
+        final boolean[] fed = {false};
+        final boolean[] feeding = {false};
+
+        FrameLayout feedBtn = new FrameLayout(this);
+        feedBtn.setClickable(true);
+        feedBtn.setContentDescription("投币");
+        final ImageView feedIcon = new ImageView(this);
+        feedIcon.setImageResource(R.drawable.ic_settings_bolt);
+        feedIcon.setColorFilter(Theme.INK);
+        feedIcon.setScaleType(ImageView.ScaleType.CENTER);
+        feedBtn.addView(feedIcon, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
+        bar.addView(feedBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        io.execute(() -> {
+            try {
+                List<String> ids = new ArrayList<>();
+                ids.add(shareId);
+                CommunityStore.FeedState state = community.feedStates(ids).get(shareId);
+                if (state != null) main.post(() -> {
+                    fed[0] = state.fed;
+                    feedIcon.setColorFilter(fed[0] ? 0xffd99a1a : Theme.INK);
+                    feedBtn.setContentDescription(fed[0] ? "已投币" : "投币");
+                });
+            } catch (Exception ignored) {}
+        });
+        feedBtn.setOnClickListener(v -> {
+            if (fed[0] || feeding[0]) return;
+            feeding[0] = true;
+            feedBtn.setAlpha(0.45f);
+            io.execute(() -> {
+                try {
+                    CommunityStore.FeedResult result = community.feed(shareId);
+                    main.post(() -> {
+                        feeding[0] = false;
+                        feedBtn.setAlpha(1f);
+                        if (result.ok || result.already) {
+                            fed[0] = true;
+                            feedIcon.setColorFilter(0xffd99a1a);
+                            feedBtn.setContentDescription("已投币");
+                            if (result.already) toast("已经投过这条了");
+                            else toast("已投币：你 +" + suanliText(result.feederSuanli)
+                                    + "，作者 +" + suanliText(result.authorSuanli) + " 算力");
+                        } else if ("cannot_feed_own".equals(result.error)) {
+                            toast("不能给自己的提示词投币");
+                        } else if ("pool_exhausted".equals(result.error)) {
+                            toast("今日算力池已发完，明天再来");
+                        } else if (result.needsWechatSignin()) {
+                            toast("投币需要先用微信登录");
+                        } else {
+                            toast("投币失败，稍后再试");
+                        }
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        feeding[0] = false;
+                        feedBtn.setAlpha(1f);
+                        toast("投币失败：" + e.getMessage());
+                    });
+                }
+            });
+        });
+
+        final boolean[] liked = {prefs.likedCommunityPost(shareId)};
+        final boolean[] likeTouched = {false};
+        FrameLayout likeBtn = new FrameLayout(this);
+        likeBtn.setClickable(true);
+        likeBtn.setContentDescription(liked[0] ? "取消赞" : "赞");
+        final ImageView likeIcon = new ImageView(this);
+        AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
+                liked[0] ? Theme.RED : Theme.INK);
+        likeIcon.setScaleType(ImageView.ScaleType.CENTER);
+        likeBtn.addView(likeIcon, new FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER));
+        bar.addView(likeBtn, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        io.execute(() -> {
+            try {
+                List<CommunityStore.Post> singleton = new ArrayList<>();
+                singleton.add(post);
+                boolean serverLiked = community.rank(singleton).liked.contains(shareId);
+                main.post(() -> {
+                    if (likeTouched[0]) return;
+                    liked[0] = serverLiked;
+                    prefs.setLikedCommunityPost(shareId, serverLiked);
+                    AliIconFont.apply(likeIcon, serverLiked ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
+                            serverLiked ? Theme.RED : Theme.INK);
+                    likeBtn.setContentDescription(serverLiked ? "取消赞" : "赞");
+                });
+            } catch (Exception ignored) {}
+        });
+        likeBtn.setOnClickListener(v -> {
+            likeTouched[0] = true;
+            liked[0] = !liked[0];
+            prefs.setLikedCommunityPost(shareId, liked[0]);
+            AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
+                    liked[0] ? Theme.RED : Theme.INK);
+            likeBtn.setContentDescription(liked[0] ? "取消赞" : "赞");
+            io.execute(() -> community.engage(shareId, "like", liked[0]));
+        });
+
+        toolbarIconButton(bar, Theme.INK, 11, AliIconFont.MORE, Color.WHITE,
+                dp(18), dp(38), dp(2), true, v -> showCommunityPostMenu(post, authorName, v));
+
+        BouncyScrollView scroll = new BouncyScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22), dp(12), dp(22), getNavigationBarHeight() + dp(24));
+        scroll.addView(content);
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        MinedArticle prompt = doc != null && !doc.articles.isEmpty() ? doc.articles.get(0) : null;
+        String titleText = prompt != null && prompt.title != null && !prompt.title.isEmpty()
+                ? prompt.title : (post.title == null || post.title.isEmpty() ? "社区提示词" : post.title);
+        TextView title = text(titleText, 26, Theme.INK, Typeface.BOLD);
+        title.setLineSpacing(dp(5), 1f);
+        content.addView(title);
+
+        TextView meta = text("", 14, Theme.FAINT, Typeface.NORMAL);
+        meta.setText(communityMetaText(post));
+        meta.setPadding(0, dp(9), 0, dp(18));
+        content.addView(meta);
+
+        if (!post.promptCode.isEmpty()) {
+            TextView codeLabel = text("一条 VoiceDrop 提示词 · 分享码", 13, Theme.FAINT, Typeface.NORMAL);
+            codeLabel.setGravity(Gravity.CENTER);
+            content.addView(codeLabel, new LinearLayout.LayoutParams(-1, -2));
+
+            TextView code = text(post.promptCode, 38, Theme.INK, Typeface.BOLD);
+            code.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            code.setLetterSpacing(0.18f);
+            code.setGravity(Gravity.CENTER);
+            code.setPadding(0, dp(8), 0, dp(20));
+            content.addView(code, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        TextView instruction = text(prompt == null || prompt.body == null || prompt.body.isEmpty()
+                        ? "这条提示词暂不可读，请稍后刷新。" : prompt.body,
+                16, Theme.INK, Typeface.NORMAL);
+        instruction.setLineSpacing(dp(7), 1f);
+        instruction.setPadding(dp(15), dp(15), dp(15), dp(15));
+        instruction.setTextIsSelectable(true);
+        instruction.setBackground(round(0xfff0ece5, 12));
+        content.addView(instruction, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView howTitle = text("怎么用", 16, Theme.INK, Typeface.BOLD);
+        howTitle.setPadding(0, dp(22), 0, dp(8));
+        content.addView(howTitle);
+        if (!post.promptCode.isEmpty()) {
+            TextView oneTime = text("在任意文章里长按屏幕按住说话，说「用 " + post.promptCode
+                            + " 改这段」——AI 按这条提示词干活，只管这一次，不改你的设置。",
+                    14, Theme.SECONDARY, Typeface.NORMAL);
+            oneTime.setLineSpacing(dp(5), 1f);
+            content.addView(oneTime);
+        }
+        TextView longTerm = text(ownPrompt
+                        ? "这是你分享的提示词。把分享码发给朋友，或在 设置 → 提示词 里管理。"
+                        : "想长期用：点下面「收下这条提示词」，之后长按菜单里随手可用。",
+                14, Theme.SECONDARY, Typeface.NORMAL);
+        longTerm.setLineSpacing(dp(5), 1f);
+        longTerm.setPadding(0, dp(8), 0, 0);
+        content.addView(longTerm);
+
+        if (!ownPrompt && !post.promptCode.isEmpty()) {
+            PromptStore promptStore = new PromptStore(this, auth, http);
+            final boolean[] imported = {PromptTree.containsImport(promptStore.items(), post.promptCode)};
+            final boolean[] importing = {false};
+
+            LinearLayout importButton = new LinearLayout(this);
+            importButton.setGravity(Gravity.CENTER);
+            importButton.setClickable(!imported[0]);
+            importButton.setContentDescription(imported[0] ? "已收下" : "收下这条提示词");
+            importButton.setBackground(round(imported[0] ? Theme.SECONDARY : Theme.ACCENT, 12));
+            ImageView importIcon = new ImageView(this);
+            importIcon.setImageResource(imported[0] ? R.drawable.ic_check_flat : R.drawable.ic_prompt_import);
+            importIcon.setColorFilter(Color.WHITE);
+            importButton.addView(importIcon, new LinearLayout.LayoutParams(dp(21), dp(21)));
+            TextView importLabel = text(imported[0] ? "已收下" : "收下这条提示词",
+                    16, Color.WHITE, Typeface.BOLD);
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
+            labelLp.setMargins(dp(9), 0, 0, 0);
+            importButton.addView(importLabel, labelLp);
+            LinearLayout.LayoutParams buttonLp = new LinearLayout.LayoutParams(-1, dp(56));
+            buttonLp.setMargins(0, dp(24), 0, 0);
+            content.addView(importButton, buttonLp);
+            importButton.setOnClickListener(v -> {
+                if (imported[0] || importing[0]) return;
+                importing[0] = true;
+                importButton.setAlpha(0.55f);
+                io.execute(() -> {
+                    String error = promptStore.importCode(post.promptCode);
+                    main.post(() -> {
+                        importing[0] = false;
+                        importButton.setAlpha(1f);
+                        if (error == null) {
+                            imported[0] = true;
+                            importButton.setClickable(false);
+                            importButton.setContentDescription("已收下");
+                            importButton.setBackground(round(Theme.SECONDARY, 12));
+                            importIcon.setImageResource(R.drawable.ic_check_flat);
+                            importIcon.setColorFilter(Color.WHITE);
+                            importLabel.setText("已收下");
+                            toast("已加入你的提示词");
+                        } else {
+                            toast(error);
+                        }
+                    });
+                });
+            });
+        }
+
+        io.execute(() -> {
+            try { community.engage(shareId, "view"); } catch (Exception ignored) {}
+        });
+        root.setTag(new Object[]{post, scroll, content});
     }
 
     protected void startCommunityReplyRecording(CommunityStore.Post post) {

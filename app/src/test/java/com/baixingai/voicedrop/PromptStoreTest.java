@@ -3,6 +3,7 @@ package com.baixingai.voicedrop;
 import com.baixingai.voicedrop.core.PromptNode;
 import com.baixingai.voicedrop.core.PromptTree;
 import com.baixingai.voicedrop.data.PromptStore;
+import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.net.HttpClient;
 
 import org.junit.Before;
@@ -19,6 +20,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class PromptStoreTest {
     private static final String RESOLVED = "{\"schema\":1,\"items\":[{\"id\":\"sys_concise\",\"type\":\"action\",\"label\":\"精简\",\"origin\":\"system\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]}]}";
@@ -76,9 +78,10 @@ public class PromptStoreTest {
         assertEquals("共享", store.preview("1234567").label);
         assertEquals("GET /agent/prompt-share/1234567", transport.lastRequestLine());
 
-        transport.enqueue(200, "{\"item\":{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]}}");
+        transport.enqueue(200, "{\"item\":{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\",\"prompt\":\"P\",\"appliesTo\":[\"text\"],\"importedFrom\":\"1234567\"}}");
         assertNull(store.importCode("1234567"));
         assertEquals("POST /agent/prompts/import", transport.lastRequestLine());
+        assertTrue(cache.get(PromptStore.CACHE_KEY).contains("\"importedFrom\":\"1234567\""));
 
         transport.enqueue(200, "{\"code\":\"1234567\",\"sharing\":true}");
         PromptStore.ShareState state = store.setSharing("p_12345678", true);
@@ -111,12 +114,34 @@ public class PromptStoreTest {
         assertEquals(1, PromptTree.flattenIds(store.items()).size());
     }
 
+    @Test public void importedPromptIsImmediatelyVisibleToRecordingDetailMenus() {
+        transport.enqueue(200, "{\"item\":{\"id\":\"p_imported1\",\"type\":\"action\","
+                + "\"label\":\"社区导入\",\"origin\":\"user\",\"prompt\":\"按导入提示词处理\","
+                + "\"appliesTo\":[\"text\",\"image\"],\"importedFrom\":\"3295225\"}}");
+
+        assertNull(store.importCode("3295225"));
+
+        PromptStore recordingDetailStore = new PromptStore(
+                new FakeTransport(), cache, "token", "https://example.test/agent", new ArrayList<>());
+        assertTrue(menuContains(recordingDetailStore.textMenu(), "社区导入"));
+        assertTrue(menuContains(recordingDetailStore.imageMenu(), "社区导入"));
+    }
+
     @Test public void sharingPreservesServerBusinessError() {
         PromptStore signedStore = new PromptStore(transport, cache, "anon-token", "wechat.session.token",
                 "https://example.test/agent", new ArrayList<>());
         transport.enqueue(403, "{\"error\":\"content_flagged\"}");
         assertEquals("提示词未通过社区审核，暂时不能分享",
                 signedStore.setSharing("p_12345678", true).error);
+    }
+
+    private static boolean menuContains(UIConfigStore.MenuConfig menu, String label) {
+        for (List<UIConfigStore.MenuNode> group : menu.groups) {
+            for (UIConfigStore.MenuNode node : group) {
+                if (label.equals(node.label)) return true;
+            }
+        }
+        return false;
     }
 
     private static final class FakeCache implements PromptStore.Cache {

@@ -161,6 +161,7 @@ public class SettingsActivity extends Activity {
     private void rebuildPrimarySettings(LinearLayout content) {
         // 顶部卡片：账户、算力
         addPrimaryCard(content);
+        addInviteCard(content);
 
         // 写作
         addSection(content, "写作");
@@ -246,15 +247,22 @@ public class SettingsActivity extends Activity {
         usageRow.setOnClickListener(v -> openUsage());
         card.addView(usageRow);
 
-        View inviteDivider = new View(this);
-        inviteDivider.setBackgroundColor(0xfff0e8da);
-        card.addView(inviteDivider, cardDividerLayoutParams());
-        addCardRow(card, R.drawable.ic_settings_community, "邀请好友", "朋友装上，双方都得算力", this::shareInvite);
-
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, 0);
         content.addView(card, lp);
         loadPrimaryUsageBalance();
+    }
+
+    private void addInviteCard(LinearLayout content) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(settingsCardBackground());
+        addCardRow(card, R.drawable.ic_settings_community,
+                "邀请好友", "朋友装上，双方都得算力", this::shareInvite);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(12), 0, 0);
+        content.addView(card, lp);
     }
 
     private void loadPrimaryUsageBalance() {

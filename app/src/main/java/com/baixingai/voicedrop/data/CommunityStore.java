@@ -239,6 +239,7 @@ public final class CommunityStore {
     public static final class Post {
         public final String shareId;
         public final String author;
+        public final String owner;
         public final String articleKey;
         public final double firstSharedAt;
         public final String title;
@@ -254,11 +255,12 @@ public final class CommunityStore {
         public final String promptCode;
         public final List<String> appliesTo;
 
-        Post(String shareId, String author, String articleKey, double firstSharedAt, String title, String replyTo,
+        Post(String shareId, String author, String owner, String articleKey, double firstSharedAt, String title, String replyTo,
              ArticleDoc doc, double updatedAt, int count, boolean mine, boolean hasPhoto,
              String coverPhotoKey, String preview, String kind, String promptCode, List<String> appliesTo) {
             this.shareId = shareId;
             this.author = author;
+            this.owner = owner;
             this.articleKey = articleKey;
             this.firstSharedAt = firstSharedAt;
             this.title = title;
@@ -281,6 +283,7 @@ public final class CommunityStore {
         public static Post from(JSONObject obj) {
             return new Post(trim(obj.optString("shareId")),
                     trim(obj.optString("author", obj.optString("authorName"))),
+                    trim(obj.optString("owner")),
                     trim(obj.optString("articleKey")), obj.optDouble("firstSharedAt", obj.optDouble("sharedAt")),
                     trim(obj.optString("title")),
                     trim(obj.optString("replyTo")),

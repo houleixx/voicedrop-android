@@ -85,6 +85,15 @@ public class CommunityStoreTest {
     }
 
     @Test
+    public void lightweightFeedPromptIsRecognizedWithoutPromptCode() throws Exception {
+        CommunityStore.Post post = CommunityStore.Post.from(new JSONObject(
+                "{\"shareId\":\"prompt\",\"kind\":\"prompt\"}"));
+
+        assertTrue(post.isPrompt());
+        assertEquals("", post.promptCode);
+    }
+
+    @Test
     public void legacyFeedKeepsLatestOrderAndRanksWhenCoverageIsComplete() throws Exception {
         CommunityStore.Post a = CommunityStore.Post.from(new JSONObject(
                 "{\"shareId\":\"a\",\"firstSharedAt\":2,\"replyTo\":\"root\"}"));

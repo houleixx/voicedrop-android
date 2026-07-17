@@ -49,6 +49,6 @@ public class CommunityFeedPresentationTest {
 
     private CommunityStore.Post prompt(String id, double time) throws Exception {
         return CommunityStore.Post.from(new JSONObject().put("shareId", id).put("firstSharedAt", time)
-                .put("kind", "prompt").put("promptCode", "1234567"));
+                .put("kind", "prompt"));
     }
 }

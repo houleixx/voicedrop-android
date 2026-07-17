@@ -275,7 +275,8 @@ public final class CommunityStore {
             this.appliesTo = Collections.unmodifiableList(new ArrayList<>(appliesTo));
         }
 
-        public boolean isPrompt() { return "prompt".equals(kind) && !promptCode.isEmpty(); }
+        // The lightweight /reco/feed omits promptCode; detail fetch supplies it.
+        public boolean isPrompt() { return "prompt".equals(kind); }
 
         public static Post from(JSONObject obj) {
             return new Post(trim(obj.optString("shareId")),

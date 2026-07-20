@@ -43,7 +43,7 @@ public final class CommunityFeedView extends LinearLayout {
             {0xffe7ede3, 0xffd6e0ce}
     };
 
-    private final CommunityStore.Feed feed;
+    private CommunityStore.Feed feed;
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final FeedAdapter adapter;
@@ -82,6 +82,12 @@ public final class CommunityFeedView extends LinearLayout {
     /** Places the refresh spinner immediately below the fixed filter tabs. */
     public int refreshSpinnerOffset() {
         return dp(38);
+    }
+
+    /** Updates the existing masonry list without recreating the pager or losing scroll state. */
+    public void updateFeed(CommunityStore.Feed next) {
+        feed = next == null ? CommunityStore.Feed.empty() : next;
+        adapter.setPosts(CommunityFeedPresentation.posts(feed, selected));
     }
 
     private View buildTabs() {

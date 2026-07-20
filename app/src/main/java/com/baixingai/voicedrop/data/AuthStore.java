@@ -14,6 +14,8 @@ public final class AuthStore {
     private static final String ANON = "anon";
     private static final String SESSION = "session";
     private static final String PRE_WECHAT_ANON = "pre_wechat_anon";
+    private static final String LIBRARY_META_PREFIX = "library_meta_v1_";
+    private static final String COMMUNITY_FEED_PREFIX = "community_feed_v1_";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SharedPreferences prefs;
@@ -61,6 +63,46 @@ public final class AuthStore {
             return builder.toString();
         } catch (Exception e) {
             return "anon-local";
+        }
+    }
+
+    public String libraryMetadataCache() {
+        return prefs.getString(libraryMetadataKey(), "");
+    }
+
+    public void storeLibraryMetadataCache(String json) {
+        prefs.edit().putString(libraryMetadataKey(), json == null ? "" : json).apply();
+    }
+
+    public String communityFeedCache() {
+        return prefs.getString(communityFeedKey(), "");
+    }
+
+    public void storeCommunityFeedCache(String json) {
+        prefs.edit().putString(communityFeedKey(), json == null ? "" : json).apply();
+    }
+
+    private String libraryMetadataKey() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(bearer().getBytes("UTF-8"));
+            StringBuilder key = new StringBuilder(LIBRARY_META_PREFIX);
+            for (int i = 0; i < 12 && i < hash.length; i++) key.append(String.format("%02x", hash[i]));
+            return key.toString();
+        } catch (Exception e) {
+            return LIBRARY_META_PREFIX + "default";
+        }
+    }
+
+    private String communityFeedKey() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(anonymousBearer().getBytes("UTF-8"));
+            StringBuilder key = new StringBuilder(COMMUNITY_FEED_PREFIX);
+            for (int i = 0; i < 12 && i < hash.length; i++) key.append(String.format("%02x", hash[i]));
+            return key.toString();
+        } catch (Exception e) {
+            return COMMUNITY_FEED_PREFIX + "default";
         }
     }
 

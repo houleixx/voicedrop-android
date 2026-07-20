@@ -4,10 +4,59 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.junit.Assert.*;
 
 public class CommunityStoreTest {
+    @Test
+    public void recoEndpointsAlwaysUseTheAnonymousCapabilityAfterWechatLogin() throws Exception {
+        Path path = Paths.get("src/main/java/com/baixingai/voicedrop/data/CommunityStore.java");
+        if (!Files.exists(path)) path = Paths.get("app", path.toString());
+        String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("Api.recoBase() + \"/feed\", auth.anonymousBearer()"));
+        assertTrue(source.contains("Api.recoBase() + \"/rank\", auth.anonymousBearer()"));
+        assertTrue(source.contains("http.postJson(url, auth.anonymousBearer()"));
+    }
+
+    @Test
+    public void communityColdStartUsesIndependentIoAndPersistentSnapshots() throws Exception {
+        String store = readSource("src/main/java/com/baixingai/voicedrop/data/CommunityStore.java");
+        String auth = readSource("src/main/java/com/baixingai/voicedrop/data/AuthStore.java");
+        String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String photos = readSource("src/main/java/com/baixingai/voicedrop/data/PhotoService.java");
+
+        assertTrue(store.contains("auth.storeCommunityFeedCache(response.text())"));
+        assertTrue(store.contains("public Feed cachedFeed()"));
+        assertTrue(auth.contains("COMMUNITY_FEED_PREFIX"));
+        assertTrue(activity.contains("communityIo = Executors.newSingleThreadExecutor()"));
+        assertTrue(activity.contains("ExecutorService executor = loadCommunity ? communityIo : io"));
+        assertTrue(activity.contains("if (!loadCommunity) uploader.drainPending()"));
+        assertTrue(activity.contains("restoreCachedCommunityFeed();"));
+        assertTrue(photos.contains("new File(context.getApplicationContext().getCacheDir(), \"photo-cache\")"));
+        assertTrue(photos.contains("writeDisk(cacheKey, response.body)"));
+    }
+
+    @Test
+    public void communityMarksTheFirstLoadBeforeRenderingItsLoadingState() throws Exception {
+        String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        int entry = activity.indexOf("if (communityTab && !communityLoadAttempted)");
+        int attempted = activity.indexOf("communityLoadAttempted = true;", entry);
+        int loading = activity.indexOf("communityLoading = posts.isEmpty();", entry);
+        int render = activity.indexOf("refreshHomePages();", entry);
+        int request = activity.indexOf("refreshDataInBackground();", entry);
+
+        assertTrue(entry >= 0);
+        assertTrue(attempted > entry);
+        assertTrue(attempted < loading);
+        assertTrue(loading < render);
+        assertTrue(render < request);
+    }
+
     @Test
     public void postFromCommunityDetailKeepsInlineArticles() throws Exception {
         JSONObject json = new JSONObject("{"
@@ -92,6 +141,12 @@ public class CommunityStoreTest {
 
         assertTrue(post.isPrompt());
         assertEquals("", post.promptCode);
+    }
+
+    private static String readSource(String moduleRelative) throws Exception {
+        Path path = Paths.get(moduleRelative);
+        if (!Files.exists(path)) path = Paths.get("app", moduleRelative);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
 
     @Test

@@ -74,10 +74,38 @@ public class LibraryStoreRequestTest {
     }
 
     @Test
-    public void loadRefreshesArticleDocWhenTagsAreMissingEvenIfTitleIsCached() throws Exception {
+    public void recordingRowsPublishBeforeBoundedMetadataEnrichment() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
 
-        assertTrue(source.contains("r.hasArticles && (r.articleTitle == null || r.tags == null)"));
+        assertTrue(source.contains("META_IO = Executors.newFixedThreadPool(5)"));
+        assertTrue(source.contains("public boolean enrichMissingMetadata"));
+        assertTrue(source.contains("auth.storeLibraryMetadataCache"));
+        int fastLoad = source.indexOf("public List<Recording> load(List<String> localUploading, Map");
+        int enrichment = source.indexOf("public boolean enrichMissingMetadata");
+        assertFalse(source.substring(fastLoad, enrichment).contains("fetchDoc(r)"));
+    }
+
+    @Test
+    public void homeRefreshUpdatesExistingListsWithoutRecreatingEveryPagerPage() throws Exception {
+        String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String feed = readSource("src/main/java/com/baixingai/voicedrop/ui/CommunityFeedView.java");
+
+        assertTrue(activity.contains("communityFeedView.updateFeed(communityFeed)"));
+        assertTrue(activity.contains("scheduleRecordingMetadataEnrichment(recordings)"));
+        assertTrue(feed.contains("public void updateFeed(CommunityStore.Feed next)"));
+    }
+
+    @Test
+    public void recordingListPrefersTheLightweightIndexAndFallsBackToTheLegacyList() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
+
+        int indexed = source.indexOf("Api.filesBase() + \"/recordings\"");
+        int legacy = source.indexOf("Api.filesBase() + \"/list\"");
+        assertTrue(indexed >= 0);
+        assertTrue(legacy > indexed);
+        assertTrue(source.contains("row.optBoolean(\"hasArticles\")"));
+        assertTrue(source.contains("row.optBoolean(\"isEmpty\")"));
+        assertTrue(source.contains("row.optBoolean(\"hasTags\")"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

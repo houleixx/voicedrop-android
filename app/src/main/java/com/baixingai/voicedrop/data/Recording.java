@@ -14,6 +14,7 @@ public final class Recording {
     public String phase;
     public String blockReason;
     public List<String> tags;
+    public boolean hasTagsSidecar;
 
     public Recording(String audioName, String uploaded, boolean hasArticles, boolean isEmpty) {
         this.audioName = audioName;

@@ -62,6 +62,7 @@ import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingReplyStore;
+import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.Recording;
@@ -109,7 +110,10 @@ public final class RecordingsActivity extends Activity {
     public static final String EXTRA_SHARE_ID = "shareId";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
+    protected final ExecutorService communityIo = Executors.newSingleThreadExecutor();
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
+    protected final ExecutorService metadataIo = Executors.newSingleThreadExecutor();
+    protected int recordingMetadataGeneration;
     protected AuthStore auth;
     protected Prefs prefs;
     protected HttpClient http;
@@ -182,6 +186,7 @@ public final class RecordingsActivity extends Activity {
     protected List<Recording> recordings = new ArrayList<>();
     protected List<CommunityStore.Post> posts = new ArrayList<>();
     protected CommunityStore.Feed communityFeed = CommunityStore.Feed.empty();
+    protected CommunityFeedView communityFeedView;
     protected com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab communityFeedTab =
             com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.RECOMMENDED;
     protected final List<CapturedPhoto> capturedPhotos = new ArrayList<>();
@@ -242,6 +247,7 @@ public final class RecordingsActivity extends Activity {
         businessInitialized = true;
         ((VoiceDropApplication) getApplication()).activateConsentedServices();
         auth = new AuthStore(this);
+        PhotoService.configure(this);
         prefs = new Prefs(this);
         http = new HttpClient();
         library = new LibraryStore(auth, http);
@@ -317,6 +323,7 @@ public final class RecordingsActivity extends Activity {
                 });
             }
         });
+        restoreCachedCommunityFeed();
         onPageCreate(getIntent());
     }
 
@@ -403,7 +410,9 @@ public final class RecordingsActivity extends Activity {
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
         io.shutdownNow();
+        communityIo.shutdownNow();
         dictationIo.shutdownNow();
+        metadataIo.shutdownNow();
     }
     @Override
     public void onBackPressed() {
@@ -435,6 +444,15 @@ public final class RecordingsActivity extends Activity {
         communityFeed = community.feed().filtered(post -> !blockStore.isBlocked(post.author));
         prefs.setLikedCommunityPosts(communityFeed.liked);
         return new ArrayList<>(communityFeed.recommended);
+    }
+    protected boolean restoreCachedCommunityFeed() {
+        CommunityStore.Feed cached = community.cachedFeed()
+                .filtered(post -> !blockStore.isBlocked(post.author));
+        if (cached.latest.isEmpty()) return false;
+        communityFeed = cached;
+        posts = new ArrayList<>(cached.recommended);
+        prefs.setLikedCommunityPosts(cached.liked);
+        return true;
     }
     protected void applyCommunityRanking(List<CommunityStore.Post> visible) {
         try {
@@ -1165,8 +1183,9 @@ public final class RecordingsActivity extends Activity {
         } else {
             recordingsLoadAttempted = true;
         }
-        io.execute(() -> {
-            uploader.drainPending();
+        ExecutorService executor = loadCommunity ? communityIo : io;
+        executor.execute(() -> {
+            if (!loadCommunity) uploader.drainPending();
             boolean tagsChanged = false;
             try {
                 if (loadCommunity) posts = loadRankedCommunityPosts();
@@ -1195,6 +1214,7 @@ public final class RecordingsActivity extends Activity {
 
     protected boolean loadRecordingsAndPublishPendingReplies() throws Exception {
         recordings = library.load(uploader.pendingNames(), uploader.pendingTagsByName());
+        scheduleRecordingMetadataEnrichment(recordings);
         boolean tagsChanged = refreshHomeTagsFromRecordings();
         int published = pendingReplies.publishReadyReplies(recordings,
                 (recording, replyToShareId) -> community.share(recording, replyToShareId) != null);
@@ -1203,6 +1223,18 @@ public final class RecordingsActivity extends Activity {
             main.post(() -> toast("回应已发布到社区"));
         }
         return tagsChanged;
+    }
+
+    protected void scheduleRecordingMetadataEnrichment(List<Recording> snapshot) {
+        final int generation = ++recordingMetadataGeneration;
+        metadataIo.execute(() -> {
+            if (!library.enrichMissingMetadata(snapshot)) return;
+            main.post(() -> {
+                if (generation != recordingMetadataGeneration || recordings != snapshot || isFinishing()) return;
+                boolean tagsChanged = refreshHomeTagsFromRecordings();
+                refreshHomeAfterRecordingLoad(tagsChanged);
+            });
+        });
     }
 
     protected boolean refreshHomeTagsFromRecordings() {
@@ -1252,8 +1284,7 @@ public final class RecordingsActivity extends Activity {
 
     protected void refreshCommunityFromPull(PullRefreshLayout refresher) {
         communityLoadAttempted = true;
-        io.execute(() -> {
-            uploader.drainPending();
+        communityIo.execute(() -> {
             try {
                 posts = loadRankedCommunityPosts();
             } catch (Exception e) {
@@ -1374,6 +1405,7 @@ public final class RecordingsActivity extends Activity {
                 selectedTag = position >= 2 && position - 2 < homeTags.size() ? homeTags.get(position - 2) : null;
                 updateHomeTabs();
                 if (communityTab && !communityLoadAttempted) {
+                    communityLoadAttempted = true;
                     communityLoading = posts.isEmpty();
                     refreshHomePages();
                     refreshDataInBackground();
@@ -1398,7 +1430,23 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void refreshHomePages() {
-        if (homePagerAdapter != null) homePagerAdapter.notifyDataSetChanged();
+        for (Map.Entry<String, LinearLayout> entry : recordingsListsByPage.entrySet()) {
+            String key = entry.getKey();
+            List<Recording> visible = "__all_recordings__".equals(key)
+                    ? recordings
+                    : recordingsForTag(key.startsWith("tag:") ? key.substring(4) : "");
+            String empty = emptyListTextByPage.get(key);
+            populateRecordingList(entry.getValue(), empty == null ? "暂无录音" : empty, visible);
+        }
+        if (communityFeedView != null && !posts.isEmpty()) {
+            communityFeedView.updateFeed(communityFeed);
+        } else if (homePagerAdapter != null && communityLoadAttempted) {
+            // The first successful community load replaces the initial empty/loading placeholder once.
+            recordingsListsByPage.clear();
+            emptyListTextByPage.clear();
+            communityFeedView = null;
+            homePagerAdapter.notifyDataSetChanged();
+        }
         updateHomeTabs();
     }
 
@@ -1496,13 +1544,14 @@ public final class RecordingsActivity extends Activity {
             renderCommunityList(list);
             content = list;
         } else {
-            content = new CommunityFeedView(this, communityFeed, new CommunityFeedView.Listener() {
+            communityFeedView = new CommunityFeedView(this, communityFeed, new CommunityFeedView.Listener() {
                 @Override public void onSelect(CommunityStore.Post post) { openCommunityPost(post); }
                 @Override public void onUnshare(CommunityStore.Post post) { confirmCommunityUnshare(post); }
                 @Override public void onTabChanged(com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab tab) {
                     communityFeedTab = tab;
                 }
             }, communityFeedTab);
+            content = communityFeedView;
         }
         refresher.addView(content, match());
         if (content instanceof CommunityFeedView) {
@@ -2577,6 +2626,9 @@ public final class RecordingsActivity extends Activity {
         recordingsTabTitle = null;
         communityTabTitle = null;
         homeTabUnderline = null;
+        communityFeedView = null;
+        recordingsListsByPage.clear();
+        emptyListTextByPage.clear();
     }
 
     protected void buildHomeShell(AudioRecorder.Take take, List<CapturedPhoto> photos) {

@@ -16,18 +16,25 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class LibraryStore {
+    private static final ExecutorService META_IO = Executors.newFixedThreadPool(5);
     private final AuthStore auth;
     private final HttpClient http;
     private final Map<String, String> titleCache = new HashMap<>();
     private final Map<String, List<String>> tagsCache = new HashMap<>();
+    private String metadataBearer = "";
     private String cachedScope;
     private String cachedScopeToken;
 
     public LibraryStore(AuthStore auth, HttpClient http) {
         this.auth = auth;
         this.http = http;
+        ensureMetadataCache();
     }
 
     public List<Recording> load(List<String> localUploading) throws Exception {
@@ -35,20 +42,8 @@ public final class LibraryStore {
     }
 
     public List<Recording> load(List<String> localUploading, Map<String, List<String>> pendingTagsByName) throws Exception {
-        HttpClient.Response response = http.get(Api.filesBase() + "/list", auth.bearer());
-        if (!response.ok()) throw new IllegalStateException("加载失败 HTTP " + response.code);
-        JSONObject root = new JSONObject(response.text());
-        JSONArray files = root.optJSONArray("files");
-        Set<String> names = new HashSet<>();
-        List<Item> items = new ArrayList<>();
-        if (files != null) {
-            for (int i = 0; i < files.length(); i++) {
-                JSONObject item = files.getJSONObject(i);
-                String name = item.optString("name");
-                names.add(name);
-                items.add(new Item(name, item.optString("uploaded", "")));
-            }
-        }
+        ensureMetadataCache();
+        List<Item> items = fetchRecordingItems();
 
         List<Recording> recordings = new ArrayList<>();
         for (String local : localUploading) {
@@ -64,14 +59,14 @@ public final class LibraryStore {
             Recording r = new Recording(
                     item.name,
                     item.uploaded,
-                    names.contains(Recording.articleKey(stem)),
-                    names.contains(Recording.emptyKey(stem)));
-            r.articleTitle = titleCache.get(r.articleKey());
-            r.tags = tagsCache.get(r.articleKey());
-            if ((r.tags == null || r.tags.isEmpty()) && pendingTagsByName != null) r.tags = pendingTagsByName.get(last);
-            if ((r.tags == null || r.tags.isEmpty()) && !r.hasArticles && names.contains(Recording.tagsKey(stem))) {
-                r.tags = fetchTagsSidecar(stem);
+                    item.hasArticles,
+                    item.isEmpty);
+            synchronized (this) {
+                r.articleTitle = titleCache.get(r.articleKey());
+                r.tags = tagsCache.containsKey(r.articleKey()) ? tagsCache.get(r.articleKey()) : null;
             }
+            r.hasTagsSidecar = item.hasTags;
+            if ((r.tags == null || r.tags.isEmpty()) && pendingTagsByName != null) r.tags = pendingTagsByName.get(last);
             recordings.add(r);
         }
         Collections.sort(recordings, (a, b) -> {
@@ -79,21 +74,145 @@ public final class LibraryStore {
             int byUpload = b.uploaded.compareTo(a.uploaded);
             return byUpload != 0 ? byUpload : b.audioName.compareTo(a.audioName);
         });
-        for (Recording r : recordings) {
-            if (r.hasArticles && (r.articleTitle == null || r.tags == null)) {
-                ArticleDoc doc = fetchDoc(r);
-                if (doc != null && !doc.articles.isEmpty()) {
-                    r.articleTitle = doc.articles.get(0).title;
-                    titleCache.put(r.articleKey(), r.articleTitle);
-                    r.tags = doc.tags.isEmpty() ? null : doc.tags;
-                    tagsCache.put(r.articleKey(), doc.tags);
-                }
-            }
-        }
         return recordings;
     }
 
-    public void invalidateArticleCaches(List<String> stems) {
+    /** Fetches titles/tags after the lightweight rows are already visible. */
+    public boolean enrichMissingMetadata(List<Recording> recordings) {
+        ensureMetadataCache();
+        List<Callable<MetadataResult>> tasks = new ArrayList<>();
+        for (Recording r : recordings == null ? Collections.<Recording>emptyList() : recordings) {
+            boolean articleMetaMissing;
+            synchronized (this) {
+                articleMetaMissing = r.hasArticles
+                        && (!titleCache.containsKey(r.articleKey()) || !tagsCache.containsKey(r.articleKey()));
+            }
+            if (articleMetaMissing) {
+                tasks.add(() -> new MetadataResult(r, fetchDoc(r), null));
+            } else if (!r.hasArticles && r.hasTagsSidecar && (r.tags == null || r.tags.isEmpty())) {
+                tasks.add(() -> new MetadataResult(r, null, fetchTagsSidecar(r.stem())));
+            }
+        }
+        if (tasks.isEmpty()) return false;
+        boolean changed = false;
+        try {
+            for (Future<MetadataResult> future : META_IO.invokeAll(tasks)) {
+                MetadataResult result = future.get();
+                if (result.doc != null) {
+                    String title = result.doc.articles.isEmpty() ? "" : result.doc.articles.get(0).title;
+                    synchronized (this) {
+                        result.recording.articleTitle = title;
+                        result.recording.tags = new ArrayList<>(result.doc.tags);
+                        titleCache.put(result.recording.articleKey(), title == null ? "" : title);
+                        tagsCache.put(result.recording.articleKey(), new ArrayList<>(result.doc.tags));
+                    }
+                    changed = true;
+                } else if (result.sidecarTags != null && !result.sidecarTags.isEmpty()) {
+                    result.recording.tags = result.sidecarTags;
+                    changed = true;
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception ignored) {
+        }
+        if (changed) persistMetadataCache();
+        return changed;
+    }
+
+    private synchronized void ensureMetadataCache() {
+        String bearer = auth.bearer();
+        if (bearer.equals(metadataBearer)) return;
+        metadataBearer = bearer;
+        titleCache.clear();
+        tagsCache.clear();
+        try {
+            JSONObject root = new JSONObject(auth.libraryMetadataCache());
+            JSONObject titles = root.optJSONObject("titles");
+            if (titles != null) {
+                java.util.Iterator<String> keys = titles.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    titleCache.put(key, titles.optString(key, ""));
+                }
+            }
+            JSONObject tags = root.optJSONObject("tags");
+            if (tags != null) {
+                java.util.Iterator<String> keys = tags.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    JSONArray arr = tags.optJSONArray(key);
+                    List<String> values = new ArrayList<>();
+                    if (arr != null) for (int i = 0; i < arr.length(); i++) values.add(arr.optString(i));
+                    tagsCache.put(key, values);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private synchronized void persistMetadataCache() {
+        try {
+            JSONObject titles = new JSONObject();
+            for (Map.Entry<String, String> entry : titleCache.entrySet()) titles.put(entry.getKey(), entry.getValue());
+            JSONObject tags = new JSONObject();
+            for (Map.Entry<String, List<String>> entry : tagsCache.entrySet()) tags.put(entry.getKey(), new JSONArray(entry.getValue()));
+            auth.storeLibraryMetadataCache(new JSONObject().put("titles", titles).put("tags", tags).toString());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private List<Item> fetchRecordingItems() throws Exception {
+        try {
+            HttpClient.Response response = http.get(Api.filesBase() + "/recordings", auth.bearer());
+            if (response.ok()) {
+                JSONArray rows = new JSONObject(response.text()).optJSONArray("recordings");
+                if (rows != null) {
+                    List<Item> indexed = new ArrayList<>();
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject row = rows.getJSONObject(i);
+                        indexed.add(new Item(
+                                row.optString("name"),
+                                row.optString("uploaded", ""),
+                                row.optBoolean("hasArticles"),
+                                row.optBoolean("isEmpty"),
+                                row.optBoolean("hasTags")));
+                    }
+                    return indexed;
+                }
+            }
+        } catch (Exception ignored) {
+            // Older or temporarily unavailable servers fall back to the full R2 listing.
+        }
+
+        HttpClient.Response response = http.get(Api.filesBase() + "/list", auth.bearer());
+        if (!response.ok()) throw new IllegalStateException("加载失败 HTTP " + response.code);
+        JSONArray files = new JSONObject(response.text()).optJSONArray("files");
+        Set<String> names = new HashSet<>();
+        List<JSONObject> rows = new ArrayList<>();
+        if (files != null) {
+            for (int i = 0; i < files.length(); i++) {
+                JSONObject row = files.getJSONObject(i);
+                names.add(row.optString("name"));
+                rows.add(row);
+            }
+        }
+        List<Item> legacy = new ArrayList<>();
+        for (JSONObject row : rows) {
+            String name = row.optString("name");
+            String stem = name.endsWith(".m4a") ? name.substring(0, name.length() - 4) : name;
+            legacy.add(new Item(
+                    name,
+                    row.optString("uploaded", ""),
+                    names.contains(Recording.articleKey(stem)),
+                    names.contains(Recording.emptyKey(stem)),
+                    names.contains(Recording.tagsKey(stem))));
+        }
+        return legacy;
+    }
+
+    public synchronized void invalidateArticleCaches(List<String> stems) {
+        ensureMetadataCache();
         if (stems == null) return;
         for (String stem : stems) {
             if (stem == null || stem.isEmpty()) continue;
@@ -101,6 +220,7 @@ public final class LibraryStore {
             titleCache.remove(key);
             tagsCache.remove(key);
         }
+        persistMetadataCache();
     }
 
     private List<String> fetchTagsSidecar(String stem) {
@@ -428,9 +548,28 @@ public final class LibraryStore {
     private static final class Item {
         final String name;
         final String uploaded;
-        Item(String name, String uploaded) {
+        final boolean hasArticles;
+        final boolean isEmpty;
+        final boolean hasTags;
+
+        Item(String name, String uploaded, boolean hasArticles, boolean isEmpty, boolean hasTags) {
             this.name = name;
             this.uploaded = uploaded == null ? "" : uploaded;
+            this.hasArticles = hasArticles;
+            this.isEmpty = isEmpty;
+            this.hasTags = hasTags;
+        }
+    }
+
+    private static final class MetadataResult {
+        final Recording recording;
+        final ArticleDoc doc;
+        final List<String> sidecarTags;
+
+        MetadataResult(Recording recording, ArticleDoc doc, List<String> sidecarTags) {
+            this.recording = recording;
+            this.doc = doc;
+            this.sidecarTags = sidecarTags;
         }
     }
 

@@ -41,10 +41,13 @@ public final class CommunityStore {
     public Feed feed() throws Exception {
         try {
             HttpClient.RequestOptions options = new HttpClient.RequestOptions().readTimeoutMs(5_000);
-            HttpClient.Response response = http.get(Api.recoBase() + "/feed", auth.bearer(), options);
+            HttpClient.Response response = http.get(Api.recoBase() + "/feed", auth.anonymousBearer(), options);
             if (response.ok()) {
                 Feed parsed = parseFeed(response.text());
-                if (!parsed.latest.isEmpty()) return parsed;
+                if (!parsed.latest.isEmpty()) {
+                    auth.storeCommunityFeedCache(response.text());
+                    return parsed;
+                }
             }
         } catch (Exception ignored) {
             // The display index is expendable. R2 below remains the source of truth.
@@ -58,6 +61,16 @@ public final class CommunityStore {
             ranking = Ranking.identity(latest);
         }
         return Feed.fromLegacy(latest, ranking);
+    }
+
+    /** Last successful unified feed, used as an instant cold-start snapshot while refreshing. */
+    public Feed cachedFeed() {
+        try {
+            String json = auth.communityFeedCache();
+            return json == null || json.isEmpty() ? Feed.empty() : parseFeed(json);
+        } catch (Exception ignored) {
+            return Feed.empty();
+        }
     }
 
     public Ranking rank(List<Post> posts) throws Exception {
@@ -80,7 +93,7 @@ public final class CommunityStore {
             payloadPosts.put(obj);
         }
         JSONObject body = new JSONObject().put("posts", payloadPosts);
-        HttpClient.Response response = http.postJson(Api.recoBase() + "/rank", auth.bearer(),
+        HttpClient.Response response = http.postJson(Api.recoBase() + "/rank", auth.anonymousBearer(),
                 body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("rank HTTP " + response.code);
 
@@ -194,7 +207,7 @@ public final class CommunityStore {
             JSONObject body = new JSONObject();
             body.put("action", action);
             if (on != null) body.put("on", on);
-            http.postJson(url, auth.bearer(), body.toString().getBytes("UTF-8"));
+            http.postJson(url, auth.anonymousBearer(), body.toString().getBytes("UTF-8"));
         } catch (Exception ignored) {
         }
     }

@@ -51,7 +51,8 @@ public class AccountActivitySourceTest {
 
         assertTrue(source.contains("library.ownerScope()"));
         assertTrue(source.contains("currentAccountId"));
-        assertTrue(source.contains("keyField(\"你的 ID\", idDisplay, false, currentAccountId)"));
+        assertTrue(source.contains("keyField(\"你的 ID\", currentAccountId, false, currentAccountId)"));
+        assertFalse(source.contains("currentAccountId.isEmpty() ? \"读取失败\""));
         assertTrue(source.contains("keyField(\"访问令牌\", maskedToken(), true, auth.anonymousBearer())"));
         assertFalse(source.contains("keyField(\"你的 ID\", auth.anonId()"));
         assertTrue(source.contains("auth.adoptToken"));

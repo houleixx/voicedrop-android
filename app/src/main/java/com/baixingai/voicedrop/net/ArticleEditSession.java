@@ -98,8 +98,12 @@ public final class ArticleEditSession {
     }
 
     public void enqueue(String text, int articleIndex, List<AgentImage> images, EditAnchor anchor) {
+        enqueue(text, articleIndex, images, anchor, null);
+    }
+
+    public void enqueue(String text, int articleIndex, List<AgentImage> images, EditAnchor anchor, String itemId) {
         if (text == null || text.trim().isEmpty()) return;
-        EditRequest request = new EditRequest(UUID.randomUUID().toString(), text.trim(), Math.max(0, articleIndex), anchor);
+        EditRequest request = new EditRequest(UUID.randomUUID().toString(), text.trim(), Math.max(0, articleIndex), anchor, itemId);
         request.images.addAll(images);
         queue.add(request);
         persist();
@@ -237,6 +241,7 @@ public final class ArticleEditSession {
                 obj.put("text", request.text);
                 obj.put("articleIndex", request.articleIndex);
                 if (request.anchor != null) obj.put("anchor", request.anchor.toJson());
+                if (request.itemId != null && !request.itemId.isEmpty()) obj.put("itemId", request.itemId);
                 arr.put(obj);
             } catch (Exception ignored) {
             }
@@ -255,7 +260,7 @@ public final class ArticleEditSession {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject obj = arr.getJSONObject(i);
                 out.add(new EditRequest(obj.optString("id"), obj.optString("text"), obj.optInt("articleIndex", 0),
-                        EditAnchor.fromJson(obj.optJSONObject("anchor"))));
+                        EditAnchor.fromJson(obj.optJSONObject("anchor")), nullableString(obj, "itemId")));
             }
         } catch (Exception ignored) {
         }
@@ -292,6 +297,9 @@ public final class ArticleEditSession {
             body.append(']');
         }
         if (request.anchor != null) body.append(",\"anchor\":").append(request.anchor.toJson());
+        if (request.itemId != null && !request.itemId.isEmpty()) {
+            body.append(",\"itemId\":\"").append(jsonEscape(request.itemId)).append('"');
+        }
         body.append('}');
         return body.toString();
     }
@@ -320,22 +328,33 @@ public final class ArticleEditSession {
         return out.toString();
     }
 
+    private static String nullableString(JSONObject obj, String key) {
+        String value = obj.optString(key, "");
+        return value.isEmpty() ? null : value;
+    }
+
     public static final class EditRequest {
         public final String id;
         public final String text;
         public final int articleIndex;
         public final List<AgentImage> images = new ArrayList<>();
         public final EditAnchor anchor;
+        public final String itemId;
 
         public EditRequest(String id, String text, int articleIndex) {
             this(id, text, articleIndex, null);
         }
 
         public EditRequest(String id, String text, int articleIndex, EditAnchor anchor) {
+            this(id, text, articleIndex, anchor, null);
+        }
+
+        public EditRequest(String id, String text, int articleIndex, EditAnchor anchor, String itemId) {
             this.id = id;
             this.text = text;
             this.articleIndex = articleIndex;
             this.anchor = anchor;
+            this.itemId = itemId;
         }
     }
 

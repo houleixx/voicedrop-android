@@ -54,6 +54,17 @@ public class ArticleEditSessionTest {
     }
 
     @Test
+    public void includesMenuItemIdForPromptImageProvenance() throws Exception {
+        ArticleEditSession.EditRequest request = new ArticleEditSession.EditRequest(
+                "edit-item", "改成水彩", 0,
+                ArticleEditSession.EditAnchor.image("photos/a.jpg"), "sys_watercolor");
+
+        org.json.JSONObject payload = new org.json.JSONObject(ArticleEditSession.payloadFor(request));
+
+        assertEquals("sys_watercolor", payload.getString("itemId"));
+    }
+
+    @Test
     public void acceptsStreamingRestylePreviewEvents() throws Exception {
         String source = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
                 "src/main/java/com/baixingai/voicedrop/net/ArticleEditSession.java")),

@@ -12,10 +12,11 @@ import static org.junit.Assert.assertTrue;
 
 public final class PrivacyDocumentationSourceTest {
     @Test
-    public void policyOpensInsideAppWithRestrictedWebView() throws Exception {
+    public void localPolicyOpensInsideAppWithRestrictedWebView() throws Exception {
         String about = readRoot("app/src/main/java/com/baixingai/voicedrop/AboutActivity.java");
         String dialog = readRoot("app/src/main/java/com/baixingai/voicedrop/ui/PrivacyConsentDialog.java");
         String activity = readRoot("app/src/main/java/com/baixingai/voicedrop/PrivacyPolicyActivity.java");
+        String policy = readRoot("app/src/main/assets/privacy.html");
         String manifest = readRoot("app/src/main/AndroidManifest.xml");
 
         assertTrue(about.contains("PrivacyPolicyActivity.open(this)"));
@@ -27,8 +28,13 @@ public final class PrivacyDocumentationSourceTest {
         assertTrue(activity.contains("setJavaScriptEnabled(false)"));
         assertTrue(activity.contains("setAllowFileAccess(false)"));
         assertTrue(activity.contains("setAllowContentAccess(false)"));
-        assertTrue(activity.contains("PrivacyConsent.POLICY_URL.equals"));
-        assertTrue(activity.contains("webView.loadUrl(PrivacyConsent.POLICY_URL)"));
+        assertTrue(activity.contains("getAssets().open(PrivacyConsent.POLICY_ASSET)"));
+        assertTrue(activity.contains("webView.loadDataWithBaseURL(PrivacyConsent.POLICY_URL"));
+        assertFalse(activity.contains("webView.loadUrl(PrivacyConsent.POLICY_URL)"));
+        assertTrue(policy.contains("百姓网股份有限公司"));
+        assertTrue(policy.contains("Android_ID（ANDROID_ID）"));
+        assertTrue(policy.contains("友盟移动统计 SDK"));
+        assertTrue(policy.contains("无需联网即可查看"));
         assertTrue(manifest.contains("android:name=\".PrivacyPolicyActivity\""));
         assertTrue(manifest.contains("android:exported=\"false\""));
     }

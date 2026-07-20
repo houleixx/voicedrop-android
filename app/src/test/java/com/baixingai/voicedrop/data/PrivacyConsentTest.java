@@ -15,6 +15,12 @@ public final class PrivacyConsentTest {
     }
 
     @Test
+    public void policyUsesBundledAssetAndNewDisclosureVersion() {
+        assertEquals("privacy.html", PrivacyConsent.POLICY_ASSET);
+        assertEquals("2026-07-17", PrivacyConsent.CURRENT_VERSION);
+    }
+
+    @Test
     public void acceptingStoresCurrentVersionAndTimestamp() {
         PrivacyConsent consent = new PrivacyConsent(storage, () -> 1234L);
 

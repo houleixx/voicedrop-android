@@ -2632,7 +2632,7 @@ public final class RecordingDetailActivity extends Activity {
         if (menu == null) return;
         showConfiguredMenu(anchor, menu, instruction ->
                 UIConfigStore.fill(instruction, "LINE", String.valueOf(line), "QUOTE", UIConfigStore.quotePrefix(paragraph)),
-                filled -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.line(line, paragraph)),
+                (filled, itemId) -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.line(line, paragraph), itemId),
                 new LocalMenuRow("拷贝", AliIconFont.DOC, () -> {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", paragraph));
@@ -2833,7 +2833,7 @@ public final class RecordingDetailActivity extends Activity {
         if (menu == null) return;
         showConfiguredMenu(anchor, menu,
                 instruction -> UIConfigStore.fill(instruction, "KEY", relKey),
-                filled -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.image(relKey)));
+                (filled, itemId) -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.image(relKey), itemId));
     }
 
     protected void enqueueConfiguredInstruction(Recording rec, String instruction) {
@@ -2841,10 +2841,14 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void enqueueConfiguredInstruction(Recording rec, String instruction, ArticleEditSession.EditAnchor anchor) {
+        enqueueConfiguredInstruction(rec, instruction, anchor, null);
+    }
+
+    protected void enqueueConfiguredInstruction(Recording rec, String instruction, ArticleEditSession.EditAnchor anchor, String itemId) {
         if (instruction == null || instruction.trim().isEmpty()) return;
         ensureArticleEditSession(rec);
         if (editSession != null) {
-            editSession.enqueue(instruction.trim(), articleIndex, new ArrayList<>(), anchor);
+            editSession.enqueue(instruction.trim(), articleIndex, new ArrayList<>(), anchor, itemId);
             toast("已加入修改队列");
         }
     }
@@ -2912,7 +2916,7 @@ public final class RecordingDetailActivity extends Activity {
         LinearLayout row = menuRow(node.label, configuredInstructionIcon(node.id), Theme.RED, Theme.INK);
         row.setOnClickListener(v -> {
             if (popup[0] != null) popup[0].dismiss();
-            consumer.accept(filler.fill(node.instruction));
+            consumer.accept(filler.fill(node.instruction), node.id);
         });
         menu.addView(row);
     }
@@ -2953,7 +2957,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected interface InstructionConsumer {
-        void accept(String instruction);
+        void accept(String instruction, String itemId);
     }
 
     protected static final class LocalMenuRow {

@@ -5,7 +5,8 @@ import android.content.SharedPreferences;
 
 public final class PrivacyConsent {
     public static final String POLICY_URL = "https://voicedrop.cn/privacy/";
-    public static final String CURRENT_VERSION = "2026-07-12";
+    public static final String POLICY_ASSET = "privacy.html";
+    public static final String CURRENT_VERSION = "2026-07-17";
 
     private static final String PREFS = "voicedrop.privacy";
     private static final String ACCEPTED_VERSION = "acceptedVersion";

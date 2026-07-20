@@ -161,8 +161,7 @@ public final class AccountActivity extends Activity {
         card.addView(header);
         card.addView(dividerWide(dp(16), dp(16)));
 
-        String idDisplay = currentAccountId.isEmpty() ? "读取失败" : currentAccountId;
-        card.addView(keyField("你的 ID", idDisplay, false, currentAccountId));
+        card.addView(keyField("你的 ID", currentAccountId, false, currentAccountId));
         card.addView(keyField("访问令牌", maskedToken(), true, auth.anonymousBearer()));
         card.addView(dividerWide(dp(16), dp(10)));
 

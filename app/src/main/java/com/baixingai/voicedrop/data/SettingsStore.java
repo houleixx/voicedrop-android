@@ -6,6 +6,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,22 +82,48 @@ public final class SettingsStore {
         if (!response.ok()) throw new IllegalStateException("wechat HTTP " + response.code);
     }
 
-    public String validateWechatCreds(String appid, String secret) throws Exception {
+    public String validateWechatCreds(String appid, String secret) {
         String cleanAppid = appid == null ? "" : appid.trim();
         String cleanSecret = secret == null ? "" : secret.trim();
-        if (!cleanAppid.startsWith("wx") || cleanAppid.length() < 8) return "AppID 格式不对";
-        if (cleanSecret.length() < 16) return "AppSecret 太短";
-        String url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential"
-                + "&appid=" + com.baixingai.voicedrop.net.Api.path(cleanAppid)
-                + "&secret=" + com.baixingai.voicedrop.net.Api.path(cleanSecret);
-        HttpClient.Response response = http.get(url, "");
-        if (!response.ok()) return "微信校验失败 HTTP " + response.code;
-        JSONObject obj = new JSONObject(response.text());
-        int code = obj.optInt("errcode", 0);
-        if (code == 0 || code == 40164) return null;
-        if (code == 40013) return "AppID 不正确";
-        if (code == 40125) return "AppSecret 不正确";
-        return obj.optString("errmsg", "微信校验失败");
+        String formatError = wechatCredentialFormatError(cleanAppid, cleanSecret);
+        if (formatError != null) return formatError;
+        try {
+            JSONObject body = new JSONObject().put("appid", cleanAppid).put("secret", cleanSecret);
+            HttpClient.Response response = http.postJson(
+                    Api.filesBase() + "/wechat-validate",
+                    auth.bearer(),
+                    body.toString().getBytes(StandardCharsets.UTF_8));
+            if (!response.ok()) return "暂时连不上验证服务，请稍后再试（配置未保存）";
+            return wechatValidationMessage(new JSONObject(response.text()));
+        } catch (Exception error) {
+            return "暂时连不上验证服务，请稍后再试（配置未保存）";
+        }
+    }
+
+    public static String wechatCredentialFormatError(String appid, String secret) {
+        String cleanAppid = appid == null ? "" : appid.trim();
+        String cleanSecret = secret == null ? "" : secret.trim();
+        if (!cleanAppid.matches("^wx[0-9A-Za-z]{16}$")) {
+            return "AppID 格式不对（应以 wx 开头，共 18 位）";
+        }
+        if (!cleanSecret.matches("^[0-9a-f]{32}$")) {
+            return "AppSecret 格式不对（应为 32 位小写十六进制，别把 AppID 填进来）";
+        }
+        return null;
+    }
+
+    public static String wechatValidationMessage(JSONObject obj) {
+        if (obj != null && obj.optBoolean("ok", false)) return null;
+        int code = obj == null ? -1 : obj.optInt("errcode", -1);
+        if (code == 40164) {
+            return "服务器 IP 还没生效：把下方 IP 加入公众号后台的「IP 白名单」，保存白名单后等一两分钟再点保存";
+        }
+        if (code == 40013) return "AppID 无效，找不到这个公众号";
+        if (code == 40125) return "AppSecret 无效";
+        if (code == 41002) return "缺少 AppID";
+        if (code == 41004) return "缺少 AppSecret";
+        String message = obj == null ? "未知错误" : obj.optString("errmsg", "未知错误");
+        return "验证失败：" + message;
     }
 
     public JSONObject loadConfig() throws Exception {

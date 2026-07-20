@@ -23,6 +23,10 @@ import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.Theme;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
 public final class PrivacyPolicyActivity extends Activity {
     private WebView webView;
     private FrameLayout webContainer;
@@ -56,7 +60,7 @@ public final class PrivacyPolicyActivity extends Activity {
         webContainer.addView(progress,
                 new FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER));
 
-        webView.loadUrl(PrivacyConsent.POLICY_URL);
+        loadPolicy();
     }
 
     private View buildTopBar() {
@@ -165,7 +169,20 @@ public final class PrivacyPolicyActivity extends Activity {
     private void reload() {
         clearError();
         progress.setVisibility(View.VISIBLE);
-        webView.loadUrl(PrivacyConsent.POLICY_URL);
+        loadPolicy();
+    }
+
+    private void loadPolicy() {
+        try (InputStream input = getAssets().open(PrivacyConsent.POLICY_ASSET);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(input, "UTF-8"))) {
+            StringBuilder html = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) html.append(line).append('\n');
+            webView.loadDataWithBaseURL(PrivacyConsent.POLICY_URL, html.toString(),
+                    "text/html", "UTF-8", null);
+        } catch (Exception error) {
+            showError();
+        }
     }
 
     private void clearError() {

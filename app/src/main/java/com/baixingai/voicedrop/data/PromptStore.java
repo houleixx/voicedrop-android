@@ -165,7 +165,9 @@ public final class PromptStore {
     public String importCode(String code) {
         if (PromptTree.extractShareCode(code) == null || code.length() != 7) return "请输入有效的 7 位分享码";
         try {
-            return responseMutation("/prompts/import", new JSONObject().put("code", code));
+            String error = responseMutation("/prompts/import", new JSONObject().put("code", code));
+            if (error == null) refresh(); // 服务端可能按 groupPath 放进分组；失败时保留已导入的本地回退。
+            return error;
         } catch (Exception error) {
             return "操作失败，请重试";
         }

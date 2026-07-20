@@ -180,12 +180,19 @@ public class WechatSettingsActivity extends Activity {
         helpArrowLp.setMargins(dp(5), 0, 0, 0);
         help.addView(helpArrow, helpArrowLp);
         help.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://developers.weixin.qq.com/doc/offiaccount/Basic_Information/Get_access_token.html"));
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://developers.weixin.qq.com/console/"));
             try { startActivity(intent); } catch (Exception e) { toast("无法打开浏览器"); }
         });
         LinearLayout.LayoutParams helpLp = new LinearLayout.LayoutParams(-1, -2);
-        helpLp.setMargins(0, 0, 0, dp(24));
+        helpLp.setMargins(0, 0, 0, dp(10));
         content.addView(help, helpLp);
+
+        TextView helpSteps = text("点上方链接打开公众平台后台，出现登录二维码时先截屏，再打开微信「扫一扫 → 右上角相册」选中截图，选择要绑定的公众号完成登录；进「设置与开发 → 基本配置」：AppID 直接复制，AppSecret 需点「生成」（或「重置」）、管理员扫码确认后显示；同时在该页把下方的 IP 地址加入「IP 白名单」。",
+                13, Theme.FAINT, Typeface.NORMAL);
+        helpSteps.setLineSpacing(dp(3), 1.0f);
+        LinearLayout.LayoutParams helpStepsLp = new LinearLayout.LayoutParams(-1, -2);
+        helpStepsLp.setMargins(0, 0, 0, dp(24));
+        content.addView(helpSteps, helpStepsLp);
 
         View divider = new View(this);
         divider.setBackgroundColor(0x1a000000);

@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 
 public class PromptStoreTest {
     private static final String RESOLVED = "{\"schema\":1,\"items\":[{\"id\":\"sys_concise\",\"type\":\"action\",\"label\":\"精简\",\"origin\":\"system\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]}]}";
+    private static final String IMPORTED_GROUPED = "{\"schema\":1,\"items\":[{\"id\":\"g_shared\",\"type\":\"group\",\"label\":\"共享组\",\"origin\":\"user\",\"children\":[{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\",\"prompt\":\"P\",\"appliesTo\":[\"text\"],\"importedFrom\":\"1234567\"}]}]}";
     private FakeTransport transport;
     private FakeCache cache;
     private PromptStore store;
@@ -79,9 +80,12 @@ public class PromptStoreTest {
         assertEquals("GET /agent/prompt-share/1234567", transport.lastRequestLine());
 
         transport.enqueue(200, "{\"item\":{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\",\"prompt\":\"P\",\"appliesTo\":[\"text\"],\"importedFrom\":\"1234567\"}}");
+        transport.enqueue(200, IMPORTED_GROUPED);
         assertNull(store.importCode("1234567"));
-        assertEquals("POST /agent/prompts/import", transport.lastRequestLine());
+        assertTrue(transport.requests.contains("POST /agent/prompts/import"));
+        assertEquals("GET /agent/prompts", transport.lastRequestLine());
         assertTrue(cache.get(PromptStore.CACHE_KEY).contains("\"importedFrom\":\"1234567\""));
+        assertEquals("g_shared", store.items().get(0).id);
 
         transport.enqueue(200, "{\"code\":\"1234567\",\"sharing\":true}");
         PromptStore.ShareState state = store.setSharing("p_12345678", true);
@@ -110,6 +114,7 @@ public class PromptStoreTest {
 
     @Test public void idempotentImportDoesNotAppendDuplicateLocalItem() {
         transport.enqueue(200, "{\"item\":{\"id\":\"sys_concise\",\"type\":\"action\",\"label\":\"精简\",\"origin\":\"system\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]},\"already\":true}");
+        transport.enqueue(200, RESOLVED);
         assertNull(store.importCode("1234567"));
         assertEquals(1, PromptTree.flattenIds(store.items()).size());
     }
@@ -118,6 +123,9 @@ public class PromptStoreTest {
         transport.enqueue(200, "{\"item\":{\"id\":\"p_imported1\",\"type\":\"action\","
                 + "\"label\":\"社区导入\",\"origin\":\"user\",\"prompt\":\"按导入提示词处理\","
                 + "\"appliesTo\":[\"text\",\"image\"],\"importedFrom\":\"3295225\"}}");
+        transport.enqueue(200, "{\"schema\":1,\"items\":[{\"id\":\"p_imported1\",\"type\":\"action\","
+                + "\"label\":\"社区导入\",\"origin\":\"user\",\"prompt\":\"按导入提示词处理\","
+                + "\"appliesTo\":[\"text\",\"image\"],\"importedFrom\":\"3295225\"}]}");
 
         assertNull(store.importCode("3295225"));
 

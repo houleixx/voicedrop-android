@@ -47,4 +47,24 @@ public class SettingsStoreRequestTest {
 
         assertEquals("王小明", body.getString("name"));
     }
+
+    @Test
+    public void validatesWechatCredentialFormatsBeforeRemoteCheck() {
+        assertNull(SettingsStore.wechatCredentialFormatError(
+                "wx1234567890abcdef", "0123456789abcdef0123456789abcdef"));
+        assertNotNull(SettingsStore.wechatCredentialFormatError(
+                "wx123", "0123456789abcdef0123456789abcdef"));
+        assertNotNull(SettingsStore.wechatCredentialFormatError(
+                "wx1234567890abcdef", "ABCDEF0123456789ABCDEF0123456789"));
+    }
+
+    @Test
+    public void mapsWechatRelayErrorsWithoutAcceptingMissingWhitelist() throws Exception {
+        assertNull(SettingsStore.wechatValidationMessage(new JSONObject().put("ok", true)));
+        assertTrue(SettingsStore.wechatValidationMessage(
+                new JSONObject().put("ok", false).put("errcode", 40164).put("errmsg", "invalid ip"))
+                .contains("IP 白名单"));
+        assertEquals("AppSecret 无效", SettingsStore.wechatValidationMessage(
+                new JSONObject().put("ok", false).put("errcode", 40125)));
+    }
 }

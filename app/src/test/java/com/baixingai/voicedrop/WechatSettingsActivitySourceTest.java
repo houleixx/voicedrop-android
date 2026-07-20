@@ -11,14 +11,16 @@ import static org.junit.Assert.*;
 
 public class WechatSettingsActivitySourceTest {
     @Test
-    public void credentialHelpUsesProvidedIconsAndOfficialDocsLink() throws Exception {
+    public void credentialHelpUsesProvidedIconsAndOfficialConsoleFlow() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/WechatSettingsActivity.java");
 
         assertTrue(source.contains("R.drawable.ic_wechat_help_compass"));
         assertTrue(source.contains("R.drawable.ic_arrow_up_right_flat"));
-        assertTrue(source.contains("https://developers.weixin.qq.com/doc/offiaccount/Basic_Information/Get_access_token.html"));
+        assertTrue(source.contains("https://developers.weixin.qq.com/console/"));
+        assertTrue(source.contains("扫一扫 → 右上角相册"));
+        assertTrue(source.contains("IP 白名单"));
         assertFalse(source.contains("⊘ 去哪里找 AppID / AppSecret?  ↗"));
-        assertFalse(source.contains("Uri.parse(\"https://mp.weixin.qq.com/\")"));
+        assertFalse(source.contains("Get_access_token.html"));
     }
 
     @Test

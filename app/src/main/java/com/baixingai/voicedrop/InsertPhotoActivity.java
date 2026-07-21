@@ -180,7 +180,7 @@ public final class InsertPhotoActivity extends Activity {
             TextView delete = topText("×", 16, 0xffffffff, Typeface.BOLD);
             delete.setIncludeFontPadding(false);
             delete.setGravity(Gravity.CENTER);
-            delete.setPadding(0, dp(2), 0, 0);
+            delete.setPadding(0, dp(1), 0, 0);
             delete.setBackground(round(0xaa000000, 11));
             delete.setOnClickListener(v -> {
                 if (index < photos.size()) {

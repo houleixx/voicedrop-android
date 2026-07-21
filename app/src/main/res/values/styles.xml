@@ -15,7 +15,12 @@
     </style>
 
     <style name="BottomSheetDialogAnimation">
-        <item name="android:windowEnterAnimation">@anim/slide_in_bottom</item>
-        <item name="android:windowExitAnimation">@anim/slide_out_bottom</item>
+        <!--
+          Keep these names alphabetically after the established slide_* and stay resources.
+          Android 14 can retain window-animation resource IDs across an in-place install, so
+          inserting an earlier anim name makes existing page transitions resolve incorrectly.
+        -->
+        <item name="android:windowEnterAnimation">@anim/window_sheet_slide_in_bottom</item>
+        <item name="android:windowExitAnimation">@anim/window_sheet_slide_out_bottom</item>
     </style>
 </resources>

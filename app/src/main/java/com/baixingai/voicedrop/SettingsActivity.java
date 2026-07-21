@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -485,8 +486,10 @@ public class SettingsActivity extends Activity {
     }
 
     private void openInstructionSettings() {
-        startActivity(new Intent(this, InstructionSettingsActivity.class));
-        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+        Intent intent = new Intent(this, InstructionSettingsActivity.class);
+        ActivityOptions options = ActivityOptions.makeCustomAnimation(
+                this, R.anim.slide_in_right, R.anim.slide_out_left);
+        startActivity(intent, options.toBundle());
     }
 
     @Override

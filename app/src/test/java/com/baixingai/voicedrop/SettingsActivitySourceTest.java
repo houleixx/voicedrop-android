@@ -114,6 +114,16 @@ public class SettingsActivitySourceTest {
         assertTrue(invite.contains("lp.setMargins(0, dp(12), 0, 0)"));
     }
 
+    @Test
+    public void promptManagerTransitionIsAttachedToActivityLaunch() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String method = methodBody(source, "private void openInstructionSettings");
+
+        assertTrue(method.contains("ActivityOptions.makeCustomAnimation"));
+        assertTrue(method.contains("startActivity(intent, options.toBundle())"));
+        assertFalse(method.contains("overridePendingTransition"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

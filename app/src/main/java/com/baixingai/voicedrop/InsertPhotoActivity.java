@@ -74,7 +74,7 @@ public final class InsertPhotoActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(18), getStatusBarHeight() + dp(12), dp(18), dp(8));
+        top.setPadding(dp(18), dp(12), dp(18), dp(8));
         root.addView(top, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
         TextView cancel = topText("取消", 16, Theme.SECONDARY, Typeface.NORMAL);
@@ -96,7 +96,7 @@ public final class InsertPhotoActivity extends Activity {
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setGravity(Gravity.CENTER);
-        bottom.setPadding(dp(24), dp(16), dp(24), dp(32));
+        bottom.setPadding(dp(24), dp(12), dp(24), dp(12));
         root.addView(bottom, new FrameLayout.LayoutParams(-1, dp(112), Gravity.BOTTOM));
 
         bottom.addView(iconButton(AliIconFont.IMAGE, "相册", this::openLibrary), new LinearLayout.LayoutParams(dp(84), dp(72)));
@@ -111,8 +111,8 @@ public final class InsertPhotoActivity extends Activity {
         filmRow.setOrientation(LinearLayout.HORIZONTAL);
         filmRow.setGravity(Gravity.CENTER_VERTICAL);
         filmstrip.addView(filmRow, new HorizontalScrollView.LayoutParams(-2, -1));
-        FrameLayout.LayoutParams filmLp = new FrameLayout.LayoutParams(-1, dp(86), Gravity.BOTTOM);
-        filmLp.setMargins(0, 0, 0, dp(112));
+        FrameLayout.LayoutParams filmLp = new FrameLayout.LayoutParams(-1, dp(86), Gravity.TOP);
+        filmLp.setMargins(0, dp(70), 0, 0);
         root.addView(filmstrip, filmLp);
 
         refreshState();
@@ -331,11 +331,6 @@ public final class InsertPhotoActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private int getStatusBarHeight() {
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
     }
 
     private GradientDrawable round(int color, int radiusDp) {

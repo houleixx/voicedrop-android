@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -506,12 +507,21 @@ public final class InstructionSettingsActivity extends Activity {
     private void showImportSheet() {
         Dialog dialog = new Dialog(this);
         LinearLayout sheet = vertical();
-        sheet.setPadding(dp(16), dp(28), dp(16), dp(28));
-        sheet.setBackground(rounded(0xfffffbf6, 22));
+        sheet.setPadding(dp(16), dp(16), dp(16), dp(28));
+        sheet.setBackground(topRounded(0xfffffbf6, 22));
 
+        FrameLayout header = new FrameLayout(this);
         TextView title = text("导入提示词", 20, Typeface.BOLD, Theme.INK);
         title.setGravity(Gravity.CENTER);
-        sheet.addView(title, new LinearLayout.LayoutParams(-1, dp(34)));
+        header.addView(title, new FrameLayout.LayoutParams(-1, dp(44), Gravity.CENTER));
+        TextView close = text("×", 22, Typeface.NORMAL, Theme.SECONDARY);
+        close.setContentDescription("关闭");
+        close.setIncludeFontPadding(false);
+        close.setGravity(Gravity.CENTER);
+        close.setBackground(rounded(TILE_NEUTRAL, 11));
+        close.setOnClickListener(v -> dialog.dismiss());
+        header.addView(close, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.RIGHT | Gravity.CENTER_VERTICAL));
+        sheet.addView(header, new LinearLayout.LayoutParams(-1, dp(44)));
         TextView subtitle = text("输入 7 位魔法数字，或粘贴分享链接", 14, Typeface.NORMAL, Theme.FAINT);
         subtitle.setGravity(Gravity.CENTER);
         sheet.addView(subtitle, margins(-1, -2, 0, 2, 0, 18));
@@ -579,14 +589,27 @@ public final class InstructionSettingsActivity extends Activity {
         });
 
         dialog.setContentView(sheet);
-        dialog.setOnShowListener(d -> {
-            Window window = dialog.getWindow();
-            if (window == null) return;
+        Window window = dialog.getWindow();
+        if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.setDimAmount(0.28f);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             window.setGravity(Gravity.BOTTOM);
+            window.setWindowAnimations(R.style.BottomSheetDialogAnimation);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+        }
+        dialog.setOnShowListener(d -> {
+            Window shown = dialog.getWindow();
+            if (shown != null) {
+                shown.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                shown.setGravity(Gravity.BOTTOM);
+            }
+            codeInput.requestFocus();
+            codeInput.post(() -> {
+                InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (keyboard != null) keyboard.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
+            });
         });
         dialog.show();
     }
@@ -782,6 +805,7 @@ public final class InstructionSettingsActivity extends Activity {
     private void addIconWithSpacing(LinearLayout parent, ImageView icon, int size) { LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(size), dp(size)); iconLp.rightMargin = dp(12); parent.addView(icon, iconLp); }
     private ImageView iconTile(int iconResId, boolean accent) { ImageView v = new ImageView(this); v.setImageResource(iconResId); v.setColorFilter(accent ? Theme.ACCENT : Theme.SECONDARY); v.setScaleType(ImageView.ScaleType.CENTER); v.setPadding(dp(8), dp(8), dp(8), dp(8)); v.setBackground(rounded(accent ? Theme.ACCENT_SOFT : TILE_NEUTRAL, 10)); return v; }
     private GradientDrawable rounded(int color, int radius) { return outlined(color, radius, Color.TRANSPARENT, 0, 0, 0); }
+    private GradientDrawable topRounded(int color, int radius) { GradientDrawable d = new GradientDrawable(); float r = dp(radius); d.setColor(color); d.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0}); return d; }
     private GradientDrawable outlined(int color, int radius, int stroke, int width, int dash, int gap) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); if (width > 0) d.setStroke(dp(width), stroke, dp(dash), dp(gap)); return d; }
     private LinearLayout.LayoutParams margins(int width, int height, int left, int top, int right, int bottom) { LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, height); p.setMargins(dp(left), dp(top), dp(right), dp(bottom)); return p; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

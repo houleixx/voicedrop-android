@@ -805,12 +805,15 @@ public class SettingsActivity extends Activity {
         io.execute(() -> {
             try {
                 SettingsStore.Style style = settingsStore.loadStyle();
-                runOnUiThread(() -> input.setText(style.name));
+                runOnUiThread(() -> {
+                    input.setText(style.name);
+                    input.setSelection(input.length());
+                });
             } catch (Exception ignored) {
             }
         });
 
-        IosDialog.showBottomSheet(this, "名字", form, 230,
+        IosDialog dialog = IosDialog.showBottomSheet(this, "名字", form, 110,
                 "完成", () -> io.execute(() -> {
                     try {
                         String typedName = input.getText().toString().trim();
@@ -825,6 +828,18 @@ public class SettingsActivity extends Activity {
                         toast("名字保存失败：" + e.getMessage());
                     }
                 }), null, null, true, false);
+        input.post(() -> {
+            input.requestFocus();
+            input.setSelection(input.length());
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            }
+            android.view.inputmethod.InputMethodManager keyboard =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private void buildStyleVersionPanel(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions, List<Integer> selectedStyles,

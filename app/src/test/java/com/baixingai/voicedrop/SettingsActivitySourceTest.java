@@ -91,6 +91,17 @@ public class SettingsActivitySourceTest {
     }
 
     @Test
+    public void profileNameSheetIsCompactAndFocusesInput() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String method = methodBody(source, "private void showNameEditor");
+
+        assertTrue(method.contains("IosDialog.showBottomSheet(this, \"名字\", form, 110"));
+        assertTrue(method.contains("input.requestFocus()"));
+        assertTrue(method.contains("SOFT_INPUT_STATE_ALWAYS_VISIBLE"));
+        assertTrue(method.contains("keyboard.showSoftInput(input"));
+    }
+
+    @Test
     public void settingsShowsCurrentNameOnNameRow() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
 

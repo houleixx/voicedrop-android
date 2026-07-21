@@ -178,7 +178,9 @@ public final class InsertPhotoActivity extends Activity {
             image.setImageBitmap(photo.thumb);
             cell.addView(image, new FrameLayout.LayoutParams(dp(70), dp(70), Gravity.CENTER));
             TextView delete = topText("×", 16, 0xffffffff, Typeface.BOLD);
+            delete.setIncludeFontPadding(false);
             delete.setGravity(Gravity.CENTER);
+            delete.setPadding(0, dp(2), 0, 0);
             delete.setBackground(round(0xaa000000, 11));
             delete.setOnClickListener(v -> {
                 if (index < photos.size()) {

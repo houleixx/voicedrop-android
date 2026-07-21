@@ -24,6 +24,7 @@ import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.SimpleToast;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
 import java.io.File;
@@ -51,10 +52,10 @@ public final class InsertPhotoActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.BLACK);
-        getWindow().setNavigationBarColor(Color.BLACK);
+        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, false);
+        getWindow().setStatusBarColor(Theme.BG);
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(Theme.BG);
         setContentView(root);
         render();
     }
@@ -76,20 +77,20 @@ public final class InsertPhotoActivity extends Activity {
         top.setPadding(dp(18), getStatusBarHeight() + dp(12), dp(18), dp(8));
         root.addView(top, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
-        TextView cancel = topText("取消", 16, 0xccffffff, Typeface.NORMAL);
+        TextView cancel = topText("取消", 16, Theme.SECONDARY, Typeface.NORMAL);
         cancel.setOnClickListener(v -> finish());
         top.addView(cancel, new LinearLayout.LayoutParams(dp(64), dp(42)));
 
-        countPill = topText("", 13, 0xddffffff, Typeface.NORMAL);
+        countPill = topText("", 13, Theme.SECONDARY, Typeface.NORMAL);
         countPill.setGravity(Gravity.CENTER);
-        countPill.setBackground(round(0x22ffffff, 14));
+        countPill.setBackground(roundStroke(Theme.CARD, 14, Theme.BORDER_CHROME, 1));
         LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(0, dp(32), 1);
         countLp.setMargins(dp(8), 0, dp(8), 0);
         top.addView(countPill, countLp);
 
-        doneButton = topText("完成", 16, 0x80ffffff, Typeface.BOLD);
+        doneButton = topText("完成", 16, Theme.FAINT, Typeface.BOLD);
         doneButton.setGravity(Gravity.CENTER);
-        doneButton.setBackground(round(0x24ffffff, 14));
+        doneButton.setBackground(roundStroke(Theme.CARD, 14, Theme.BORDER_CHROME, 1));
         doneButton.setOnClickListener(v -> finishWithPhotos());
         top.addView(doneButton, new LinearLayout.LayoutParams(dp(72), dp(42)));
 
@@ -122,14 +123,14 @@ public final class InsertPhotoActivity extends Activity {
         stack.setOrientation(LinearLayout.VERTICAL);
         stack.setGravity(Gravity.CENTER);
         ImageView icon = new ImageView(this);
-        AliIconFont.apply(icon, AliIconFont.CAMERA, 0x80ffffff);
+        AliIconFont.apply(icon, AliIconFont.CAMERA, Theme.ACCENT);
         stack.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
-        TextView title = topText("插入图片", 15, 0x80ffffff, Typeface.NORMAL);
+        TextView title = topText("插入图片", 15, Theme.INK, Typeface.NORMAL);
         title.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(-2, -2);
         titleLp.setMargins(0, dp(12), 0, 0);
         stack.addView(title, titleLp);
-        TextView sub = topText("拍照或从相册选择，照片会交给 AI 放进文章", 13, 0x66ffffff, Typeface.NORMAL);
+        TextView sub = topText("拍照或从相册选择，照片会交给 AI 放进文章", 13, Theme.SECONDARY, Typeface.NORMAL);
         sub.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-2, -2);
         subLp.setMargins(0, dp(6), 0, 0);
@@ -141,13 +142,13 @@ public final class InsertPhotoActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setBackground(round(0x20ffffff, 14));
+        box.setBackground(roundStroke(Theme.CARD, 14, Theme.BORDER_CHROME, 1));
         box.setClickable(true);
         box.setOnClickListener(v -> action.run());
         ImageView icon = new ImageView(this);
-        AliIconFont.apply(icon, iconRes, 0xffffffff);
+        AliIconFont.apply(icon, iconRes, Theme.ACCENT);
         box.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        TextView text = topText(label, 12, 0xccffffff, Typeface.NORMAL);
+        TextView text = topText(label, 12, Theme.INK, Typeface.NORMAL);
         text.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(-2, -2);
         textLp.setMargins(0, dp(6), 0, 0);
@@ -159,8 +160,10 @@ public final class InsertPhotoActivity extends Activity {
         emptyHint.setVisibility(photos.isEmpty() ? View.VISIBLE : View.GONE);
         filmstrip.setVisibility(photos.isEmpty() ? View.GONE : View.VISIBLE);
         countPill.setText(photos.isEmpty() ? "选择要插入的图片" : "已选 " + photos.size() + " 张");
-        doneButton.setTextColor(photos.isEmpty() ? 0x80ffffff : 0xffffffff);
-        doneButton.setBackground(round(photos.isEmpty() ? 0x24ffffff : Theme.RED, 14));
+        doneButton.setTextColor(photos.isEmpty() ? Theme.FAINT : Color.WHITE);
+        doneButton.setBackground(photos.isEmpty()
+                ? roundStroke(Theme.CARD, 14, Theme.BORDER_CHROME, 1)
+                : round(Theme.RED, 14));
         rebuildFilmstrip();
     }
 
@@ -339,6 +342,12 @@ public final class InsertPhotoActivity extends Activity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private GradientDrawable roundStroke(int color, int radiusDp, int strokeColor, int strokeDp) {
+        GradientDrawable drawable = round(color, radiusDp);
+        drawable.setStroke(dp(strokeDp), strokeColor);
         return drawable;
     }
 

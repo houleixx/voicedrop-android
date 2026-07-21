@@ -48,7 +48,7 @@ public final class PlaybackProgressButton extends FrameLayout {
         icon = new ImageView(context);
         AliIconFont.apply(icon, AliIconFont.PLAY, 0xffffffff);
         icon.setScaleType(ImageView.ScaleType.CENTER);
-        button.addView(icon, new FrameLayout.LayoutParams(dp(15), dp(15), Gravity.CENTER));
+        button.addView(icon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
 
         loading = new ProgressBar(context);
         loading.setIndeterminate(true);

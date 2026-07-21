@@ -30,6 +30,7 @@ import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.update.AppUpdateManager;
 
@@ -102,7 +103,7 @@ public class SettingsActivity extends Activity {
 
         // Top bar
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout backTouch = new FrameLayout(this);
@@ -189,9 +190,9 @@ public class SettingsActivity extends Activity {
         addCard(content, card -> {
             addCardRow(card, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
             addCardDivider(card);
-            addCardRowWithValue(card, R.drawable.ic_settings_update, "检查更新", "", appVersionName(), () -> AppUpdateManager.checkManually(this));
+            addCardRow(card, R.drawable.ic_settings_update, "检查更新", "版本 " + appVersionName(), () -> AppUpdateManager.checkManually(this));
             addCardDivider(card);
-            addCardRow(card, R.drawable.ic_settings_info, "关于", null, this::openAbout);
+            addCardRow(card, R.drawable.ic_settings_info, "关于", "隐私 · 公约 · 屏蔽 · 联系", this::openAbout);
         });
     }
 
@@ -1170,13 +1171,6 @@ public class SettingsActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private void toast(String message) {

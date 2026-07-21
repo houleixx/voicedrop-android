@@ -71,7 +71,7 @@ public final class PrivacyDocumentationSourceTest {
     public void policyBackButtonMatchesOtherTopLevelPages() throws Exception {
         String activity = readRoot("app/src/main/java/com/baixingai/voicedrop/PrivacyPolicyActivity.java");
 
-        assertTrue(activity.contains("top.setPadding(dp(12), dp(14) + statusBarHeight(), dp(16), dp(10))"));
+        assertTrue(activity.contains("SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8))"));
         assertTrue(activity.contains("FrameLayout backTouch = new FrameLayout(this)"));
         assertTrue(activity.contains("GradientDrawable backBg = new GradientDrawable()"));
         assertTrue(activity.contains("backBg.setColor(Theme.CARD)"));

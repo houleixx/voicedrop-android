@@ -39,6 +39,7 @@ import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.PromptDragController;
 import com.baixingai.voicedrop.ui.PromptListPresentation;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 
 import java.util.HashSet;
 import java.util.List;
@@ -81,7 +82,7 @@ public final class InstructionSettingsActivity extends Activity {
         root.addView(page, new FrameLayout.LayoutParams(-1, -1));
 
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         top.addView(header(), new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER_VERTICAL));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
@@ -606,13 +607,6 @@ public final class InstructionSettingsActivity extends Activity {
     private void finishWithPageTransition() {
         finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
-    }
-
-    private int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private void configureEdgeToEdge() {

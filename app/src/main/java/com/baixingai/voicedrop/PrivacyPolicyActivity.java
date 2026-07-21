@@ -22,6 +22,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -65,7 +66,7 @@ public final class PrivacyPolicyActivity extends Activity {
 
     private View buildTopBar() {
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + statusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         top.setBackgroundColor(Theme.BG);
 
         FrameLayout backTouch = new FrameLayout(this);
@@ -206,11 +207,6 @@ public final class PrivacyPolicyActivity extends Activity {
     public void finish() {
         super.finish();
         overridePendingTransition(R.anim.stay, R.anim.slide_out_right);
-    }
-
-    private int statusBarHeight() {
-        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 
     private int dp(int value) {

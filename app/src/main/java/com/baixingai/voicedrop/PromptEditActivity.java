@@ -28,6 +28,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -76,7 +77,7 @@ public final class PromptEditActivity extends Activity {
 
         // Top bar
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         top.addView(header(id), new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER_VERTICAL));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
@@ -136,13 +137,6 @@ public final class PromptEditActivity extends Activity {
             getWindow().setNavigationBarColor(Theme.BG);
         }
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-    }
-
-    private int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private View header(String id) {

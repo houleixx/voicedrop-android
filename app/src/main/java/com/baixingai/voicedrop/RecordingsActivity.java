@@ -86,6 +86,7 @@ import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.SoftCircleShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.update.AppUpdateManager;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -988,12 +989,6 @@ public final class RecordingsActivity extends Activity {
         underline.setTranslationX(visualLeft);
         underline.setVisibility(View.VISIBLE);
     }
-    protected int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
-    }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
     }
@@ -1319,7 +1314,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(18), dp(8) + getStatusBarHeight(), dp(12), dp(8));
+        SystemBarDefaults.applyTopInsets(topBar, dp(18), dp(8), dp(12), 0);
         page.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout logo = new LinearLayout(this);
@@ -1360,7 +1355,7 @@ public final class RecordingsActivity extends Activity {
 
         recordingsTabTitle = text("我的录音", 20, !communityTab && selectedTag == null ? Theme.INK : Theme.FAINT, Typeface.BOLD);
         recordingsTabTitle.setGravity(Gravity.CENTER);
-        recordingsTabTitle.setPadding(dp(8), dp(6), dp(14), dp(6));
+        recordingsTabTitle.setPadding(0, dp(6), dp(14), dp(6));
         titleRow.addView(recordingsTabTitle, new LinearLayout.LayoutParams(-2, -2));
 
         communityTabTitle = text("VD社区", 20, communityTab ? Theme.INK : Theme.FAINT, Typeface.BOLD);
@@ -2312,7 +2307,7 @@ public final class RecordingsActivity extends Activity {
 
         // Status: centered red dot + "正在录音"
         FrameLayout statusWrap = new FrameLayout(this);
-        statusWrap.setPadding(dp(20), dp(64) + getStatusBarHeight(), dp(20), 0);
+        SystemBarDefaults.applyTopInsets(statusWrap, dp(20), dp(64), dp(20), 0);
         page.addView(statusWrap, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout statusRow = new LinearLayout(this);
@@ -2641,7 +2636,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(18), dp(8) + getStatusBarHeight(), dp(12), dp(8));
+        SystemBarDefaults.applyTopInsets(topBar, dp(18), dp(8), dp(12), 0);
         page.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout logo = new LinearLayout(this);

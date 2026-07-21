@@ -66,7 +66,7 @@ public final class SharedArticleActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(14), dp(14) + statusBar(), dp(14), dp(8));
+        SystemBarDefaults.applyTopInsets(bar, dp(14), dp(8), dp(14), dp(8));
         root.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         FrameLayout back = new FrameLayout(this);
         back.setBackground(round(Theme.CARD, 11));
@@ -192,8 +192,4 @@ public final class SharedArticleActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private int statusBar() {
-        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
-    }
 }

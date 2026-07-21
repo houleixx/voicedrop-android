@@ -13,18 +13,14 @@ import static org.junit.Assert.fail;
 
 public class SettingsUpdateRowSourceTest {
     @Test
-    public void updateVersionIsVerticallyCenteredAndRightAlignedBesideChevron() throws Exception {
+    public void updateVersionAndAboutDetailsAreShownAsSubtitles() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
-        String method = methodBody(source, "private TextView addCardRowWithValue");
+        String settings = methodBody(source, "private void rebuildPrimarySettings");
 
-        assertTrue(method.contains("row.setBaselineAligned(false)"));
-        assertTrue(method.contains("valueText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL)"));
-        assertTrue(method.contains("valueText.setIncludeFontPadding(false)"));
-        assertTrue(method.contains("valueLp.gravity = Gravity.CENTER_VERTICAL"));
-        assertTrue(method.contains("row.addView(valueText, valueLp)"));
-        assertTrue(method.contains("row.addView(settingsChevron())"));
-        assertFalse(method.contains("text(\"›\""));
-        assertFalse(method.contains("LinearLayout rightBox"));
+        assertTrue(settings.contains("addCardRow(card, R.drawable.ic_settings_update, \"检查更新\", \"版本 \" + appVersionName()"));
+        assertFalse(settings.contains("addCardRowWithValue(card, R.drawable.ic_settings_update"));
+        assertTrue(settings.contains("addCardRow(card, R.drawable.ic_settings_info, \"关于\", \"隐私 · 公约 · 屏蔽 · 联系\""));
+        assertFalse(settings.contains("隐私 · 公约 · 屏蔽 · 联系 · 版本"));
     }
 
     @Test

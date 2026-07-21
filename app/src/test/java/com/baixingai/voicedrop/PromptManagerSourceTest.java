@@ -93,7 +93,7 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("configureEdgeToEdge();"));
         assertTrue(manager.contains("FrameLayout root = new FrameLayout(this)"));
         assertTrue(manager.contains("root.setFitsSystemWindows(false)"));
-        assertTrue(manager.contains("top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10))"));
+        assertTrue(manager.contains("SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8))"));
         assertTrue(manager.contains("BouncyScrollView scroll = new BouncyScrollView(this)"));
         assertTrue(manager.contains("content.setPadding(dp(16), dp(6), dp(16), dp(40))"));
     }

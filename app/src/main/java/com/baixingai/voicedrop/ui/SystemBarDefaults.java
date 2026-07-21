@@ -8,8 +8,41 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
 public final class SystemBarDefaults {
     private SystemBarDefaults() {}
+
+    /** Adds the live status-bar and display-cutout safe area to a top-aligned view. */
+    public static void applyTopInsets(View view, int baseLeft, int baseTop, int baseRight, int baseBottom) {
+        if (view == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(view, (target, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout());
+            target.setPadding(
+                    baseLeft + safe.left,
+                    baseTop + safe.top,
+                    baseRight + safe.right,
+                    baseBottom);
+            return windowInsets;
+        });
+        if (ViewCompat.isAttachedToWindow(view)) {
+            ViewCompat.requestApplyInsets(view);
+        } else {
+            view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View attachedView) {
+                    attachedView.removeOnAttachStateChangeListener(this);
+                    ViewCompat.requestApplyInsets(attachedView);
+                }
+
+                @Override
+                public void onViewDetachedFromWindow(View detachedView) {}
+            });
+        }
+    }
 
     public static void applyLightActivity(Window window, int navigationBarColor, boolean edgeToEdge) {
         if (window == null) return;

@@ -69,6 +69,7 @@ import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -825,12 +826,6 @@ public final class CommunityActivity extends Activity {
         underline.setTranslationX(activeTab.getLeft() + offset);
         underline.setVisibility(View.VISIBLE);
     }
-    protected int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
-    }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
     }
@@ -921,7 +916,7 @@ public final class CommunityActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setPadding(dp(18), dp(8) + getStatusBarHeight(), dp(12), dp(8));
+        SystemBarDefaults.applyTopInsets(topBar, dp(18), dp(8), dp(12), dp(8));
         page.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout logo = new LinearLayout(this);

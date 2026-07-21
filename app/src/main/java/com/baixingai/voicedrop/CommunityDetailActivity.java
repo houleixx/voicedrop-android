@@ -72,6 +72,7 @@ import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -842,13 +843,6 @@ public final class CommunityDetailActivity extends Activity {
         underline.setTranslationX(activeTab.getLeft() + offset);
         underline.setVisibility(View.VISIBLE);
     }
-    protected int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
-    }
-
     protected int getNavigationBarHeight() {
         int resourceId = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
         return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
@@ -924,7 +918,7 @@ public final class CommunityDetailActivity extends Activity {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         // Left: 12dp bar padding + 4dp inset around the back button = 16dp.
         // Right: 5dp bar padding + 11dp inset around the 34dp more button = 16dp.
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(5), dp(8));
+        SystemBarDefaults.applyTopInsets(bar, dp(12), dp(8), dp(5), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
         Space toolbarSpace = new Space(this);
@@ -1143,7 +1137,7 @@ public final class CommunityDetailActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(5), dp(8));
+        SystemBarDefaults.applyTopInsets(bar, dp(12), dp(8), dp(5), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::leaveDetailPage);
         bar.addView(new Space(this), new LinearLayout.LayoutParams(0, dp(48), 1));
@@ -1402,7 +1396,7 @@ public final class CommunityDetailActivity extends Activity {
         // Nav bar (simplified)
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        SystemBarDefaults.applyTopInsets(bar, dp(12), dp(8), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, () -> {
             cancelCommunityReplyRecording();
@@ -2014,7 +2008,7 @@ public final class CommunityDetailActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), dp(12) + getStatusBarHeight(), dp(8), dp(8));
+        SystemBarDefaults.applyTopInsets(bar, dp(12), dp(8), dp(8), dp(8));
         page.addView(bar, new LinearLayout.LayoutParams(-1, -2));
         addNavBackButton(bar, this::finishDetailActivity);
 

@@ -23,6 +23,7 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 
 import org.json.JSONObject;
 
@@ -53,7 +54,7 @@ public class WechatSettingsActivity extends Activity {
         root.addView(page, new FrameLayout.LayoutParams(-1, -1));
 
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout backTouch = new FrameLayout(this);
@@ -380,13 +381,6 @@ public class WechatSettingsActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private void toast(String message) {

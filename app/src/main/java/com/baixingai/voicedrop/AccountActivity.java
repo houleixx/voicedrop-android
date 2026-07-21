@@ -24,6 +24,7 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 
@@ -43,6 +44,7 @@ public final class AccountActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         auth = new AuthStore(this);
+        currentAccountId = accountIdFromScope(auth.storageScope());
         HttpClient http = new HttpClient();
         library = new LibraryStore(auth, http);
         configureEdgeToEdge();
@@ -59,7 +61,7 @@ public final class AccountActivity extends Activity {
         root.addView(page, new FrameLayout.LayoutParams(-1, -1));
 
         FrameLayout top = new FrameLayout(this);
-        top.setPadding(dp(12), dp(14) + getStatusBarHeight(), dp(16), dp(10));
+        SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout backTouch = new FrameLayout(this);
@@ -115,9 +117,7 @@ public final class AccountActivity extends Activity {
         io.execute(() -> {
             int recordings = 0;
             int mined = 0;
-            String accountId = "";
             try {
-                accountId = accountIdFromScope(library.ownerScope());
                 List<Recording> list = library.load(new ArrayList<>());
                 recordings = list.size();
                 for (Recording r : list) if (r.hasArticles) mined++;
@@ -125,9 +125,7 @@ public final class AccountActivity extends Activity {
             }
             int finalRecordings = recordings;
             int finalMined = mined;
-            String finalAccountId = accountId;
             runOnUiThread(() -> {
-                currentAccountId = finalAccountId;
                 render(finalRecordings, finalMined, true);
             });
         });
@@ -246,8 +244,12 @@ public final class AccountActivity extends Activity {
         valueText.setSingleLine(true);
         valueText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         row.addView(valueText, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView copy = text("复制", 13, Theme.RED, Typeface.BOLD);
-        copy.setGravity(Gravity.CENTER);
+        ImageView copy = new ImageView(this);
+        copy.setImageResource(R.drawable.ic_copy_flat);
+        copy.setColorFilter(Theme.RED);
+        copy.setScaleType(ImageView.ScaleType.CENTER);
+        copy.setTranslationX(dp(4));
+        copy.setContentDescription("复制" + label);
         row.addView(copy, new LinearLayout.LayoutParams(dp(46), -1));
         row.setOnClickListener(v -> copy(copyValue, label + "已复制"));
         copy.setOnClickListener(v -> copy(copyValue, label + "已复制"));
@@ -405,15 +407,29 @@ public final class AccountActivity extends Activity {
         note.setPadding(0, dp(12), 0, 0);
         form.addView(note);
 
-        IosDialog.showBottomSheet(this, "登录已有账号", form, 380,
+        IosDialog dialog = IosDialog.showBottomSheet(this, "登录已有账号", form, 300,
                 "导入", () -> {
                     if (auth.adoptToken(input.getText().toString().trim())) {
                         toast("已切换到已有账号");
+                        currentAccountId = accountIdFromScope(auth.storageScope());
                         loadCounts();
                     } else {
                         toast("请粘贴以 anon_ 开头的访问令牌");
                     }
                 }, null, null, true, true);
+        input.post(() -> {
+            input.requestFocus();
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            }
+            android.view.inputmethod.InputMethodManager keyboard =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (keyboard != null) {
+                keyboard.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
     }
 
     private String maskedToken() {
@@ -495,13 +511,6 @@ public final class AccountActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private int getStatusBarHeight() {
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(metrics);
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : (int) (24 * metrics.density);
     }
 
     private void configureEdgeToEdge() {

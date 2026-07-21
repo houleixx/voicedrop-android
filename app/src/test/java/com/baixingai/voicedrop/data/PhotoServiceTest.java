@@ -18,6 +18,11 @@ public class PhotoServiceTest {
         assertTrue(source.contains("image(String fullKey, boolean ignoringLocalCache)"));
         assertTrue(source.contains("Cache-Control"));
         assertTrue(source.contains("no-cache"));
+        assertTrue(source.contains("Api.photoBase() + \"/photo/\""));
+        assertTrue(source.contains("Api.filesBase() + \"/photo/\""));
+        assertTrue(source.indexOf("Api.photoBase() + \"/photo/\"")
+                < source.indexOf("Api.filesBase() + \"/photo/\""));
+        assertTrue(source.contains("/cdn-cgi/image/width=512,quality=60/files/api/photo/"));
     }
 
     @Test

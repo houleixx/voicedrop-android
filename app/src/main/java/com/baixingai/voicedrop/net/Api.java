@@ -5,11 +5,17 @@ import java.net.URLEncoder;
 
 public final class Api {
     public static final String HOST = "jianshuo.dev";
+    /** Public immutable photo originals use the EdgeOne-backed domestic CDN. */
+    public static final String PHOTO_HOST = "voicedrop.cn";
 
     private Api() {}
 
     public static String filesBase() {
         return "https://" + HOST + "/files/api";
+    }
+
+    public static String photoBase() {
+        return "https://" + PHOTO_HOST + "/files/api";
     }
 
     public static String agentBase() {

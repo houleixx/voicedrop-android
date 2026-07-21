@@ -109,8 +109,16 @@ public final class PhotoService {
         HttpClient.RequestOptions options = ignoringLocalCache
                 ? new HttpClient.RequestOptions().header("Cache-Control", "no-cache")
                 : null;
-        HttpClient.Response response = http.get(Api.filesBase() + "/photo/" + Api.path(fullKey), "", options);
-        return response.ok() ? response.body : null;
+        // Originals prefer voicedrop.cn / EdgeOne; fall back to the existing API host when
+        // the CDN, DNS, or the user's current network cannot reach it.
+        try {
+            HttpClient.Response cdn = http.get(Api.photoBase() + "/photo/" + Api.path(fullKey), "", options);
+            if (cdn.ok()) return cdn.body;
+        } catch (java.io.IOException ignored) {
+            // The public origin below remains the compatibility path.
+        }
+        HttpClient.Response origin = http.get(Api.filesBase() + "/photo/" + Api.path(fullKey), "", options);
+        return origin.ok() ? origin.body : null;
     }
 
     private static byte[] readDisk(String cacheKey) {

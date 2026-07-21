@@ -505,26 +505,11 @@ public final class InstructionSettingsActivity extends Activity {
     }
 
     private void showImportSheet() {
-        Dialog dialog = new Dialog(this);
         LinearLayout sheet = vertical();
-        sheet.setPadding(dp(16), dp(16), dp(16), dp(28));
-        sheet.setBackground(topRounded(0xfffffbf6, 22));
-
-        FrameLayout header = new FrameLayout(this);
-        TextView title = text("导入提示词", 20, Typeface.BOLD, Theme.INK);
-        title.setGravity(Gravity.CENTER);
-        header.addView(title, new FrameLayout.LayoutParams(-1, dp(44), Gravity.CENTER));
-        TextView close = text("×", 28, Typeface.NORMAL, Theme.SECONDARY);
-        close.setContentDescription("关闭");
-        close.setIncludeFontPadding(false);
-        close.setGravity(Gravity.CENTER);
-        close.setPadding(dp(12), 0, 0, dp(16));
-        close.setOnClickListener(v -> dialog.dismiss());
-        header.addView(close, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.RIGHT | Gravity.CENTER_VERTICAL));
-        sheet.addView(header, new LinearLayout.LayoutParams(-1, dp(44)));
+        sheet.setPadding(dp(16), dp(10), dp(16), dp(12));
         TextView subtitle = text("输入 7 位魔法数字，或粘贴分享链接", 14, Typeface.NORMAL, Theme.FAINT);
         subtitle.setGravity(Gravity.CENTER);
-        sheet.addView(subtitle, margins(-1, -2, 0, 2, 0, 18));
+        sheet.addView(subtitle, margins(-1, -2, 0, 2, 0, 16));
 
         EditText codeInput = new EditText(this);
         codeInput.setTextSize(18);
@@ -576,6 +561,8 @@ public final class InstructionSettingsActivity extends Activity {
                 loadImportPreview(merged, previous, preview, importButton);
             }
         });
+        IosDialog dialog = IosDialog.showBottomSheet(this, "导入提示词", sheet, 250,
+                null, null, null, null, true, false);
         importButton.setOnClickListener(v -> {
             String code = previous[0];
             setImportButton(importButton, false);
@@ -587,31 +574,16 @@ public final class InstructionSettingsActivity extends Activity {
                 });
             });
         });
-
-        dialog.setContentView(sheet);
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setDimAmount(0.28f);
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setGravity(Gravity.BOTTOM);
-            window.setWindowAnimations(R.style.BottomSheetDialogAnimation);
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
-        }
-        dialog.setOnShowListener(d -> {
-            Window shown = dialog.getWindow();
-            if (shown != null) {
-                shown.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                shown.setGravity(Gravity.BOTTOM);
-            }
+        codeInput.post(() -> {
             codeInput.requestFocus();
-            codeInput.post(() -> {
-                InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-                if (keyboard != null) keyboard.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
-            });
+            Window window = dialog.getWindow();
+            if (window != null) {
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            }
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
         });
-        dialog.show();
     }
 
     private void loadImportPreview(String code, String[] previous, TextView preview, TextView importButton) {

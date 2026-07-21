@@ -103,6 +103,8 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("showImportSheet"));
         assertTrue(manager.contains("加入我的提示词"));
         assertTrue(manager.contains("导入后是你自己的副本"));
+        assertTrue(manager.contains("IosDialog.showBottomSheet(this, \"导入提示词\", sheet, 250"));
+        assertFalse(manager.contains("window.setWindowAnimations(R.style.BottomSheetDialogAnimation)"));
     }
 
     @Test public void managerUsesTheSharedDialogForRestoringDefaults() throws Exception {

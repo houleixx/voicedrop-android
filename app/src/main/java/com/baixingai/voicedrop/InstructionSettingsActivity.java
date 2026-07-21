@@ -514,11 +514,11 @@ public final class InstructionSettingsActivity extends Activity {
         TextView title = text("导入提示词", 20, Typeface.BOLD, Theme.INK);
         title.setGravity(Gravity.CENTER);
         header.addView(title, new FrameLayout.LayoutParams(-1, dp(44), Gravity.CENTER));
-        TextView close = text("×", 22, Typeface.NORMAL, Theme.SECONDARY);
+        TextView close = text("×", 24, Typeface.NORMAL, Theme.SECONDARY);
         close.setContentDescription("关闭");
         close.setIncludeFontPadding(false);
         close.setGravity(Gravity.CENTER);
-        close.setBackground(rounded(TILE_NEUTRAL, 11));
+        close.setPadding(dp(16), 0, 0, dp(12));
         close.setOnClickListener(v -> dialog.dismiss());
         header.addView(close, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.RIGHT | Gravity.CENTER_VERTICAL));
         sheet.addView(header, new LinearLayout.LayoutParams(-1, dp(44)));

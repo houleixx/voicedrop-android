@@ -223,6 +223,50 @@ public final class PromptStore {
         }
     }
 
+    /** Public prompt discovery. Shared prompts stay flat here; importCode preserves server groupPath. */
+    public List<MarketItem> market(String sort, String scope, int limit) {
+        try {
+            String safeSort = "new".equals(sort) ? "new" : "hot";
+            StringBuilder url = new StringBuilder(baseUrl)
+                    .append("/prompt-market?sort=").append(safeSort)
+                    .append("&limit=").append(Math.max(1, Math.min(limit, 100)));
+            if ("text".equals(scope) || "image".equals(scope)) url.append("&scope=").append(scope);
+            HttpClient.Response response = transport.get(url.toString(), bearer);
+            if (!response.ok()) return null;
+            JSONArray values = new JSONObject(response.text()).optJSONArray("items");
+            List<MarketItem> result = new ArrayList<>();
+            if (values == null) return result;
+            for (int i = 0; i < values.length(); i++) {
+                JSONObject value = values.optJSONObject(i);
+                if (value == null) continue;
+                String code = value.optString("code", "").trim();
+                if (code.isEmpty()) continue;
+                MarketItem item = new MarketItem();
+                item.code = code;
+                item.label = value.optString("label", "分享指令");
+                item.author = value.optString("author", "");
+                item.kind = value.optString("kind", null);
+                item.importCount = Math.max(0, value.optInt("importCount", 0));
+                item.createdAt = value.optString("createdAt", "");
+                JSONObject example = value.optJSONObject("example");
+                if (example != null) {
+                    item.exampleInput = example.optString("input", "");
+                    item.exampleOutput = example.optString("output", "");
+                    item.exampleImageKey = example.optString("imageKey", "");
+                }
+                JSONArray applies = value.optJSONArray("appliesTo");
+                if (applies != null) for (int j = 0; j < applies.length(); j++) {
+                    String anchor = applies.optString(j, "");
+                    if (!anchor.isEmpty()) item.appliesTo.add(anchor);
+                }
+                result.add(item);
+            }
+            return result;
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
     public Map<String, ShareState> shareStates() {
         Map<String, ShareState> result = new HashMap<>();
         try {
@@ -278,6 +322,19 @@ public final class PromptStore {
         public String author;
         public String kind;
         public int importCount;
+        public final List<String> appliesTo = new ArrayList<>();
+    }
+
+    public static final class MarketItem {
+        public String code;
+        public String label;
+        public String author;
+        public String kind;
+        public String createdAt;
+        public int importCount;
+        public String exampleInput = "";
+        public String exampleOutput = "";
+        public String exampleImageKey = "";
         public final List<String> appliesTo = new ArrayList<>();
     }
 

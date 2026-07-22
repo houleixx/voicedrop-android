@@ -13,9 +13,13 @@ public final class SoftRoundedShadowFrameLayout extends FrameLayout {
     private final int cornerRadius;
 
     public SoftRoundedShadowFrameLayout(Context context) {
+        this(context, 16, 8);
+    }
+
+    public SoftRoundedShadowFrameLayout(Context context, int cornerRadiusDp, int shadowRadiusDp) {
         super(context);
-        shadowRadius = dp(8);
-        cornerRadius = dp(16);
+        shadowRadius = dp(shadowRadiusDp);
+        cornerRadius = dp(cornerRadiusDp);
         setWillNotDraw(false);
         setLayerType(LAYER_TYPE_SOFTWARE, null);
         paint.setColor(0xffffffff);

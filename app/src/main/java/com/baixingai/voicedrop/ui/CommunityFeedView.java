@@ -98,7 +98,6 @@ public final class CommunityFeedView extends LinearLayout {
         row.addView(tab("推荐", CommunityFeedPresentation.Tab.RECOMMENDED));
         row.addView(tab("最新", CommunityFeedPresentation.Tab.LATEST));
         row.addView(tab("回应", CommunityFeedPresentation.Tab.REPLIES));
-        row.addView(tab("提示词", CommunityFeedPresentation.Tab.PROMPTS));
         return row;
     }
 

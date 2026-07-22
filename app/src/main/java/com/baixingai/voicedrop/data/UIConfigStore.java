@@ -63,7 +63,8 @@ public final class UIConfigStore {
 
     private static MenuNode parseNode(JSONObject obj) {
         if (obj == null) return null;
-        MenuNode node = new MenuNode(obj.optString("id"), obj.optString("label"), obj.optString("type"), obj.optString("instruction"));
+        MenuNode node = new MenuNode(obj.optString("id"), obj.optString("label"), obj.optString("type"),
+                obj.optString("instruction"), obj.optString("origin"));
         JSONArray children = obj.optJSONArray("children");
         if (children != null) for (int i = 0; i < children.length(); i++) {
             MenuNode child = parseNode(children.optJSONObject(i));
@@ -98,12 +99,18 @@ public final class UIConfigStore {
         public final String label;
         public final String type;
         public final String instruction;
+        public final String origin;
         public final List<MenuNode> children = new ArrayList<>();
         public MenuNode(String id, String label, String type, String instruction) {
+            this(id, label, type, instruction, id != null && id.startsWith("sys_") ? "system" : "user");
+        }
+        public MenuNode(String id, String label, String type, String instruction, String origin) {
             this.id = id == null ? "" : id;
             this.label = label == null ? "" : label;
             this.type = type == null ? "" : type;
             this.instruction = instruction == null ? "" : instruction;
+            this.origin = origin == null || origin.isEmpty()
+                    ? (this.id.startsWith("sys_") ? "system" : "user") : origin;
         }
     }
 }

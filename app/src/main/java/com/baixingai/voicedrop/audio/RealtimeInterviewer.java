@@ -30,6 +30,12 @@ public final class RealtimeInterviewer {
                 state = s;
                 if (s == RealtimeSession.State.LIVE) reconnectAttempt = 0;
                 if (s == RealtimeSession.State.DEGRADED) scheduleReconnect();
+                if (s == RealtimeSession.State.UNAVAILABLE) {
+                    if (reconnectRunnable != null) main.removeCallbacks(reconnectRunnable);
+                    reconnectRunnable = null;
+                    muted = true;
+                    releasePlayer();
+                }
                 notifyChanged();
             }
 
@@ -88,11 +94,12 @@ public final class RealtimeInterviewer {
         if (state == RealtimeSession.State.CONNECTING) return "AI 连接中…";
         if (state == RealtimeSession.State.LIVE) return muted ? "AI 正在说话" : "AI 采访中 · 再点一下结束";
         if (state == RealtimeSession.State.DEGRADED) return "AI 已断开 · 录音继续";
+        if (state == RealtimeSession.State.UNAVAILABLE) return "AI 采访暂不可用 · 录音继续";
         return "AI 采访中";
     }
 
     public void onPcm16(byte[] pcm16le, int sampleRate) {
-        if (!active || muted || pcm16le == null || pcm16le.length == 0) return;
+        if (!active || muted || state == RealtimeSession.State.UNAVAILABLE || pcm16le == null || pcm16le.length == 0) return;
         session.appendAudio(MuLaw.pcm16ToPcmu8k(pcm16le, sampleRate));
     }
 

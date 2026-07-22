@@ -16,7 +16,7 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 
 public final class RealtimeSession {
-    public enum State { IDLE, CONNECTING, LIVE, DEGRADED }
+    public enum State { IDLE, CONNECTING, LIVE, DEGRADED, UNAVAILABLE }
 
     public interface Listener {
         void onState(State state);
@@ -35,6 +35,7 @@ public final class RealtimeSession {
     private WebSocket socket;
     private int generation;
     private State state = State.IDLE;
+    private boolean fatal;
 
     public RealtimeSession(AuthStore auth, Listener listener) {
         this.auth = auth;
@@ -43,6 +44,7 @@ public final class RealtimeSession {
 
     public void connect() {
         if (socket != null) return;
+        fatal = false;
         setState(State.CONNECTING);
         final int gen = ++generation;
         String token = auth == null ? "" : auth.bearer();
@@ -67,13 +69,19 @@ public final class RealtimeSession {
 
             @Override public void onFailure(WebSocket webSocket, Throwable t, Response response) {
                 if (!current(webSocket, gen)) return;
-                setState(State.DEGRADED);
+                socket = null;
+                setState(fatal ? State.UNAVAILABLE : State.DEGRADED);
             }
 
             @Override public void onClosed(WebSocket webSocket, int code, String reason) {
                 if (!current(webSocket, gen)) return;
                 socket = null;
-                setState(State.IDLE);
+                if (fatal || isFatalClose(code, reason)) {
+                    fatal = true;
+                    setState(State.UNAVAILABLE);
+                } else {
+                    setState(State.DEGRADED);
+                }
             }
         });
     }
@@ -93,13 +101,22 @@ public final class RealtimeSession {
                 if (!b64.isEmpty()) listener.onAudioDelta(Base64.decode(b64, Base64.DEFAULT));
             } else if ("response.done".equals(type)) {
                 listener.onResponseDone();
+            } else if ("error".equals(type)) {
+                JSONObject error = obj.optJSONObject("error");
+                String reason = error == null ? obj.toString()
+                        : error.optString("code", "") + " " + error.optString("type", "")
+                        + " " + error.optString("message", "");
+                if (isFatalReason(reason)) {
+                    fatal = true;
+                    setState(State.UNAVAILABLE);
+                }
             }
         } catch (Exception ignored) {
         }
     }
 
     public void appendAudio(byte[] pcmu8k) {
-        if (pcmu8k == null || pcmu8k.length == 0 || socket == null) return;
+        if (pcmu8k == null || pcmu8k.length == 0 || socket == null || fatal) return;
         try {
             JSONObject obj = new JSONObject()
                     .put("type", "input_audio_buffer.append")
@@ -122,6 +139,7 @@ public final class RealtimeSession {
         generation++;
         WebSocket ws = socket;
         socket = null;
+        fatal = false;
         if (ws != null) ws.close(1000, "done");
         setState(State.IDLE);
     }
@@ -134,5 +152,17 @@ public final class RealtimeSession {
         if (state == next) return;
         state = next;
         listener.onState(next);
+    }
+
+    private static boolean isFatalClose(int code, String reason) {
+        return code == 1013 || isFatalReason(reason);
+    }
+
+    private static boolean isFatalReason(String reason) {
+        String value = reason == null ? "" : reason.toLowerCase(java.util.Locale.ROOT);
+        return value.contains("insufficient_quota")
+                || value.contains("exceeded_current_quota")
+                || value.contains("account_deactivated")
+                || value.contains("billing");
     }
 }

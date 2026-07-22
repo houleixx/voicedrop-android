@@ -271,7 +271,7 @@ public final class PromptTree {
 
     private static UIConfigStore.MenuNode menuNode(PromptNode node, String anchor) {
         if (node.isGroup()) {
-            UIConfigStore.MenuNode group = new UIConfigStore.MenuNode(node.id, node.label, "submenu", "");
+            UIConfigStore.MenuNode group = new UIConfigStore.MenuNode(node.id, node.label, "submenu", "", node.origin);
             for (PromptNode child : node.children) {
                 UIConfigStore.MenuNode converted = menuNode(child, anchor);
                 if (converted != null) group.children.add(converted);
@@ -279,7 +279,7 @@ public final class PromptTree {
             return group.children.isEmpty() ? null : group;
         }
         if (!node.appliesTo.contains(anchor)) return null;
-        return new UIConfigStore.MenuNode(node.id, node.label, "", node.prompt);
+        return new UIConfigStore.MenuNode(node.id, node.label, "", node.prompt, node.origin);
     }
 
     private static int clamp(int value, int size) {

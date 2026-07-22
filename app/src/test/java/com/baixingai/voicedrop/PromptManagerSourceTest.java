@@ -35,15 +35,17 @@ public class PromptManagerSourceTest {
 
     @Test public void managerKeepsTwelveDpBetweenListIconsAndCopy() throws Exception {
         String manager = source("InstructionSettingsActivity.java");
-        assertTrue(manager.contains("addIconWithSpacing(line, icon, 40)"));
+        assertTrue(manager.contains("addIconWithSpacing(line, icon, 32)"));
         assertTrue(manager.contains("addIconWithSpacing(box, icon, 44)"));
         assertTrue(manager.contains("iconLp.rightMargin = dp(12)"));
     }
 
     @Test public void managerUsesComfortablyCompactPromptListRows() throws Exception {
         String manager = source("InstructionSettingsActivity.java");
-        assertTrue(manager.contains("line.setPadding(dp(14 + row.depth * 18), dp(8), dp(14), dp(8))"));
-        assertTrue(manager.contains("line.setMinimumHeight(dp(row.group ? 52 : 56))"));
+        assertTrue(manager.contains("line.setPadding(dp(15 + row.depth * 16), dp(9), dp(15), dp(9))"));
+        assertTrue(manager.contains("line.setMinimumHeight(dp(52))"));
+        assertTrue(manager.contains("divider(59 + rows.get(i + 1).depth * 16)"));
+        assertTrue(manager.contains("outlined(Color.WHITE, 12, Theme.BORDER_CHROME, 1, 0, 0)"));
     }
 
     @Test public void longPressStartsDragAndReorderSaveShowsLoading() throws Exception {
@@ -79,13 +81,12 @@ public class PromptManagerSourceTest {
         assertFalse(manager.contains("new AlertDialog.Builder(this)"));
     }
 
-    @Test public void managerUsesAnIconForTheExpandedGroupChevron() throws Exception {
+    @Test public void managerRotatesTheSameChevronWithoutChangingRowHeight() throws Exception {
         String manager = source("InstructionSettingsActivity.java");
-        assertTrue(manager.contains("R.drawable.ic_prompt_chevron_down"));
-        assertTrue(manager.contains("chevron.setImageResource"));
-        Path icon = Paths.get("src/main/res/drawable/ic_prompt_chevron_down.xml");
-        if (!Files.exists(icon)) icon = Paths.get("app/src/main/res/drawable/ic_prompt_chevron_down.xml");
-        assertTrue(Files.exists(icon));
+        assertTrue(manager.contains("ImageView chevron = trailingChevron()"));
+        assertTrue(manager.contains("chevron.setRotation(90f)"));
+        assertTrue(manager.contains("new LinearLayout.LayoutParams(dp(16), dp(16))"));
+        assertFalse(manager.contains("R.drawable.ic_prompt_chevron_down"));
     }
 
     @Test public void managerUsesTheSharedSettingsPageScaffold() throws Exception {
@@ -134,6 +135,8 @@ public class PromptManagerSourceTest {
         String manager = source("InstructionSettingsActivity.java");
         assertTrue(manager.contains("\"仅文字\".equals(row.appliesLabel) ? Theme.GREEN : Theme.SECONDARY"));
         assertTrue(manager.contains("\"仅文字\".equals(row.appliesLabel) ? Theme.GREEN_BG : TILE_NEUTRAL"));
+        assertTrue(manager.contains("private TextView originBadge(PromptNode node)"));
+        assertTrue(manager.contains("custom ? Theme.AMBER_BG : Theme.GREEN_BG"));
     }
 
     @Test public void editorForksSystemsSupportsAnchorsAndSharesOnlyUrl() throws Exception {

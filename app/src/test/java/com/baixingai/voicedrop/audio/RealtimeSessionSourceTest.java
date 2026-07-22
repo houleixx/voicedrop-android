@@ -59,6 +59,20 @@ public class RealtimeSessionSourceTest {
         assertTrue(interviewerSource.contains("session.clearInputBuffer()"));
     }
 
+    @Test
+    public void hardRelayRejectionBecomesUnavailableAndStopsReconnectAndUplink() throws Exception {
+        String sessionSource = readSource("src/main/java/com/baixingai/voicedrop/audio/RealtimeSession.java");
+        String interviewerSource = readSource("src/main/java/com/baixingai/voicedrop/audio/RealtimeInterviewer.java");
+
+        assertTrue(sessionSource.contains("UNAVAILABLE"));
+        assertTrue(sessionSource.contains("insufficient_quota"));
+        assertTrue(sessionSource.contains("code == 1013"));
+        assertTrue(sessionSource.contains("else if (\"error\".equals(type))"));
+        assertTrue(interviewerSource.contains("AI 采访暂不可用 · 录音继续"));
+        assertTrue(interviewerSource.contains("state == RealtimeSession.State.UNAVAILABLE"));
+        assertTrue(interviewerSource.contains("reconnectRunnable = null"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

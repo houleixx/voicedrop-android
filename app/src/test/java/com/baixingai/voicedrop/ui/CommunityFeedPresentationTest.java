@@ -15,7 +15,7 @@ public class CommunityFeedPresentationTest {
         CommunityStore.Post latest = post("latest", null, 3);
         CommunityStore.Post reply = post("reply", "root", 2);
         CommunityStore.Post root = post("root", null, 1);
-        CommunityStore.Post prompt = prompt("prompt", 0);
+        CommunityStore.Post prompt = prompt("prompt", 0); // Historical rows remain decodable for old links/caches.
         CommunityStore.Feed feed = CommunityStore.Feed.fromLegacy(
                 Arrays.asList(latest, reply, root, prompt),
                 new CommunityStore.Ranking(Arrays.asList("root", "latest", "reply", "prompt"),
@@ -30,9 +30,6 @@ public class CommunityFeedPresentationTest {
         assertEquals(Arrays.asList("reply"),
                 CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
                         CommunityFeedPresentation.Tab.REPLIES)));
-        assertEquals(Arrays.asList("prompt"),
-                CommunityFeedPresentation.ids(CommunityFeedPresentation.posts(feed,
-                        CommunityFeedPresentation.Tab.PROMPTS)));
     }
 
     @Test

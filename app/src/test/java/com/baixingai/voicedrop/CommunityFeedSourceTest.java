@@ -16,6 +16,8 @@ public class CommunityFeedSourceTest {
         assertTrue(source.contains("CommunityFeedPresentation.Tab.RECOMMENDED"));
         assertTrue(source.contains("CommunityFeedPresentation.Tab.LATEST"));
         assertTrue(source.contains("CommunityFeedPresentation.Tab.REPLIES"));
+        assertFalse(source.contains("CommunityFeedPresentation.Tab.PROMPTS"));
+        assertFalse(source.contains("tab(\"提示词\""));
         assertTrue(source.contains("setOnLongClickListener"));
         assertTrue(source.contains("PhotoService.thumbnail"));
         assertTrue(source.contains("newFixedThreadPool(4)"));

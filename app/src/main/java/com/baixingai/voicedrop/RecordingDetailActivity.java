@@ -2628,12 +2628,12 @@ public final class RecordingDetailActivity extends Activity {
         showConfiguredMenu(anchor, menu, instruction ->
                 UIConfigStore.fill(instruction, "LINE", String.valueOf(line), "QUOTE", UIConfigStore.quotePrefix(paragraph)),
                 (filled, itemId) -> enqueueConfiguredInstruction(rec, filled, ArticleEditSession.EditAnchor.line(line, paragraph), itemId),
-                new LocalMenuRow("拷贝", AliIconFont.DOC, () -> {
+                new LocalMenuRow("拷贝", () -> {
                     ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                     if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop", paragraph));
                     toast("已拷贝");
                 }),
-                new LocalMenuRow("编辑", AliIconFont.EDIT,
+                new LocalMenuRow("编辑",
                         () -> startInlineParagraphEdit(
                                 rec, paragraphRow, paragraphView, line, paragraph, renderedBody)));
     }
@@ -2854,33 +2854,32 @@ public final class RecordingDetailActivity extends Activity {
         PopupWindow[] popup = new PopupWindow[1];
         Runnable[] showRoot = new Runnable[1];
         showRoot[0] = () -> {
-            LinearLayout view = configuredMenuView(menu.groups, filler, consumer, popup, showRoot, anchor, localRows);
+            ConfiguredMenuSections view = configuredMenuView(menu.groups, filler, consumer, popup, showRoot, anchor, localRows);
             popup[0] = showConfiguredPopup(view, anchor);
         };
         showRoot[0].run();
     }
 
-    protected LinearLayout configuredMenuView(List<List<UIConfigStore.MenuNode>> groups,
-                                             InstructionFiller filler, InstructionConsumer consumer,
-                                             PopupWindow[] popup, Runnable[] showRoot,
-                                             View anchor,
-                                             LocalMenuRow... localRows) {
-        LinearLayout menu = configuredMenuContainer();
-        boolean needsDivider = false;
+    protected ConfiguredMenuSections configuredMenuView(List<List<UIConfigStore.MenuNode>> groups,
+                                                        InstructionFiller filler, InstructionConsumer consumer,
+                                                        PopupWindow[] popup, Runnable[] showRoot,
+                                                        View anchor,
+                                                        LocalMenuRow... localRows) {
+        ConfiguredMenuSections menu = configuredMenuSections();
         for (List<UIConfigStore.MenuNode> group : groups) {
-            if (needsDivider) menu.addView(divider());
-            needsDivider = true;
-            for (UIConfigStore.MenuNode node : group) addConfiguredNode(menu, node, filler, consumer, popup, showRoot, anchor);
+            for (UIConfigStore.MenuNode node : group) {
+                LinearLayout target = isCustomMenuNode(node) ? menu.scrollable : menu.fixedTop;
+                addConfiguredNode(target, node, filler, consumer, popup, showRoot, anchor);
+            }
         }
         if (localRows != null && localRows.length > 0) {
-            if (needsDivider) menu.addView(divider());
             for (LocalMenuRow row : localRows) {
-                LinearLayout item = menuRow(row.label, row.icon, Theme.RED, Theme.INK);
+                LinearLayout item = configuredMenuRow(row.label, Theme.INK, Typeface.NORMAL);
                 item.setOnClickListener(v -> {
                     if (popup[0] != null) popup[0].dismiss();
                     row.action.run();
                 });
-                menu.addView(item);
+                addConfiguredMenuRow(menu.fixedBottom, item);
             }
         }
         return menu;
@@ -2890,61 +2889,173 @@ public final class RecordingDetailActivity extends Activity {
                                      InstructionFiller filler, InstructionConsumer consumer,
                                      PopupWindow[] popup, Runnable[] showRoot, View anchor) {
         if ("submenu".equals(node.type) && !node.children.isEmpty()) {
-            LinearLayout row = menuRow(node.label, AliIconFont.CHEVRON_RIGHT_FLAT, Theme.RED, Theme.INK);
+            LinearLayout row = configuredSubmenuRow(node.label);
             row.setOnClickListener(v -> {
-                LinearLayout sub = configuredMenuContainer();
-                LinearLayout back = menuRow("返回", AliIconFont.BACK, Theme.SECONDARY, Theme.SECONDARY);
+                ConfiguredMenuSections sub = configuredMenuSections();
+                LinearLayout back = configuredMenuRow("返回", Theme.SECONDARY, Typeface.BOLD);
                 back.setOnClickListener(backView -> {
                     if (popup[0] != null) popup[0].dismiss();
                     showRoot[0].run();
                 });
-                sub.addView(back);
-                sub.addView(divider());
-                for (UIConfigStore.MenuNode child : node.children) addConfiguredNode(sub, child, filler, consumer, popup, showRoot, anchor);
+                addConfiguredMenuRow(sub.fixedTop, back);
+                for (UIConfigStore.MenuNode child : node.children) {
+                    addConfiguredNode(sub.scrollable, child, filler, consumer, popup, showRoot, anchor);
+                }
                 if (popup[0] != null) popup[0].dismiss();
                 popup[0] = showConfiguredPopup(sub, anchor);
             });
-            menu.addView(row);
+            addConfiguredMenuRow(menu, row);
             return;
         }
         if (node.instruction == null || node.instruction.isEmpty()) return;
-        LinearLayout row = menuRow(node.label, configuredInstructionIcon(node.id), Theme.RED, Theme.INK);
+        LinearLayout row = configuredMenuRow(node.label, Theme.INK, Typeface.NORMAL);
         row.setOnClickListener(v -> {
             if (popup[0] != null) popup[0].dismiss();
             consumer.accept(filler.fill(node.instruction), node.id);
         });
-        menu.addView(row);
+        addConfiguredMenuRow(menu, row);
     }
 
-    protected int configuredInstructionIcon(String id) {
-        if (id == null) return AliIconFont.PAPERPLANE;
-        switch (id) {
-            case "cartoon": return AliIconFont.STYLE_CARTOON;
-            case "ad": return AliIconFont.STYLE_AD;
-            case "watercolor": return AliIconFont.STYLE_WATERCOLOR;
-            case "sketch": return AliIconFont.STYLE_SKETCH;
-            case "oil": return AliIconFont.STYLE_OIL;
-            case "film": return AliIconFont.STYLE_FILM;
-            default: return AliIconFont.PAPERPLANE;
-        }
+    protected boolean isCustomMenuNode(UIConfigStore.MenuNode node) {
+        return node != null && !"system".equals(node.origin);
+    }
+
+    protected ConfiguredMenuSections configuredMenuSections() {
+        return new ConfiguredMenuSections(
+                configuredMenuContainer(), configuredMenuContainer(), configuredMenuContainer());
     }
 
     protected LinearLayout configuredMenuContainer() {
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(0, dp(3), 0, dp(3));
-        menu.setBackground(round(0xf9ffffff, 16));
-        menu.setElevation(dp(8));
+        menu.setBackgroundColor(Color.TRANSPARENT);
         return menu;
     }
 
-    protected PopupWindow showConfiguredPopup(LinearLayout menu, View anchor) {
-        PopupWindow popup = new PopupWindow(menu, dp(260), -2, true);
+    protected void addConfiguredMenuRow(LinearLayout menu, LinearLayout row) {
+        if (menu.getChildCount() > 0) menu.addView(configuredMenuDivider());
+        menu.addView(row);
+    }
+
+    protected LinearLayout configuredMenuRow(String label, int textColor, int textStyle) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(48));
+        row.setPadding(dp(18), 0, dp(18), 0);
+
+        TextView title = text(label, 16, textColor, textStyle);
+        title.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        row.addView(title, new LinearLayout.LayoutParams(-1, dp(48)));
+        return row;
+    }
+
+    protected LinearLayout configuredSubmenuRow(String label) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(48));
+        row.setPadding(dp(18), 0, dp(14), 0);
+
+        TextView title = text(label, 16, Theme.INK, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        ImageView chevron = new ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right_flat);
+        chevron.setColorFilter(Theme.FAINT);
+        chevron.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        row.addView(chevron, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        return row;
+    }
+
+    protected View configuredMenuDivider() {
+        View line = new View(this);
+        line.setBackgroundColor(Theme.BORDER_CHROME);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+        lp.setMargins(dp(18), 0, dp(18), 0);
+        line.setLayoutParams(lp);
+        return line;
+    }
+
+    protected PopupWindow showConfiguredPopup(ConfiguredMenuSections menu, View anchor) {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int shadowInset = dp(8);
+        int menuWidth = Math.min(dp(340), screenWidth - dp(48));
+        int popupWidth = menuWidth + (shadowInset * 2);
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(menuWidth, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        menu.fixedTop.measure(widthSpec, heightSpec);
+        menu.scrollable.measure(widthSpec, heightSpec);
+        menu.fixedBottom.measure(widthSpec, heightSpec);
+
+        boolean hasTop = menu.fixedTop.getChildCount() > 0;
+        boolean hasScrollable = menu.scrollable.getChildCount() > 0;
+        boolean hasBottom = menu.fixedBottom.getChildCount() > 0;
+        int sectionDividerCount = (hasTop && hasScrollable ? 1 : 0)
+                + (hasBottom && (hasTop || hasScrollable) ? 1 : 0);
+        int fixedHeight = menu.fixedTop.getMeasuredHeight() + menu.fixedBottom.getMeasuredHeight()
+                + dp(8) + (sectionDividerCount * dp(1));
+        int scrollContentHeight = menu.scrollable.getMeasuredHeight();
+        int maxHeight = Math.min(dp(520), Math.round(screenHeight * 0.68f));
+        int surfaceHeight = Math.min(fixedHeight + scrollContentHeight, maxHeight - (shadowInset * 2));
+        int popupHeight = surfaceHeight + (shadowInset * 2);
+        int scrollViewportHeight = Math.max(0, surfaceHeight - fixedHeight);
+
+        LinearLayout surface = new LinearLayout(this);
+        surface.setOrientation(LinearLayout.VERTICAL);
+        surface.setPadding(0, dp(4), 0, dp(4));
+        surface.setBackground(round(0xf9ffffff, 14));
+        surface.setClipToOutline(true);
+        if (hasTop) surface.addView(menu.fixedTop, new LinearLayout.LayoutParams(-1, -2));
+
+        if (hasScrollable) {
+            if (hasTop) surface.addView(configuredMenuDivider());
+            BouncyScrollView scroll = new BouncyScrollView(this);
+            scroll.setFillViewport(false);
+            scroll.setVerticalScrollBarEnabled(scrollContentHeight > scrollViewportHeight);
+            scroll.setScrollbarFadingEnabled(false);
+            scroll.setScrollBarStyle(View.SCROLLBARS_INSIDE_INSET);
+            scroll.setClipToPadding(false);
+            scroll.addView(menu.scrollable, new BouncyScrollView.LayoutParams(-1, -2));
+            surface.addView(scroll, new LinearLayout.LayoutParams(-1, scrollViewportHeight));
+        }
+        if (hasBottom) {
+            if (hasTop || hasScrollable) surface.addView(configuredMenuDivider());
+            surface.addView(menu.fixedBottom, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        SoftRoundedShadowFrameLayout shadow = new SoftRoundedShadowFrameLayout(this, 14, 8);
+        shadow.addView(surface, new FrameLayout.LayoutParams(-1, -1));
+
+        PopupWindow popup = new PopupWindow(shadow, popupWidth, popupHeight, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
-        popup.setElevation(dp(10));
-        popup.showAsDropDown(anchor, 0, -Math.max(anchor.getHeight(), dp(48)));
+        popup.setElevation(0);
+        popup.setClippingEnabled(true);
+
+        int[] anchorLocation = new int[2];
+        anchor.getLocationOnScreen(anchorLocation);
+        int margin = dp(16);
+        int popupX = Math.max(margin, Math.min(anchorLocation[0], screenWidth - popupWidth - margin));
+        int popupY = Math.max(margin, Math.min(anchorLocation[1], screenHeight - popupHeight - margin));
+        popup.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, popupX, popupY);
         return popup;
+    }
+
+    protected static final class ConfiguredMenuSections {
+        final LinearLayout fixedTop;
+        final LinearLayout scrollable;
+        final LinearLayout fixedBottom;
+
+        ConfiguredMenuSections(LinearLayout fixedTop, LinearLayout scrollable, LinearLayout fixedBottom) {
+            this.fixedTop = fixedTop;
+            this.scrollable = scrollable;
+            this.fixedBottom = fixedBottom;
+        }
     }
 
     protected interface InstructionFiller {
@@ -2957,12 +3068,10 @@ public final class RecordingDetailActivity extends Activity {
 
     protected static final class LocalMenuRow {
         final String label;
-        final int icon;
         final Runnable action;
 
-        LocalMenuRow(String label, int icon, Runnable action) {
+        LocalMenuRow(String label, Runnable action) {
             this.label = label;
-            this.icon = icon;
             this.action = action;
         }
     }

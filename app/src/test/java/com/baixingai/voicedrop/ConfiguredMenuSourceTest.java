@@ -21,33 +21,63 @@ public class ConfiguredMenuSourceTest {
     }
 
     @Test
-    public void submenuRowsUseTheFlatRightChevronInsteadOfTheMoreIcon() throws Exception {
+    public void configuredRowsUseTextOnlyHierarchyWithoutIcons() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
-        String icons = readSource("src/main/java/com/baixingai/voicedrop/ui/AliIconFont.java");
 
-        assertTrue(source.contains("menuRow(node.label, AliIconFont.CHEVRON_RIGHT_FLAT"));
-        assertTrue(icons.contains("CHEVRON_RIGHT_FLAT = R.drawable.ic_chevron_right_flat"));
+        assertTrue(source.contains("configuredSubmenuRow(node.label)"));
+        assertTrue(source.contains("configuredMenuRow(node.label, Theme.INK, Typeface.NORMAL)"));
+        assertTrue(source.contains("configuredMenuRow(\"返回\", Theme.SECONDARY, Typeface.BOLD)"));
+        assertFalse(source.contains("menuRow(node.label, AliIconFont"));
+        assertFalse(source.contains("configuredInstructionIcon"));
     }
 
     @Test
-    public void imageStyleRowsUseSemanticIconsByStableIdWithPaperPlaneFallback() throws Exception {
+    public void onlyRowsThatOpenSubmenusShowTheProjectRightChevron() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
-        String icons = readSource("src/main/java/com/baixingai/voicedrop/ui/AliIconFont.java");
 
-        assertTrue(source.contains("menuRow(node.label, configuredInstructionIcon(node.id)"));
-        assertTrue(source.contains("case \"cartoon\": return AliIconFont.STYLE_CARTOON"));
-        assertTrue(source.contains("case \"ad\": return AliIconFont.STYLE_AD"));
-        assertTrue(source.contains("case \"watercolor\": return AliIconFont.STYLE_WATERCOLOR"));
-        assertTrue(source.contains("case \"sketch\": return AliIconFont.STYLE_SKETCH"));
-        assertTrue(source.contains("case \"oil\": return AliIconFont.STYLE_OIL"));
-        assertTrue(source.contains("case \"film\": return AliIconFont.STYLE_FILM"));
-        assertTrue(source.contains("default: return AliIconFont.PAPERPLANE"));
-        assertTrue(icons.contains("STYLE_CARTOON = R.drawable.ic_style_cartoon"));
-        assertTrue(icons.contains("STYLE_AD = R.drawable.ic_style_ad"));
-        assertTrue(icons.contains("STYLE_WATERCOLOR = R.drawable.ic_style_watercolor"));
-        assertTrue(icons.contains("STYLE_SKETCH = R.drawable.ic_style_sketch"));
-        assertTrue(icons.contains("STYLE_OIL = R.drawable.ic_style_oil"));
-        assertTrue(icons.contains("STYLE_FILM = R.drawable.ic_style_film"));
+        assertTrue(source.contains("chevron.setImageResource(R.drawable.ic_chevron_right_flat)"));
+        assertTrue(source.contains("chevron.setColorFilter(Theme.FAINT)"));
+        assertTrue(source.contains("configuredSubmenuRow(node.label)"));
+    }
+
+    @Test
+    public void onlyCustomPromptRowsAreInsideTheHeightLimitedScrollView() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+
+        assertTrue(source.contains("isCustomMenuNode(node) ? menu.scrollable : menu.fixedTop"));
+        assertTrue(source.contains("addConfiguredMenuRow(menu.fixedBottom, item)"));
+        assertTrue(source.contains("scroll.addView(menu.scrollable"));
+        assertTrue(source.contains("BouncyScrollView scroll = new BouncyScrollView(this)"));
+        assertTrue(source.contains("scroll.setVerticalScrollBarEnabled(scrollContentHeight > scrollViewportHeight)"));
+        assertTrue(source.contains("scroll.setScrollbarFadingEnabled(false)"));
+        assertTrue(source.contains("surface.setBackground(round(0xf9ffffff, 14))"));
+        assertTrue(source.contains("surface.setClipToOutline(true)"));
+        assertTrue(source.contains("popup.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT"));
+    }
+
+    @Test
+    public void everySecondLevelMenuScrollsWhileItsBackActionStaysFixed() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+
+        assertTrue(source.contains("addConfiguredMenuRow(sub.fixedTop, back)"));
+        assertTrue(source.contains("addConfiguredNode(sub.scrollable, child"));
+    }
+
+    @Test
+    public void popupUsesUniformFourSidedShadowInsteadOfNativeBottomWeightedElevation() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+
+        assertTrue(source.contains("new SoftRoundedShadowFrameLayout(this, 14, 8)"));
+        assertTrue(source.contains("popup.setElevation(0)"));
+    }
+
+    @Test
+    public void everyConfiguredMenuRowIsSeparatedIncludingImportedPrompts() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+
+        assertTrue(source.contains("addConfiguredMenuRow(menu, row)"));
+        assertTrue(source.contains("addConfiguredMenuRow(menu.fixedBottom, item)"));
+        assertTrue(source.contains("if (menu.getChildCount() > 0) menu.addView(configuredMenuDivider())"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

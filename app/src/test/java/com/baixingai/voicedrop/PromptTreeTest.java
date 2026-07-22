@@ -97,6 +97,8 @@ public class PromptTreeTest {
         UIConfigStore.MenuConfig menu = PromptTree.menu(java.util.Collections.singletonList(style), "image");
         assertEquals(1, menu.groups.size());
         assertEquals("sys_cartoon", menu.groups.get(0).get(0).children.get(0).id);
+        assertEquals("user", menu.groups.get(0).get(0).origin);
+        assertEquals("system", menu.groups.get(0).get(0).children.get(0).origin);
         assertEquals(1, menu.groups.get(0).get(0).children.size());
     }
 

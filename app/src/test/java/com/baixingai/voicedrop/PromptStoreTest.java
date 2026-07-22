@@ -143,6 +143,25 @@ public class PromptStoreTest {
                 signedStore.setSharing("p_12345678", true).error);
     }
 
+    @Test public void marketUsesAuthenticatedFiltersAndDecodesItems() {
+        transport.enqueue(200, "{\"items\":[{\"code\":\"7654321\",\"label\":\"公众号题图\","
+                + "\"author\":\"Alice\",\"appliesTo\":[\"text\",\"image\"],\"kind\":\"image\","
+                + "\"importCount\":9,\"createdAt\":\"2026-07-22T00:00:00Z\","
+                + "\"example\":{\"input\":\"之前\",\"output\":\"之后\"}}]}");
+
+        List<PromptStore.MarketItem> items = store.market("new", "image", 30);
+
+        assertNotNull(items);
+        assertEquals(1, items.size());
+        assertEquals("7654321", items.get(0).code);
+        assertEquals(9, items.get(0).importCount);
+        assertEquals(Arrays.asList("text", "image"), items.get(0).appliesTo);
+        assertEquals("之前", items.get(0).exampleInput);
+        assertEquals("之后", items.get(0).exampleOutput);
+        assertEquals("GET /agent/prompt-market?sort=new&limit=30&scope=image", transport.lastRequestLine());
+        assertEquals("token", transport.lastBearer);
+    }
+
     private static boolean menuContains(UIConfigStore.MenuConfig menu, String label) {
         for (List<UIConfigStore.MenuNode> group : menu.groups) {
             for (UIConfigStore.MenuNode node : group) {

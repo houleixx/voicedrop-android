@@ -11,14 +11,17 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.EditText;
@@ -35,13 +38,16 @@ import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.DialogWindowDefaults;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.PromptDragController;
 import com.baixingai.voicedrop.ui.PromptListPresentation;
+import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +71,12 @@ public final class InstructionSettingsActivity extends Activity {
     private boolean savingSort;
     private boolean dragRenderPosted;
     private View openSwipeRow;
+    private List<PromptStore.MarketItem> marketItems = new ArrayList<>();
+    private final Set<String> importingMarketCodes = new HashSet<>();
+    private String marketSort = "hot";
+    private String marketScope = "";
+    private boolean marketLoading;
+    private boolean marketFailed;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -102,6 +114,7 @@ public final class InstructionSettingsActivity extends Activity {
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render(store.items());
         refresh();
+        loadMarket();
     }
 
     @Override protected void onResume() {
@@ -209,16 +222,17 @@ public final class InstructionSettingsActivity extends Activity {
             content.addView(empty, new LinearLayout.LayoutParams(-1, dp(140)));
         } else {
             LinearLayout card = vertical();
-            card.setBackground(rounded(Color.WHITE, 14));
+            card.setBackground(outlined(Color.WHITE, 12, Theme.BORDER_CHROME, 1, 0, 0));
             card.setClipToOutline(true);
             for (int i = 0; i < rows.size(); i++) {
                 card.addView(promptRow(rows.get(i)));
-                if (i < rows.size() - 1) card.addView(divider(rows.get(i + 1).depth == 1 ? 66 : 0));
+                if (i < rows.size() - 1) card.addView(divider(59 + rows.get(i + 1).depth * 16));
             }
             content.addView(card, new LinearLayout.LayoutParams(-1, -2));
         }
 
         if (!sorting) {
+            content.addView(marketSection(), margins(-1, -2, 0, 22, 0, 0));
             content.addView(importBox(), margins(-1, -2, 0, 18, 0, 0));
             TextView note = text("也可以在录音时直接对 VoiceDrop 说出数字，或点开 voicedrop.cn 链接自动跳转到这里。", 12, Typeface.NORMAL, Theme.FAINT);
             note.setLineSpacing(0, 1.18f);
@@ -229,6 +243,358 @@ public final class InstructionSettingsActivity extends Activity {
             restore.setOnClickListener(v -> confirmRestore());
             content.addView(restore, new LinearLayout.LayoutParams(-1, -2));
         }
+    }
+
+    private View marketSection() {
+        LinearLayout section = vertical();
+        TextView heading = text("社区提示词", 13, Typeface.BOLD, Theme.SECONDARY);
+        section.addView(heading, margins(-1, -2, 2, 0, 0, 10));
+
+        LinearLayout filters = horizontal();
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        filters.addView(marketFilter("热门", "hot", ""), marketChipParams(true));
+        filters.addView(marketFilter("最新", "new", ""), marketChipParams(true));
+        filters.addView(marketFilter("文字", "hot", "text"), marketChipParams(true));
+        filters.addView(marketFilter("配图", "hot", "image"), marketChipParams(false));
+        section.addView(filters, new LinearLayout.LayoutParams(-1, -2));
+
+        if (marketLoading && marketItems.isEmpty()) {
+            LinearLayout loading = vertical();
+            loading.setGravity(Gravity.CENTER);
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminate(true);
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Theme.ACCENT));
+            loading.addView(spinner, new LinearLayout.LayoutParams(dp(24), dp(24)));
+            TextView state = text("正在加载社区提示词…", 13, Typeface.NORMAL, Theme.FAINT);
+            loading.addView(state, margins(-2, -2, 0, 8, 0, 0));
+            section.addView(loading, new LinearLayout.LayoutParams(-1, dp(88)));
+            return section;
+        }
+        if (marketFailed && marketItems.isEmpty()) {
+            TextView state = text("社区提示词加载失败，点此重试", 14, Typeface.NORMAL, Theme.ACCENT);
+            state.setGravity(Gravity.CENTER);
+            state.setOnClickListener(v -> loadMarket());
+            section.addView(state, new LinearLayout.LayoutParams(-1, dp(88)));
+            return section;
+        }
+        if (marketItems.isEmpty()) {
+            TextView state = text("暂时没有可用的社区提示词", 14, Typeface.NORMAL, Theme.FAINT);
+            state.setGravity(Gravity.CENTER);
+            section.addView(state, new LinearLayout.LayoutParams(-1, dp(88)));
+            return section;
+        }
+
+        LinearLayout card = vertical();
+        card.setBackground(outlined(Color.WHITE, 12, Theme.BORDER_CHROME, 1, 0, 0));
+        card.setClipToOutline(true);
+        for (int i = 0; i < marketItems.size(); i++) {
+            card.addView(marketRow(marketItems.get(i)));
+            if (i < marketItems.size() - 1) card.addView(divider(59));
+        }
+        section.addView(card, margins(-1, -2, 0, 12, 0, 0));
+        return section;
+    }
+
+    private View marketFilter(String label, String sort, String scope) {
+        boolean selected = marketSort.equals(sort) && marketScope.equals(scope);
+        TextView chip = text(label, 13, selected ? Typeface.BOLD : Typeface.NORMAL,
+                selected ? Color.WHITE : 0xff5b5349);
+        chip.setGravity(Gravity.CENTER);
+        chip.setBackground(outlined(selected ? 0xff2b2823 : Color.WHITE, 18,
+                selected ? Color.TRANSPARENT : 0xffe5dccb, selected ? 0 : 1, 0, 0));
+        chip.setOnClickListener(v -> {
+            if (selected || marketLoading) return;
+            marketSort = sort;
+            marketScope = scope;
+            marketItems = new ArrayList<>();
+            loadMarket();
+        });
+        return chip;
+    }
+
+    private LinearLayout.LayoutParams marketChipParams(boolean spacing) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(32), 1);
+        if (spacing) params.rightMargin = dp(8);
+        return params;
+    }
+
+    private View marketRow(PromptStore.MarketItem item) {
+        LinearLayout row = horizontal();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(15), dp(9), dp(15), dp(9));
+        row.setMinimumHeight(dp(52));
+        ImageView icon = marketIconTile(isImageOnly(item.appliesTo));
+        addIconWithSpacing(row, icon, 32);
+
+        LinearLayout copy = vertical();
+        TextView title = text(item.label, 15, Typeface.NORMAL, Theme.INK);
+        title.setMaxLines(1);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(title);
+        String author = item.author == null || item.author.isEmpty() ? "匿名" : item.author;
+        TextView subline = text(author + " · 导入 " + item.importCount, 13, Typeface.NORMAL, Theme.SECONDARY);
+        subline.setMaxLines(1);
+        subline.setEllipsize(TextUtils.TruncateAt.END);
+        copy.addView(subline, margins(-1, -2, 0, 2, 0, 0));
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+
+        boolean imported = PromptTree.containsImport(store.items(), item.code);
+        boolean importing = importingMarketCodes.contains(item.code);
+        if (importing) {
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminate(true);
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Theme.ACCENT));
+            LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(dp(30), dp(30));
+            spinnerParams.leftMargin = dp(10);
+            row.addView(spinner, spinnerParams);
+        } else if (imported) {
+            LinearLayout importedState = horizontal();
+            importedState.setGravity(Gravity.CENTER_VERTICAL);
+            importedState.addView(text("已导入", 12, Typeface.NORMAL, Theme.FAINT));
+            ImageView chevron = trailingChevron();
+            LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(dp(14), dp(14));
+            chevronParams.leftMargin = dp(3);
+            importedState.addView(chevron, chevronParams);
+            row.addView(importedState, new LinearLayout.LayoutParams(-2, -2));
+        } else {
+            TextView action = text("导入", 13, Typeface.BOLD, Theme.ACCENT);
+            action.setGravity(Gravity.CENTER);
+            action.setPadding(dp(13), dp(4), dp(13), dp(4));
+            action.setBackground(outlined(Color.WHITE, 16, 0xffebc4b7, 1, 0, 0));
+            action.setOnClickListener(v -> importMarketItem(item, null, null));
+            row.addView(action, new LinearLayout.LayoutParams(-2, -2));
+        }
+        row.setOnClickListener(v -> showMarketDetail(item));
+        return row;
+    }
+
+    private void loadMarket() {
+        if (marketLoading) return;
+        marketLoading = true;
+        marketFailed = false;
+        render(store.items());
+        String sort = marketSort;
+        String scope = marketScope;
+        io.execute(() -> {
+            List<PromptStore.MarketItem> result = store.market(sort, scope, 30);
+            runOnUiThread(() -> {
+                if (!sort.equals(marketSort) || !scope.equals(marketScope)) return;
+                marketLoading = false;
+                marketFailed = result == null;
+                marketItems = result == null ? new ArrayList<>() : result;
+                render(store.items());
+            });
+        });
+    }
+
+    private void importMarketItem(PromptStore.MarketItem item, Runnable success, Runnable failure) {
+        if (importingMarketCodes.contains(item.code)) return;
+        importingMarketCodes.add(item.code);
+        render(store.items());
+        io.execute(() -> {
+            String error = store.importCode(item.code);
+            runOnUiThread(() -> {
+                importingMarketCodes.remove(item.code);
+                if (error == null) {
+                    toast("已加入提示词");
+                    if (success != null) success.run();
+                } else {
+                    showError(error);
+                    if (failure != null) failure.run();
+                }
+                render(store.items());
+            });
+        });
+    }
+
+    private void showMarketDetail(PromptStore.MarketItem item) {
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
+        dialog.setCanceledOnTouchOutside(true);
+
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(0x66000000);
+
+        FrameLayout sheetContainer = new FrameLayout(this);
+        sheetContainer.setBackground(topRounded(Theme.BG, 20));
+        sheetContainer.setClickable(true);
+        sheetContainer.setTranslationY(getResources().getDisplayMetrics().heightPixels);
+
+        LinearLayout sheet = vertical();
+        sheetContainer.addView(sheet, new FrameLayout.LayoutParams(-1, -1));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        LinearLayout content = vertical();
+        content.setPadding(dp(18), dp(20), dp(18), dp(20));
+
+        LinearLayout badgeRow = horizontal();
+        TextView type = text(marketTypeText(item.appliesTo), 11, Typeface.BOLD,
+                isImageOnly(item.appliesTo) ? Theme.ACCENT : Theme.GREEN);
+        type.setPadding(dp(7), dp(3), dp(7), dp(3));
+        type.setBackground(rounded(isImageOnly(item.appliesTo) ? Theme.ACCENT_SOFT : 0xffeaf1ec, 4));
+        badgeRow.addView(type, new LinearLayout.LayoutParams(-2, -2));
+        content.addView(badgeRow, margins(-1, -2, 0, 0, 0, 13));
+
+        TextView title = text(item.label, 23, Typeface.BOLD, Theme.INK);
+        title.setLineSpacing(dp(2), 1.0f);
+        content.addView(title, margins(-1, -2, 0, 0, 0, 15));
+
+        String author = item.author == null || item.author.isEmpty() ? "匿名分享者" : item.author;
+        String avatarCharacter = item.author == null || item.author.isEmpty() ? "友" : firstCharacter(item.author);
+        LinearLayout authorLine = horizontal();
+        authorLine.setGravity(Gravity.CENTER_VERTICAL);
+        TextView avatar = text(avatarCharacter, 11, Typeface.BOLD, Color.WHITE);
+        avatar.setGravity(Gravity.CENTER);
+        GradientDrawable avatarBackground = rounded(0xffd8a25b, 12);
+        avatarBackground.setShape(GradientDrawable.OVAL);
+        avatar.setBackground(avatarBackground);
+        authorLine.addView(avatar, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        TextView byline = text(author, 13, Typeface.NORMAL, Theme.SECONDARY);
+        authorLine.addView(byline, margins(-2, -2, 8, 0, 0, 0));
+        content.addView(authorLine, margins(-1, -2, 0, 0, 0, 16));
+
+        LinearLayout stats = horizontal();
+        stats.setGravity(Gravity.CENTER_VERTICAL);
+        stats.setPadding(0, dp(12), 0, dp(12));
+        stats.setBackground(outlined(Color.WHITE, 5, Theme.BORDER_CHROME, 1, 0, 0));
+        stats.addView(statCell(String.valueOf(item.importCount), "被导入"), new LinearLayout.LayoutParams(0, dp(54), 1));
+        View statDivider = new View(this);
+        statDivider.setBackgroundColor(DIVIDER);
+        stats.addView(statDivider, new LinearLayout.LayoutParams(dp(1), dp(30)));
+        stats.addView(statCell(appliesText(item.appliesTo), "适用于"), new LinearLayout.LayoutParams(0, dp(54), 1));
+        content.addView(stats, margins(-1, -2, 0, 0, 0, 16));
+
+        TextView promptLabel = text("提示词全文", 13, Typeface.BOLD, Theme.SECONDARY);
+        content.addView(promptLabel, margins(-1, -2, 0, 0, 0, 8));
+
+        TextView prompt = text("加载中…", 14, Typeface.NORMAL, 0xff5b5349);
+        prompt.setLineSpacing(dp(4), 1.0f);
+        prompt.setPadding(dp(14), dp(14), dp(14), dp(14));
+        prompt.setBackground(outlined(Color.WHITE, 5, Theme.BORDER_CHROME, 1, 0, 0));
+        content.addView(prompt, new LinearLayout.LayoutParams(-1, -2));
+
+        if (!item.exampleOutput.isEmpty() || !item.exampleImageKey.isEmpty()) {
+            LinearLayout example = vertical();
+            example.addView(text("效果示例", 13, Typeface.BOLD, Theme.SECONDARY));
+            if (!item.exampleInput.isEmpty()) {
+                example.addView(text(item.exampleInput, 13, Typeface.NORMAL, Theme.FAINT),
+                        margins(-1, -2, 0, 6, 0, 0));
+            }
+            if (!item.exampleOutput.isEmpty()) {
+                example.addView(text(item.exampleOutput, 14, Typeface.NORMAL, Theme.INK),
+                        margins(-1, -2, 0, 6, 0, 0));
+            }
+            content.addView(example, margins(-1, -2, 0, 18, 0, 0));
+        }
+        scroll.addView(content);
+        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        boolean imported = PromptTree.containsImport(store.items(), item.code);
+        TextView importButton = text(imported ? "已在我的提示词里" : "加入我的提示词", 17,
+                Typeface.BOLD, Color.WHITE);
+        importButton.setGravity(Gravity.CENTER);
+        importButton.setEnabled(!imported);
+        importButton.setBackground(rounded(imported ? 0xffc2b9a8 : Theme.ACCENT, 12));
+        LinearLayout footer = vertical();
+        footer.setPadding(dp(18), dp(10), dp(18), dp(12));
+        footer.setBackgroundColor(Theme.BG);
+        footer.addView(importButton, new LinearLayout.LayoutParams(-1, dp(54)));
+        sheet.addView(footer, new LinearLayout.LayoutParams(-1, -2));
+
+        ImageView closeButton = new ImageView(this);
+        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        closeButton.setColorFilter(Theme.SECONDARY);
+        closeButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+        closeButton.setContentDescription("关闭");
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(dp(40), dp(40),
+                Gravity.TOP | Gravity.RIGHT);
+        closeParams.topMargin = dp(10);
+        closeParams.rightMargin = dp(12);
+        sheetContainer.addView(closeButton, closeParams);
+
+        FrameLayout.LayoutParams sheetParams = new FrameLayout.LayoutParams(-1, -1, Gravity.BOTTOM);
+        sheetParams.topMargin = dp(220);
+        overlay.addView(sheetContainer, sheetParams);
+        dialog.setContentView(overlay, new ViewGroup.LayoutParams(-1, -1));
+
+        final boolean[] closing = {false};
+        Runnable dismissSheet = () -> {
+            if (closing[0]) return;
+            closing[0] = true;
+            sheetContainer.animate()
+                    .translationY(sheetContainer.getHeight())
+                    .setDuration(200)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .withEndAction(dialog::dismiss)
+                    .start();
+        };
+        overlay.setOnClickListener(v -> dismissSheet.run());
+        closeButton.setOnClickListener(v -> dismissSheet.run());
+        dialog.setOnKeyListener((ignored, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_UP) return false;
+            dismissSheet.run();
+            return true;
+        });
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            DialogWindowDefaults.applyModal(window, 0x66000000, Theme.BG, true);
+            window.setGravity(Gravity.BOTTOM);
+        }
+        sheetContainer.post(() -> sheetContainer.animate()
+                .translationY(0)
+                .setDuration(240)
+                .setInterpolator(new DecelerateInterpolator())
+                .start());
+
+        importButton.setOnClickListener(v -> {
+            importButton.setEnabled(false);
+            importButton.setText("导入中…");
+            importMarketItem(item, dismissSheet, () -> {
+                importButton.setEnabled(true);
+                importButton.setText("加入我的提示词");
+            });
+        });
+        io.execute(() -> {
+            PromptStore.Preview preview = store.preview(item.code);
+            runOnUiThread(() -> prompt.setText(preview == null || preview.prompt == null || preview.prompt.isEmpty()
+                    ? "（全文加载失败）" : preview.prompt));
+        });
+    }
+
+    private View statCell(String value, String label) {
+        LinearLayout cell = vertical();
+        cell.setGravity(Gravity.CENTER);
+        TextView valueView = text(value, 17, Typeface.BOLD, Theme.INK);
+        valueView.setGravity(Gravity.CENTER);
+        cell.addView(valueView, new LinearLayout.LayoutParams(-1, -2));
+        TextView labelView = text(label, 11, Typeface.NORMAL, Theme.FAINT);
+        labelView.setGravity(Gravity.CENTER);
+        cell.addView(labelView, new LinearLayout.LayoutParams(-1, -2));
+        return cell;
+    }
+
+    private static boolean isImageOnly(List<String> applies) {
+        return applies != null && applies.size() == 1 && applies.contains("image");
+    }
+
+    private static String marketTypeText(List<String> applies) {
+        return isImageOnly(applies) ? "配图提示词" : "文字提示词";
+    }
+
+    private static String firstCharacter(String value) {
+        if (value == null || value.isEmpty()) return "友";
+        return value.substring(0, value.offsetByCodePoints(0, 1));
+    }
+
+    private static String appliesText(List<String> applies) {
+        boolean text = applies != null && applies.contains("text");
+        boolean image = applies != null && applies.contains("image");
+        if (text && image) return "都行";
+        if (image) return "图片";
+        if (text) return "文字";
+        return "全部";
     }
 
     private View promptRow(PromptListPresentation.Row row) {
@@ -247,46 +613,54 @@ public final class InstructionSettingsActivity extends Activity {
 
         LinearLayout line = horizontal();
         line.setGravity(Gravity.CENTER_VERTICAL);
-        line.setPadding(dp(14 + row.depth * 18), dp(8), dp(14), dp(8));
-        line.setMinimumHeight(dp(row.group ? 52 : 56));
+        line.setPadding(dp(15 + row.depth * 16), dp(9), dp(15), dp(9));
+        line.setMinimumHeight(dp(52));
         line.setBackgroundColor(Color.WHITE);
 
         ImageView icon = iconTile(row.group ? R.drawable.ic_prompt_folder
                 : ("仅图片".equals(row.appliesLabel) ? R.drawable.ic_image : R.drawable.ic_doc),
                 !row.group && "仅图片".equals(row.appliesLabel));
-        addIconWithSpacing(line, icon, 40);
+        addIconWithSpacing(line, icon, 32);
 
         if (row.group) {
             LinearLayout copy = horizontal();
             copy.setGravity(Gravity.CENTER_VERTICAL);
-            TextView title = text(row.node.label, 17, Typeface.NORMAL, Theme.INK);
+            TextView title = text(row.node.label, 15, Typeface.NORMAL, Theme.INK);
             copy.addView(title);
-            TextView meta = text("  分组 · " + row.childCount + " 项", 13, Typeface.NORMAL, Theme.FAINT);
-            copy.addView(meta);
+            TextView origin = originBadge(row.node);
+            if (origin != null) copy.addView(origin, margins(-2, -2, 6, 0, 0, 0));
+            TextView meta = text("分组 · " + row.childCount + " 项", 12, Typeface.NORMAL, Theme.SECONDARY);
+            LinearLayout.LayoutParams metaParams = margins(-2, -2, 6, 0, 0, 0);
+            copy.addView(meta, metaParams);
             line.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         } else {
             LinearLayout copy = vertical();
-            TextView title = text(row.node.label + originSuffix(row.node), 17, Typeface.NORMAL, Theme.INK);
-            copy.addView(title);
+            LinearLayout titleLine = horizontal();
+            titleLine.setGravity(Gravity.CENTER_VERTICAL);
+            TextView title = text(row.node.label, 15, Typeface.NORMAL, Theme.INK);
+            title.setMaxLines(1);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            titleLine.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView origin = originBadge(row.node);
+            if (origin != null) titleLine.addView(origin, margins(-2, -2, 6, 0, 0, 0));
+            copy.addView(titleLine, new LinearLayout.LayoutParams(-1, -2));
             if (!row.appliesLabel.isEmpty()) {
-                TextView badge = text(row.appliesLabel, 12, Typeface.NORMAL,
+                TextView badge = text(row.appliesLabel, 11, Typeface.NORMAL,
                         "仅图片".equals(row.appliesLabel) ? Theme.ACCENT
                                 : ("仅文字".equals(row.appliesLabel) ? Theme.GREEN : Theme.SECONDARY));
                 badge.setPadding(dp(6), dp(1), dp(6), dp(1));
                 badge.setBackground(rounded("仅图片".equals(row.appliesLabel) ? Theme.ACCENT_SOFT
                         : ("仅文字".equals(row.appliesLabel) ? Theme.GREEN_BG : TILE_NEUTRAL), 4));
                 LinearLayout badgeWrap = horizontal(); badgeWrap.addView(badge);
-                copy.addView(badgeWrap, margins(-1, -2, 0, 0, 0, 0));
+                copy.addView(badgeWrap, margins(-1, -2, 0, 2, 0, 0));
             }
             line.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         }
 
         if (row.group && row.expanded) {
-            ImageView chevron = new ImageView(this);
-            chevron.setImageResource(R.drawable.ic_prompt_chevron_down);
-            chevron.setColorFilter(Theme.FAINT);
-            chevron.setScaleType(ImageView.ScaleType.CENTER);
-            line.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(40)));
+            ImageView chevron = trailingChevron();
+            chevron.setRotation(90f);
+            line.addView(chevron, new LinearLayout.LayoutParams(dp(16), dp(16)));
         } else {
             line.addView(trailingChevron());
         }
@@ -750,8 +1124,17 @@ public final class InstructionSettingsActivity extends Activity {
     }
 
     private void showError(String message) { errorBanner.setText(message); errorBanner.setVisibility(View.VISIBLE); }
+    private void toast(String message) { runOnUiThread(() -> SimpleToast.show(this, message)); }
     private String normalIntro() { return "一套指令，长按文字或图片时按『适用于』自动筛选。改过的系统项标『已自定义』，自己建的标『自建』。"; }
-    private String originSuffix(PromptNode node) { return "custom".equals(node.origin) ? "  · 已自定义" : ("user".equals(node.origin) ? "  · 自建" : ""); }
+    private TextView originBadge(PromptNode node) {
+        if (node == null || node.origin == null || "system".equals(node.origin)) return null;
+        boolean custom = "custom".equals(node.origin);
+        TextView badge = text(custom ? "已自定义" : "自建", 11, Typeface.BOLD,
+                custom ? Theme.AMBER : Theme.GREEN);
+        badge.setPadding(dp(6), dp(1), dp(6), dp(1));
+        badge.setBackground(rounded(custom ? Theme.AMBER_BG : Theme.GREEN_BG, 4));
+        return badge;
+    }
 
     private static PromptNode find(List<PromptNode> items, String id) {
         for (PromptNode node : items) { if (id.equals(node.id)) return node; PromptNode child = find(node.children, id); if (child != null) return child; }
@@ -770,6 +1153,7 @@ public final class InstructionSettingsActivity extends Activity {
     private TextView squareButton(String value, boolean accent) { TextView v = text(value, 22, Typeface.NORMAL, accent ? Color.WHITE : Theme.INK); v.setGravity(Gravity.CENTER); v.setIncludeFontPadding(false); v.setBackground(rounded(accent ? Theme.ACCENT : Color.WHITE, 12)); v.setElevation(dp(2)); return v; }
     private void addIconWithSpacing(LinearLayout parent, ImageView icon, int size) { LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(size), dp(size)); iconLp.rightMargin = dp(12); parent.addView(icon, iconLp); }
     private ImageView iconTile(int iconResId, boolean accent) { ImageView v = new ImageView(this); v.setImageResource(iconResId); v.setColorFilter(accent ? Theme.ACCENT : Theme.SECONDARY); v.setScaleType(ImageView.ScaleType.CENTER); v.setPadding(dp(8), dp(8), dp(8), dp(8)); v.setBackground(rounded(accent ? Theme.ACCENT_SOFT : TILE_NEUTRAL, 10)); return v; }
+    private ImageView marketIconTile(boolean imageOnly) { ImageView v = new ImageView(this); v.setImageResource(imageOnly ? R.drawable.ic_image : R.drawable.ic_doc); v.setColorFilter(imageOnly ? Theme.ACCENT : Theme.GREEN); v.setScaleType(ImageView.ScaleType.CENTER); v.setPadding(dp(8), dp(8), dp(8), dp(8)); v.setBackground(rounded(imageOnly ? Theme.ACCENT_SOFT : 0xffeaf1ec, 8)); return v; }
     private GradientDrawable rounded(int color, int radius) { return outlined(color, radius, Color.TRANSPARENT, 0, 0, 0); }
     private GradientDrawable topRounded(int color, int radius) { GradientDrawable d = new GradientDrawable(); float r = dp(radius); d.setColor(color); d.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0}); return d; }
     private GradientDrawable outlined(int color, int radius, int stroke, int width, int dash, int gap) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); if (width > 0) d.setStroke(dp(width), stroke, dp(dash), dp(gap)); return d; }

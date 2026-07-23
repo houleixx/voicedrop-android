@@ -66,7 +66,7 @@ public final class CommunityFeedView extends LinearLayout {
         layout.setGapStrategy(StaggeredGridLayoutManager.GAP_HANDLING_MOVE_ITEMS_BETWEEN_SPANS);
         grid.setLayoutManager(layout);
         grid.setClipToPadding(false);
-        grid.setPadding(dp(8), 0, dp(8), dp(24));
+        SystemBarDefaults.applyBottomInsets(grid, dp(8), 0, dp(8), dp(24));
         grid.setItemAnimator(null);
         adapter = new FeedAdapter();
         grid.setAdapter(adapter);

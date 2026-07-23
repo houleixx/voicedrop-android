@@ -78,7 +78,7 @@ public final class AboutActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(6), dp(16), dp(28));
+        SystemBarDefaults.applyBottomInsets(content, dp(16), dp(6), dp(16), dp(28));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -212,16 +212,7 @@ public final class AboutActivity extends Activity {
     }
 
     private void configureEdgeToEdge() {
-        int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        }
-        getWindow().getDecorView().setSystemUiVisibility(flags);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Theme.BG);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
     }
 
     private void finishWithPageTransition() {

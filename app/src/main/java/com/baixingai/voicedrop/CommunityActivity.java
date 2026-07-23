@@ -204,24 +204,7 @@ public final class CommunityActivity extends Activity {
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
-        // Edge-to-edge: content extends behind status bar and navigation bar
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().setDecorFitsSystemWindows(false);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-            getWindow().setStatusBarContrastEnforced(false);
-            getWindow().setNavigationBarContrastEnforced(false);
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                            | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), android.graphics.Color.TRANSPARENT, true);
         onPageCreate(getIntent());
     }
     @Override
@@ -796,6 +779,14 @@ public final class CommunityActivity extends Activity {
         bar.setBackground(round(Theme.RED, 2));
         parent.addView(bar, new LinearLayout.LayoutParams(width, height));
     }
+
+    /** Adds the packaged VoiceDrop SVG mark (via Android's VectorDrawable equivalent). */
+    protected void addBrandWaveformImage(LinearLayout parent) {
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.drawable.ic_voicedrop_brand_waveform);
+        mark.setScaleType(ImageView.ScaleType.FIT_XY);
+        parent.addView(mark, new LinearLayout.LayoutParams(dp(20), dp(16)));
+    }
     protected TextView circleText(String value, int dp, int bg, int sp, int fg) {
         TextView view = text(value, sp, fg, Typeface.NORMAL);
         view.setGravity(Gravity.CENTER);
@@ -922,15 +913,7 @@ public final class CommunityActivity extends Activity {
         LinearLayout logo = new LinearLayout(this);
         logo.setOrientation(LinearLayout.HORIZONTAL);
         logo.setGravity(Gravity.CENTER_VERTICAL);
-        addWaveBar(logo, dp(3), dp(10));
-        View gap1 = new View(this);
-        gap1.setLayoutParams(new LinearLayout.LayoutParams(dp(2), 1));
-        logo.addView(gap1);
-        addWaveBar(logo, dp(3), dp(16));
-        View gap2 = new View(this);
-        gap2.setLayoutParams(new LinearLayout.LayoutParams(dp(2), 1));
-        logo.addView(gap2);
-        addWaveBar(logo, dp(3), dp(10));
+        addBrandWaveformImage(logo);
         topBar.addView(logo);
 
         TextView logoText = text(" VoiceDrop 口述", 14, Theme.SECONDARY, Typeface.BOLD);
@@ -981,7 +964,7 @@ public final class CommunityActivity extends Activity {
         if (posts.isEmpty()) {
             LinearLayout list = new LinearLayout(this);
             list.setOrientation(LinearLayout.VERTICAL);
-            list.setPadding(dp(14), dp(6), dp(14), dp(16));
+            SystemBarDefaults.applyBottomInsets(list, dp(14), dp(6), dp(14), dp(16));
             renderCommunityList(list);
             content = list;
         } else {

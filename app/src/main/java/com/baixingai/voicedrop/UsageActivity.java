@@ -83,7 +83,7 @@ public final class UsageActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(6), dp(16), dp(40));
+        SystemBarDefaults.applyBottomInsets(content, dp(16), dp(6), dp(16), dp(40));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -185,7 +185,7 @@ public final class UsageActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
-        card.setBackground(strokedRound(Theme.CARD, 11, 0xffebd9b8));
+        card.setBackground(strokedRound(Theme.CARD, 11, Theme.BORDER_CHROME));
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -326,7 +326,7 @@ public final class UsageActivity extends Activity {
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(Theme.CARD, 11));
+        card.setBackground(strokedRound(Theme.CARD, 11, Theme.BORDER_CHROME));
         return card;
     }
 
@@ -379,16 +379,7 @@ public final class UsageActivity extends Activity {
     }
 
     private void configureEdgeToEdge() {
-        int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        }
-        getWindow().getDecorView().setSystemUiVisibility(flags);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Theme.BG);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
     }
 
     private void finishWithPageTransition() {

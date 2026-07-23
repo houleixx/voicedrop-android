@@ -304,24 +304,7 @@ public final class RecordingDetailActivity extends Activity {
         io.execute(() -> {
             if (promptStore != null) promptStore.refresh();
         });
-        // Edge-to-edge: content extends behind status bar and navigation bar
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().setDecorFitsSystemWindows(false);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-            getWindow().setStatusBarContrastEnforced(false);
-            getWindow().setNavigationBarContrastEnforced(false);
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                            | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), android.graphics.Color.TRANSPARENT, true);
         onPageCreate(getIntent());
     }
     @Override
@@ -941,12 +924,13 @@ public final class RecordingDetailActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setClipChildren(false);
         content.setClipToPadding(false);
-        content.setPadding(dp(22), dp(12), dp(22), dp(148));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         renderCurrentArticle(content, rec, doc);
-        renderArticleEditBar(articleFrame, rec);
+        LinearLayout editPanel = renderArticleEditBar(articleFrame, rec);
+        SystemBarDefaults.applyScrollableBottomInsetsAbove(
+                content, editPanel, dp(22), dp(12), dp(22), dp(28));
 
     }
 
@@ -2192,11 +2176,11 @@ public final class RecordingDetailActivity extends Activity {
         showArticle(rec, doc);
     }
 
-    protected void renderArticleEditBar(FrameLayout page, Recording rec) {
+    protected LinearLayout renderArticleEditBar(FrameLayout page, Recording rec) {
         LinearLayout panel = new LinearLayout(this);
         articleEditPanel = panel;
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(20), dp(8), dp(20), dp(18));
+        SystemBarDefaults.applyBottomInsets(panel, dp(20), dp(8), dp(20), dp(18));
 
         // Reply / server response area
         ArticleDoc.FollowupQuestion followupQuestion = pendingFollowupQuestion();
@@ -2302,6 +2286,7 @@ public final class RecordingDetailActivity extends Activity {
         holdEditMicIcon = micIcon;
         FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         page.addView(panel, panelLp);
+        return panel;
     }
 
     protected void attachArticleEditHoldGesture(View speak, Recording rec) {
@@ -3282,6 +3267,7 @@ public final class RecordingDetailActivity extends Activity {
         bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         FrameLayout content = new FrameLayout(this);
+        SystemBarDefaults.applyBottomInsets(content, 0, 0, 0, 0);
         page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
 
         FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);

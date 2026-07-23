@@ -85,7 +85,7 @@ public final class PromptEditActivity extends Activity {
         scroll.setClipToPadding(false);
         scroll.setFillViewport(true);
         LinearLayout form = vertical();
-        form.setPadding(dp(18), 0, dp(18), dp(20));
+        SystemBarDefaults.applyBottomInsets(form, dp(18), 0, dp(18), dp(20));
         scroll.addView(form, new ScrollView.LayoutParams(-1, -2));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -127,16 +127,7 @@ public final class PromptEditActivity extends Activity {
     }
 
     private void configureEdgeToEdge() {
-        int flags = View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        }
-        getWindow().getDecorView().setSystemUiVisibility(flags);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
-            getWindow().setNavigationBarColor(Theme.BG);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
     }
 
     private View header(String id) {

@@ -96,7 +96,8 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("root.setFitsSystemWindows(false)"));
         assertTrue(manager.contains("SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8))"));
         assertTrue(manager.contains("BouncyScrollView scroll = new BouncyScrollView(this)"));
-        assertTrue(manager.contains("content.setPadding(dp(16), dp(6), dp(16), dp(40))"));
+        assertTrue(manager.contains(
+                "SystemBarDefaults.applyBottomInsets(content, dp(16), dp(6), dp(16), dp(40))"));
     }
 
     @Test public void managerShowsImportAsAHandleFreeBottomSheet() throws Exception {

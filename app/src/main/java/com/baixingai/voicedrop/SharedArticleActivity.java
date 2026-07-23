@@ -86,7 +86,7 @@ public final class SharedArticleActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(10), dp(20), dp(34));
+        SystemBarDefaults.applyBottomInsets(content, dp(20), dp(10), dp(20), dp(34));
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 

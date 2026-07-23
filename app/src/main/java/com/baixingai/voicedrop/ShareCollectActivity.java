@@ -32,6 +32,7 @@ import com.baixingai.voicedrop.share.SilentAudio;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.PrivacyConsentDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
+import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
 import java.io.File;
@@ -130,7 +131,7 @@ public final class ShareCollectActivity extends Activity {
         root.removeAllViews();
         LinearLayout sheet = new LinearLayout(this);
         sheet.setOrientation(LinearLayout.VERTICAL);
-        sheet.setPadding(dp(20), dp(14), dp(20), dp(22));
+        SystemBarDefaults.applyBottomInsets(sheet, dp(20), dp(14), dp(20), dp(22));
         sheet.setBackgroundColor(0xfffaf6ef);
         root.addView(sheet, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
 

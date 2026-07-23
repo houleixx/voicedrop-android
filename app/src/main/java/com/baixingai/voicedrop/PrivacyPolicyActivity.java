@@ -54,6 +54,8 @@ public final class PrivacyPolicyActivity extends Activity {
         page.addView(webContainer, new LinearLayout.LayoutParams(-1, 0, 1));
 
         webView = new WebView(this);
+        webView.setClipToPadding(false);
+        SystemBarDefaults.applyBottomInsets(webView, 0, 0, 0, 0);
         configureWebView(webView);
         webContainer.addView(webView, new FrameLayout.LayoutParams(-1, -1));
 

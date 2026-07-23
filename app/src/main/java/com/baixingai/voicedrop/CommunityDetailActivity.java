@@ -239,24 +239,7 @@ public final class CommunityDetailActivity extends Activity {
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
-        // Edge-to-edge: content extends behind status bar and navigation bar
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().setDecorFitsSystemWindows(false);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-            getWindow().setStatusBarContrastEnforced(false);
-            getWindow().setNavigationBarContrastEnforced(false);
-        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                            | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-            getWindow().setStatusBarColor(0x00000000);
-            getWindow().setNavigationBarColor(0x00000000);
-        }
-        getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        SystemBarDefaults.applyLightActivity(getWindow(), android.graphics.Color.TRANSPARENT, true);
         onPageCreate(getIntent());
     }
     @Override
@@ -843,10 +826,6 @@ public final class CommunityDetailActivity extends Activity {
         underline.setTranslationX(activeTab.getLeft() + offset);
         underline.setVisibility(View.VISIBLE);
     }
-    protected int getNavigationBarHeight() {
-        int resourceId = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
-    }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
     }
@@ -1022,7 +1001,7 @@ public final class CommunityDetailActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(12), dp(22), dp(24));
+        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(12), dp(22), dp(24));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -1255,7 +1234,7 @@ public final class CommunityDetailActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(12), dp(22), getNavigationBarHeight() + dp(24));
+        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(12), dp(22), dp(24));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -1409,7 +1388,7 @@ public final class CommunityDetailActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(14), dp(20), dp(24));
+        SystemBarDefaults.applyBottomInsets(content, dp(20), dp(14), dp(20), dp(24));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -1426,7 +1405,7 @@ public final class CommunityDetailActivity extends Activity {
         recBar.setOrientation(LinearLayout.HORIZONTAL);
         recBar.setGravity(Gravity.CENTER_VERTICAL);
         recBar.setMinimumHeight(dp(112));
-        recBar.setPadding(dp(20), dp(16), dp(20), dp(20) + getNavigationBarHeight());
+        SystemBarDefaults.applyBottomInsets(recBar, dp(20), dp(16), dp(20), dp(20));
         recBar.setBackgroundColor(Theme.CARD);
         LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(-1, -2);
         page.addView(recBar, barLp);
@@ -2016,6 +1995,7 @@ public final class CommunityDetailActivity extends Activity {
         bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         FrameLayout content = new FrameLayout(this);
+        SystemBarDefaults.applyBottomInsets(content, 0, 0, 0, 0);
         page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
 
         FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);

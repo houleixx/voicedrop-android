@@ -16,9 +16,11 @@ public class SystemBarInsetsSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/ui/SystemBarDefaults.java");
 
         assertTrue(source.contains("WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout()"));
-        assertTrue(source.contains("baseLeft + safe.left"));
-        assertTrue(source.contains("baseTop + safe.top"));
-        assertTrue(source.contains("baseRight + safe.right"));
+        assertTrue(source.contains("WindowInsetsCompat.Type.navigationBars() | WindowInsetsCompat.Type.displayCutout()"));
+        assertTrue(source.contains("baseLeft + Math.max(topSafe.left, bottomSafe.left)"));
+        assertTrue(source.contains("baseTop + topSafe.top"));
+        assertTrue(source.contains("baseRight + Math.max(topSafe.right, bottomSafe.right)"));
+        assertTrue(source.contains("baseBottom + bottomSafe.bottom"));
         assertTrue(source.contains("ViewCompat.requestApplyInsets"));
     }
 
@@ -43,7 +45,9 @@ public class SystemBarInsetsSourceTest {
 
         for (String page : pages) {
             String source = readSource("src/main/java/com/baixingai/voicedrop/" + page);
-            assertTrue(page + " must apply live top insets", source.contains("SystemBarDefaults.applyTopInsets("));
+            assertTrue(page + " must apply live top insets",
+                    source.contains("SystemBarDefaults.applyTopInsets(")
+                            || source.contains("SystemBarDefaults.applyTopAndBottomInsets("));
             assertFalse(page + " must not read the internal status bar dimension",
                     source.contains("getIdentifier(\"status_bar_height\""));
         }

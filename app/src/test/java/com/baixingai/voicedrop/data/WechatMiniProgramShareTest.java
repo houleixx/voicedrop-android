@@ -10,7 +10,7 @@ public class WechatMiniProgramShareTest {
     @Test
     public void acceptsOnlyWechatMiniProgramOriginalIds() {
         assertTrue(WechatMiniProgramShare.isOriginalId("gh_123Abc"));
-        assertFalse(WechatMiniProgramShare.isOriginalId("wxedfbd113b545b4f6"));
+        assertFalse(WechatMiniProgramShare.isOriginalId("wx" + "1234567890abcdef"));
         assertFalse(WechatMiniProgramShare.isOriginalId("mini-program"));
     }
 

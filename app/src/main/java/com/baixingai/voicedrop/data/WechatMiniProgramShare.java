@@ -78,7 +78,7 @@ public final class WechatMiniProgramShare {
     public static String communityPath(String shareId) {
         String id = shareId == null ? "" : shareId.trim();
         try {
-            return "pages/community-detail/index?shareId=" + URLEncoder.encode(id, "UTF-8").replace("+", "%20");
+            return "pages/community-detail/index?shareId=" + URLEncoder.encode(id, "UTF-8").replace("+", "%20") + "&fromShare=1";
         } catch (UnsupportedEncodingException impossible) {
             throw new AssertionError(impossible);
         }

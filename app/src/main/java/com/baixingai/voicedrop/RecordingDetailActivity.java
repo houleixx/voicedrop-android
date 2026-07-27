@@ -66,12 +66,14 @@ import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingCommunityShareStore;
 import com.baixingai.voicedrop.data.Prefs;
+import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UIConfigStore;
 import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.data.WechatLogin;
+import com.baixingai.voicedrop.data.WechatMiniProgramShare;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
@@ -89,6 +91,7 @@ import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.SoftRoundedShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -1811,6 +1814,65 @@ public final class RecordingDetailActivity extends Activity {
         });
     }
 
+    protected void shareMiniProgramCard(Recording rec) {
+        WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        String title = currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
+                ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
+                : rec.rowTitle();
+        io.execute(() -> {
+            try {
+                String shareId = community.sharedShareId(rec);
+                if (shareId == null || shareId.trim().isEmpty()) {
+                    main.post(() -> {
+                        loading.dismiss();
+                        toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
+                    });
+                    return;
+                }
+                String url = library.shareUrl(rec, articleIndex);
+                if (url == null) throw new IllegalStateException("无法生成链接");
+                android.graphics.Bitmap image = articleShareThumbnail(currentArticleDoc, articleIndex);
+                main.post(() -> {
+                    loading.dismiss();
+                    WechatMiniProgramShare.Result result = WechatMiniProgramShare.send(this, title, url,
+                            WechatMiniProgramShare.communityPath(shareId), image);
+                    toast(result.message());
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    loading.dismiss();
+                    toast("分享失败：" + e.getMessage());
+                });
+            }
+        });
+    }
+
+    private android.graphics.Bitmap articleShareThumbnail(ArticleDoc doc, int section) {
+        if (doc == null || doc.articles == null || doc.articles.isEmpty()) return null;
+        MinedArticle article = doc.articles.get(Math.min(Math.max(0, section), doc.articles.size() - 1));
+        String key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+        if (key == null || key.trim().isEmpty()) return null;
+        try {
+            String fullKey = key;
+            if (!key.startsWith("users/") && !key.startsWith("anonymous/")) {
+                String scope = doc.ownerScope == null || doc.ownerScope.trim().isEmpty()
+                        ? library.ownerScope() : doc.ownerScope;
+                if (scope == null || scope.trim().isEmpty()) return null;
+                fullKey = scope + key;
+            }
+            return PhotoService.thumbnail(fullKey);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void warmArticleShareThumbnail() {
+        ArticleDoc doc = currentArticleDoc;
+        int section = articleIndex;
+        if (doc == null) return;
+        io.execute(() -> articleShareThumbnail(doc, section));
+    }
+
     protected Intent buildShareIntent(String articleText, String url, String packageName) {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
@@ -1925,6 +1987,7 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void showMoreMenu(Recording rec, View anchor) {
         if (sharedToCommunity == null) refreshCommunityShareState(rec);
+        warmArticleShareThumbnail();
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(0, dp(3), 0, dp(3));
@@ -1957,6 +2020,14 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(xhsRow);
         menu.addView(divider());
 
+        LinearLayout miniProgramRow = menuRow("分享到微信", AliIconFont.SHARE_UP, Theme.RED);
+        miniProgramRow.setOnClickListener(v -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            shareMiniProgramCard(rec);
+        });
+        menu.addView(miniProgramRow);
+        menu.addView(divider());
+
         LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED);
         shareRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
@@ -1976,6 +2047,7 @@ public final class RecordingDetailActivity extends Activity {
 
         popupRef[0] = showDetailMorePopup(menu, anchor);
     }
+
 
     protected void shareToXhs(Recording rec) {
         toast("正在生成小红书文案…");

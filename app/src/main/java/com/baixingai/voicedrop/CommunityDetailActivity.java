@@ -60,6 +60,8 @@ import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
+import com.baixingai.voicedrop.data.WechatMiniProgramShare;
+import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
@@ -72,6 +74,7 @@ import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -1700,6 +1703,7 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void showCommunityPostMenu(CommunityStore.Post post, String authorName, View anchor) {
+        warmCommunityShareThumbnail(post);
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(0, dp(3), 0, dp(3));
@@ -1716,6 +1720,14 @@ public final class CommunityDetailActivity extends Activity {
             menu.addView(replyRow);
             menu.addView(divider());
         }
+
+        LinearLayout miniProgramRow = menuRow("分享到微信", AliIconFont.SHARE_UP, Theme.RED, Theme.INK);
+        miniProgramRow.setOnClickListener(v -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            shareCommunityMiniProgramCard(post);
+        });
+        menu.addView(miniProgramRow);
+        menu.addView(divider());
 
         LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED, Theme.INK);
         shareRow.setOnClickListener(v -> {
@@ -1775,6 +1787,49 @@ public final class CommunityDetailActivity extends Activity {
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TEXT, com.baixingai.voicedrop.net.Api.sharePage(post.shareId));
         startActivity(Intent.createChooser(intent, "分享社区文章"));
+    }
+
+
+    protected void shareCommunityMiniProgramCard(CommunityStore.Post post) {
+        WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        io.execute(() -> {
+            android.graphics.Bitmap thumbnail = communityShareThumbnail(post);
+            main.post(() -> {
+                loading.dismiss();
+                WechatMiniProgramShare.Result result = WechatMiniProgramShare.send(this, post.title,
+                        com.baixingai.voicedrop.net.Api.sharePage(post.shareId),
+                        WechatMiniProgramShare.communityPath(post.shareId), thumbnail);
+                toast(result.message());
+            });
+        });
+    }
+
+    private android.graphics.Bitmap communityShareThumbnail(CommunityStore.Post post) {
+        String key = post.coverPhotoKey;
+        ArticleDoc doc = post.doc;
+        if ((key == null || key.trim().isEmpty()) && doc != null && doc.articles != null) {
+            for (MinedArticle article : doc.articles) {
+                key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+                if (key != null && !key.trim().isEmpty()) break;
+            }
+        }
+        if (key == null || key.trim().isEmpty()) return null;
+        try {
+            String fullKey = key;
+            if (!key.startsWith("users/") && !key.startsWith("anonymous/")) {
+                String owner = doc != null && doc.ownerScope != null && !doc.ownerScope.trim().isEmpty()
+                        ? doc.ownerScope : post.owner;
+                if (owner == null || owner.trim().isEmpty()) return null;
+                fullKey = owner.endsWith("/") ? owner + key : owner + "/" + key;
+            }
+            return PhotoService.thumbnail(fullKey);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void warmCommunityShareThumbnail(CommunityStore.Post post) {
+        io.execute(() -> communityShareThumbnail(post));
     }
 
     protected String suanliText(double value) {

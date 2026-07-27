@@ -19,6 +19,7 @@ if (localPropertiesFile.exists()) {
 }
 def umengAppKey = System.getenv("UMENG_APP_KEY") ?: localProperties["umeng.appKey"] ?: ""
 def umengChannel = System.getenv("UMENG_CHANNEL") ?: localProperties["umeng.channel"] ?: "github"
+def miniProgramOriginalId = System.getenv("VOICEDROP_MINI_PROGRAM_ORIGINAL_ID") ?: localProperties["voicedrop.miniProgramOriginalId"] ?: "gh_451de6440ef4"
 
 android {
     namespace "com.baixingai.voicedrop"
@@ -32,6 +33,7 @@ android {
         versionName "0.16.0"
         buildConfigField "String", "UMENG_APP_KEY", "\"${umengAppKey}\""
         buildConfigField "String", "UMENG_CHANNEL", "\"${umengChannel}\""
+        buildConfigField "String", "VOICEDROP_MINI_PROGRAM_ORIGINAL_ID", "\"${miniProgramOriginalId}\""
         manifestPlaceholders = [
                 UMENG_APPKEY : umengAppKey,
                 UMENG_CHANNEL: umengChannel
@@ -59,6 +61,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Use the production signing identity when it is available so a
+            // debug build can upgrade smoothly to the production release.
+            if (hasReleaseSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
             if (hasReleaseSigningConfig) {
                 signingConfig signingConfigs.release

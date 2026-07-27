@@ -144,6 +144,16 @@ App 会把 marker 渲染为内联图片。公众号发布、公开分享页和�
 - Android SDK
 - Gradle Wrapper
 
+“分享为微信小程序卡片”默认指向 VoiceDrop 的正式小程序。若需指向测试小程序，可在本机 `local.properties` 覆盖小程序原始 ID（不是 AppID）：
+
+```text
+voicedrop.miniProgramOriginalId=gh_xxxxxxxxxxxxxxxx
+```
+
+也可以在构建时通过 `VOICEDROP_MINI_PROGRAM_ORIGINAL_ID` 环境变量提供。该值仅用于指向小程序，不要填写 AppSecret。
+
+小程序卡片只分享已设置为“VD 社区可见”的文章，收卡人会进入小程序中的公开社区详情；这不会把未公开的录音或文章暴露给他人。
+
 运行单测：
 
 ```bash

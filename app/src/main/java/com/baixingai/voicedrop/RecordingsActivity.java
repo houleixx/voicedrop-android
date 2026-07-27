@@ -118,9 +118,10 @@ public final class RecordingsActivity extends Activity {
     protected final ExecutorService communityIo = Executors.newSingleThreadExecutor();
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
     protected final ExecutorService metadataIo = Executors.newSingleThreadExecutor();
+    protected final ExecutorService coverIo = Executors.newFixedThreadPool(4);
     protected int recordingMetadataGeneration;
     protected AuthStore auth;
-    protected String connectedBearer = "";
+    protected String connectedAccountIdentity = "";
     protected Prefs prefs;
     protected HttpClient http;
     protected LibraryStore library;
@@ -254,7 +255,7 @@ public final class RecordingsActivity extends Activity {
         businessInitialized = true;
         ((VoiceDropApplication) getApplication()).activateConsentedServices();
         auth = new AuthStore(this);
-        connectedBearer = auth.bearer();
+        connectedAccountIdentity = auth.libraryCacheIdentity();
         PhotoService.configure(this);
         prefs = new Prefs(this);
         http = new HttpClient();
@@ -269,6 +270,8 @@ public final class RecordingsActivity extends Activity {
         deviceLinkStore = new DeviceLinkStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
         uploader = new Uploader(this, auth, prefs, http);
+        // SWR: 先同步显示当前账号上次成功的录音索引快照，再由 onPageCreate 后台刷新。
+        recordings = library.cachedRecordings(uploader.pendingNames(), uploader.pendingTagsByName());
         recorder = new AudioRecorder(this);
         statusSession = new StatusSession(auth, new StatusSession.Listener() {
             @Override public void onPhase(String stem, String status) {
@@ -418,6 +421,7 @@ public final class RecordingsActivity extends Activity {
         communityIo.shutdownNow();
         dictationIo.shutdownNow();
         metadataIo.shutdownNow();
+        coverIo.shutdownNow();
     }
     @Override
     public void onBackPressed() {
@@ -1038,9 +1042,9 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void reconnectAccountSessionsIfNeeded() {
-        String currentBearer = auth == null ? "" : auth.bearer();
-        if (!ClientReliability.accountIdentityChanged(connectedBearer, currentBearer)) return;
-        connectedBearer = currentBearer;
+        String currentIdentity = auth == null ? "" : auth.libraryCacheIdentity();
+        if (!ClientReliability.accountIdentityChanged(connectedAccountIdentity, currentIdentity)) return;
+        connectedAccountIdentity = currentIdentity;
         if (statusSession != null) {
             statusSession.close();
             statusSession.connect();
@@ -2336,16 +2340,19 @@ public final class RecordingsActivity extends Activity {
 
     protected void maybeLoadRowCover(Recording rec, FrameLayout iconWrap, View fallbackIcon) {
         if (rec == null || !rec.hasArticles || iconWrap == null || fallbackIcon == null) return;
-        io.execute(() -> {
+        String cachedKey = rec.coverPhotoKey;
+        coverIo.execute(() -> {
             try {
-                ArticleDoc doc = library.fetchDoc(rec);
-                if (doc == null || doc.articles.isEmpty()) return;
-                String key = null;
-                for (MinedArticle article : doc.articles) {
-                    key = ArticleBody.firstPhotoKey(article.body, doc.photos);
-                    if (key != null) break;
+                String key = cachedKey;
+                if (key == null || key.trim().isEmpty()) {
+                    ArticleDoc doc = library.fetchDoc(rec);
+                    if (doc == null || doc.articles.isEmpty()) return;
+                    for (MinedArticle article : doc.articles) {
+                        key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+                        if (key != null && !key.trim().isEmpty()) break;
+                    }
                 }
-                if (key == null) return;
+                if (key == null || key.trim().isEmpty()) return;
                 String scope = library.ownerScope();
                 if (scope == null) return;
                 Bitmap bitmap = PhotoService.thumbnail(scope + key);

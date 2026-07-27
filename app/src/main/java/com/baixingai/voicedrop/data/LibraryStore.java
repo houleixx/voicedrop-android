@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop.data;
 
 import com.baixingai.voicedrop.core.RecordingName;
+import com.baixingai.voicedrop.core.ArticleBody;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.ClientReliability;
 import com.baixingai.voicedrop.net.HttpClient;
@@ -28,7 +29,8 @@ public final class LibraryStore {
     private final HttpClient http;
     private final Map<String, String> titleCache = new HashMap<>();
     private final Map<String, List<String>> tagsCache = new HashMap<>();
-    private String metadataBearer = "";
+    private final Map<String, String> coverCache = new HashMap<>();
+    private String metadataIdentity = "";
     private String cachedScope;
     private String cachedScopeToken;
 
@@ -44,8 +46,24 @@ public final class LibraryStore {
 
     public List<Recording> load(List<String> localUploading, Map<String, List<String>> pendingTagsByName) throws Exception {
         ensureMetadataCache();
-        List<Item> items = fetchRecordingItems();
+        return recordingsFromItems(fetchRecordingItems(), localUploading, pendingTagsByName);
+    }
 
+    /** Replays the last successful lightweight index while a fresh network load is in flight. */
+    public List<Recording> cachedRecordings(List<String> localUploading, Map<String, List<String>> pendingTagsByName) {
+        ensureMetadataCache();
+        try {
+            JSONObject root = new JSONObject(auth.libraryListCache());
+            JSONArray rows = root.optJSONArray("recordings");
+            if (rows == null) return new ArrayList<>();
+            return recordingsFromItems(itemsFromIndex(rows), localUploading, pendingTagsByName);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<Recording> recordingsFromItems(List<Item> items, List<String> localUploading,
+                                                 Map<String, List<String>> pendingTagsByName) {
         List<Recording> recordings = new ArrayList<>();
         for (String local : localUploading) {
             Recording r = new Recording(local, "", false, false);
@@ -65,6 +83,7 @@ public final class LibraryStore {
             synchronized (this) {
                 r.articleTitle = titleCache.get(r.articleKey());
                 r.tags = tagsCache.containsKey(r.articleKey()) ? tagsCache.get(r.articleKey()) : null;
+                r.coverPhotoKey = coverCache.get(r.articleKey());
             }
             r.hasTagsSidecar = item.hasTags;
             if ((r.tags == null || r.tags.isEmpty()) && pendingTagsByName != null) r.tags = pendingTagsByName.get(last);
@@ -86,7 +105,9 @@ public final class LibraryStore {
             boolean articleMetaMissing;
             synchronized (this) {
                 articleMetaMissing = r.hasArticles
-                        && (!titleCache.containsKey(r.articleKey()) || !tagsCache.containsKey(r.articleKey()));
+                        && (!titleCache.containsKey(r.articleKey())
+                        || !tagsCache.containsKey(r.articleKey())
+                        || !coverCache.containsKey(r.articleKey()));
             }
             if (articleMetaMissing) {
                 tasks.add(() -> new MetadataResult(r, fetchDoc(r), null));
@@ -101,11 +122,14 @@ public final class LibraryStore {
                 MetadataResult result = future.get();
                 if (result.doc != null) {
                     String title = result.doc.articles.isEmpty() ? "" : result.doc.articles.get(0).title;
+                    String cover = coverPhotoKey(result.doc);
                     synchronized (this) {
                         result.recording.articleTitle = title;
                         result.recording.tags = new ArrayList<>(result.doc.tags);
+                        result.recording.coverPhotoKey = cover;
                         titleCache.put(result.recording.articleKey(), title == null ? "" : title);
                         tagsCache.put(result.recording.articleKey(), new ArrayList<>(result.doc.tags));
+                        coverCache.put(result.recording.articleKey(), cover);
                     }
                     changed = true;
                 } else if (result.sidecarTags != null && !result.sidecarTags.isEmpty()) {
@@ -122,11 +146,12 @@ public final class LibraryStore {
     }
 
     private synchronized void ensureMetadataCache() {
-        String bearer = auth.bearer();
-        if (bearer.equals(metadataBearer)) return;
-        metadataBearer = bearer;
+        String identity = auth.libraryCacheIdentity();
+        if (identity.equals(metadataIdentity)) return;
+        metadataIdentity = identity;
         titleCache.clear();
         tagsCache.clear();
+        coverCache.clear();
         try {
             JSONObject root = new JSONObject(auth.libraryMetadataCache());
             JSONObject titles = root.optJSONObject("titles");
@@ -148,6 +173,14 @@ public final class LibraryStore {
                     tagsCache.put(key, values);
                 }
             }
+            JSONObject covers = root.optJSONObject("covers");
+            if (covers != null) {
+                java.util.Iterator<String> keys = covers.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    coverCache.put(key, covers.optString(key, ""));
+                }
+            }
         } catch (Exception ignored) {
         }
     }
@@ -158,7 +191,9 @@ public final class LibraryStore {
             for (Map.Entry<String, String> entry : titleCache.entrySet()) titles.put(entry.getKey(), entry.getValue());
             JSONObject tags = new JSONObject();
             for (Map.Entry<String, List<String>> entry : tagsCache.entrySet()) tags.put(entry.getKey(), new JSONArray(entry.getValue()));
-            auth.storeLibraryMetadataCache(new JSONObject().put("titles", titles).put("tags", tags).toString());
+            JSONObject covers = new JSONObject();
+            for (Map.Entry<String, String> entry : coverCache.entrySet()) covers.put(entry.getKey(), entry.getValue());
+            auth.storeLibraryMetadataCache(new JSONObject().put("titles", titles).put("tags", tags).put("covers", covers).toString());
         } catch (Exception ignored) {
         }
     }
@@ -169,17 +204,8 @@ public final class LibraryStore {
             if (response.ok()) {
                 JSONArray rows = new JSONObject(response.text()).optJSONArray("recordings");
                 if (rows != null) {
-                    List<Item> indexed = new ArrayList<>();
-                    for (int i = 0; i < rows.length(); i++) {
-                        JSONObject row = rows.getJSONObject(i);
-                        indexed.add(new Item(
-                                row.optString("name"),
-                                row.optString("uploaded", ""),
-                                row.optBoolean("hasArticles"),
-                                row.optBoolean("isEmpty"),
-                                row.optBoolean("hasTags")));
-                    }
-                    return indexed;
+                    auth.storeLibraryListCache(response.text());
+                    return itemsFromIndex(rows);
                 }
             }
         } catch (Exception ignored) {
@@ -212,11 +238,26 @@ public final class LibraryStore {
         return legacy;
     }
 
+    private static List<Item> itemsFromIndex(JSONArray rows) throws Exception {
+        List<Item> indexed = new ArrayList<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            indexed.add(new Item(
+                    row.optString("name"),
+                    row.optString("uploaded", ""),
+                    row.optBoolean("hasArticles"),
+                    row.optBoolean("isEmpty"),
+                    row.optBoolean("hasTags")));
+        }
+        return indexed;
+    }
+
     public synchronized void invalidateArticleCaches(List<String> stems) {
         ensureMetadataCache();
         if (ClientReliability.shouldInvalidateAllArticleCaches(stems)) {
             titleCache.clear();
             tagsCache.clear();
+            coverCache.clear();
             auth.clearCurrentArticleDocCaches();
             persistMetadataCache();
             return;
@@ -226,9 +267,19 @@ public final class LibraryStore {
             String key = Recording.articleKey(stem);
             titleCache.remove(key);
             tagsCache.remove(key);
+            coverCache.remove(key);
             auth.removeArticleDocCache(stem);
         }
         persistMetadataCache();
+    }
+
+    private static String coverPhotoKey(ArticleDoc doc) {
+        if (doc == null || doc.articles == null) return "";
+        for (MinedArticle article : doc.articles) {
+            String key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+            if (key != null && !key.trim().isEmpty()) return key;
+        }
+        return "";
     }
 
     private List<String> fetchTagsSidecar(String stem) {
@@ -326,7 +377,10 @@ public final class LibraryStore {
         boolean emptyDeleted = deleteKey(rec.emptyKey());
         deleteKey(rec.tagsKey());
         boolean ok = recordingDeleteSucceeded(audioDeleted, articleDeleted, srtDeleted, emptyDeleted);
-        if (ok) invalidateArticleCaches(Collections.singletonList(rec.stem()));
+        if (ok) {
+            invalidateArticleCaches(Collections.singletonList(rec.stem()));
+            auth.clearCurrentLibraryListCache();
+        }
         return ok;
     }
 

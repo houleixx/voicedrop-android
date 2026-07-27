@@ -9,7 +9,10 @@ public final class ClientReliability {
     private ClientReliability() {}
 
     public static boolean commandMessageRequiresRefresh(String type) {
-        return "updated".equals(type) || "snapshot".equals(type);
+        // A connection snapshot only restores command-queue state.  It carries no
+        // affected stems, so treating it as an article update would evict every
+        // cached title and cover on each cold start.
+        return "updated".equals(type);
     }
 
     public static boolean shouldInvalidateAllArticleCaches(List<String> stems) {
@@ -26,9 +29,9 @@ public final class ClientReliability {
         return activeGeneration == callbackGeneration;
     }
 
-    public static boolean accountIdentityChanged(String connectedBearer, String currentBearer) {
-        if (connectedBearer == null) connectedBearer = "";
-        if (currentBearer == null) currentBearer = "";
-        return !connectedBearer.equals(currentBearer);
+    public static boolean accountIdentityChanged(String connectedIdentity, String currentIdentity) {
+        if (connectedIdentity == null) connectedIdentity = "";
+        if (currentIdentity == null) currentIdentity = "";
+        return !connectedIdentity.equals(currentIdentity);
     }
 }

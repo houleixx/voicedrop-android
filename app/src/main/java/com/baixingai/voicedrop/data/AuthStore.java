@@ -19,6 +19,7 @@ public final class AuthStore {
     private static final String SESSION = "session";
     private static final String PRE_WECHAT_ANON = "pre_wechat_anon";
     private static final String LIBRARY_META_PREFIX = "library_meta_v1_";
+    private static final String LIBRARY_LIST_PREFIX = "library_list_v1_";
     private static final String COMMUNITY_FEED_PREFIX = "community_feed_v1_";
     private static final String ARTICLE_DOC_CACHE_DIR = "article-doc-cache-v1";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -81,6 +82,27 @@ public final class AuthStore {
         prefs.edit().putString(libraryMetadataKey(), json == null ? "" : json).apply();
     }
 
+    /** Last successful /recordings response for the current account (SWR list snapshot). */
+    public String libraryListCache() {
+        return prefs.getString(libraryListKey(), "");
+    }
+
+    public void storeLibraryListCache(String json) {
+        prefs.edit().putString(libraryListKey(), json == null ? "" : json).apply();
+    }
+
+    public void clearCurrentLibraryListCache() {
+        prefs.edit().remove(libraryListKey()).apply();
+    }
+
+    private void clearAllLibraryListCaches() {
+        SharedPreferences.Editor editor = prefs.edit();
+        for (String key : prefs.getAll().keySet()) {
+            if (key.startsWith(LIBRARY_LIST_PREFIX)) editor.remove(key);
+        }
+        editor.apply();
+    }
+
     public String communityFeedCache() {
         return prefs.getString(communityFeedKey(), "");
     }
@@ -123,7 +145,7 @@ public final class AuthStore {
 
     private File articleDocCacheFile(String stem) { return new File(articleDocCacheDirectory(), cacheComponent(stem) + ".json"); }
     private File articleDocCacheDirectory() {
-        return new File(new File(context.getCacheDir(), ARTICLE_DOC_CACHE_DIR), cacheComponent(bearer()));
+        return new File(new File(context.getCacheDir(), ARTICLE_DOC_CACHE_DIR), cacheComponent(libraryCacheIdentity()));
     }
     private static String cacheComponent(String value) {
         try {
@@ -142,14 +164,22 @@ public final class AuthStore {
     }
 
     private String libraryMetadataKey() {
+        return scopedCacheKey(LIBRARY_META_PREFIX);
+    }
+
+    private String libraryListKey() {
+        return scopedCacheKey(LIBRARY_LIST_PREFIX);
+    }
+
+    private String scopedCacheKey(String prefix) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(bearer().getBytes("UTF-8"));
-            StringBuilder key = new StringBuilder(LIBRARY_META_PREFIX);
+            byte[] hash = digest.digest(libraryCacheIdentity().getBytes("UTF-8"));
+            StringBuilder key = new StringBuilder(prefix);
             for (int i = 0; i < 12 && i < hash.length; i++) key.append(String.format("%02x", hash[i]));
             return key.toString();
         } catch (Exception e) {
-            return LIBRARY_META_PREFIX + "default";
+            return prefix + "default";
         }
     }
 
@@ -179,8 +209,19 @@ public final class AuthStore {
         return "users/" + anonId() + "/";
     }
 
+    /**
+     * Stable owner identity for local recording/article caches.  A session JWT can be
+     * renewed while still belonging to the same account, so it must not be used as a
+     * cache key.  This matches the mini-program behavior of scoping cached metadata
+     * by a durable local identity instead of the current bearer value.
+     */
+    public String libraryCacheIdentity() {
+        return storageScope();
+    }
+
     public void resetAnonymous() {
         clearAllArticleDocCaches();
+        clearAllLibraryListCaches();
         AccountLocalState.clearPendingWork(context);
         prefs.edit().putString(ANON, newAnon())
                 .remove(SESSION).remove(PRE_WECHAT_ANON).apply();
@@ -191,6 +232,7 @@ public final class AuthStore {
         if (!token.equals(anonymousBearer())) {
             AccountLocalState.clearPendingWork(context);
             clearAllArticleDocCaches();
+            clearAllLibraryListCaches();
         }
         prefs.edit().putString(ANON, token).remove(SESSION).remove(PRE_WECHAT_ANON).apply();
         return true;
@@ -206,6 +248,7 @@ public final class AuthStore {
         if (!isSessionToken(token)) return false;
         AccountLocalState.clearPendingWork(context);
         clearAllArticleDocCaches();
+        clearAllLibraryListCaches();
         prefs.edit()
                 .putString(PRE_WECHAT_ANON, anonymousBearer())
                 .putString(SESSION, token)
@@ -218,6 +261,7 @@ public final class AuthStore {
         if (previous != null && previous.startsWith("anon_") && previous.length() >= 20) {
             AccountLocalState.clearPendingWork(context);
             clearAllArticleDocCaches();
+            clearAllLibraryListCaches();
         }
         SharedPreferences.Editor editor = prefs.edit()
                 .remove(SESSION)

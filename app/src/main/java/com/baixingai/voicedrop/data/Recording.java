@@ -10,6 +10,8 @@ public final class Recording {
     public final boolean hasArticles;
     public final boolean isEmpty;
     public String articleTitle;
+    /** First article photo, relative to the recording owner's storage scope. */
+    public String coverPhotoKey;
     public boolean uploading;
     public String phase;
     public String blockReason;

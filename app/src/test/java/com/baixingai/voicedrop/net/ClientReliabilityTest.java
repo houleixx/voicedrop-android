@@ -9,9 +9,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class ClientReliabilityTest {
-    @Test public void authoritativeCommandSnapshotsRefreshAndInvalidateAllWithoutStems() {
+    @Test public void commandSnapshotsOnlyRestoreQueueAndDoNotInvalidateArticleCaches() {
         assertTrue(ClientReliability.commandMessageRequiresRefresh("updated"));
-        assertTrue(ClientReliability.commandMessageRequiresRefresh("snapshot"));
+        assertFalse(ClientReliability.commandMessageRequiresRefresh("snapshot"));
         assertFalse(ClientReliability.commandMessageRequiresRefresh("reply"));
 
         assertTrue(ClientReliability.shouldInvalidateAllArticleCaches(Collections.emptyList()));

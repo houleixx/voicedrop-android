@@ -1815,20 +1815,42 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void shareMiniProgramCard(Recording rec) {
+        if (Boolean.FALSE.equals(sharedToCommunity)) {
+            toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
+            return;
+        }
+        if (Boolean.TRUE.equals(sharedToCommunity) && communityShareId != null && !communityShareId.trim().isEmpty()) {
+            prepareMiniProgramCard(rec, communityShareId);
+            return;
+        }
+        // 分享状态还在同步时，只核对社区可见性；确认后才显示 loading 和准备封面。
+        io.execute(() -> {
+            try {
+                String shareId = community.sharedShareId(rec);
+                main.post(() -> {
+                    sharedToCommunity = shareId != null && !shareId.trim().isEmpty();
+                    communityShareId = sharedToCommunity ? shareId : null;
+                    if (!sharedToCommunity) {
+                        toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
+                        return;
+                    }
+                    prepareMiniProgramCard(rec, shareId);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    toast("无法确认 VD 社区可见状态，请稍后重试");
+                });
+            }
+        });
+    }
+
+    private void prepareMiniProgramCard(Recording rec, String shareId) {
         WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
         String title = currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
                 ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
                 : rec.rowTitle();
         io.execute(() -> {
             try {
-                String shareId = community.sharedShareId(rec);
-                if (shareId == null || shareId.trim().isEmpty()) {
-                    main.post(() -> {
-                        loading.dismiss();
-                        toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
-                    });
-                    return;
-                }
                 String url = library.shareUrl(rec, articleIndex);
                 if (url == null) throw new IllegalStateException("无法生成链接");
                 android.graphics.Bitmap image = articleShareThumbnail(currentArticleDoc, articleIndex);

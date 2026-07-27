@@ -84,7 +84,7 @@ public final class PhotoService {
         }
         if (!missingThumbs.contains(cacheKey)) {
             try {
-                String url = "https://" + Api.HOST
+                String url = "https://" + Api.WS_HOST
                         + "/cdn-cgi/image/width=512,quality=60/files/api/photo/" + Api.path(fullKey);
                 HttpClient.Response response = new HttpClient().get(url, "",
                         new HttpClient.RequestOptions().readTimeoutMs(20_000));

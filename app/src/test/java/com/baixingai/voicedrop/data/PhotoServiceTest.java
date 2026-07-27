@@ -23,6 +23,7 @@ public class PhotoServiceTest {
         assertTrue(source.indexOf("Api.photoBase() + \"/photo/\"")
                 < source.indexOf("Api.filesBase() + \"/photo/\""));
         assertTrue(source.contains("/cdn-cgi/image/width=512,quality=60/files/api/photo/"));
+        assertTrue(source.contains("Api.WS_HOST"));
     }
 
     @Test

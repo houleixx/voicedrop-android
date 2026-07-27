@@ -2263,7 +2263,7 @@ public final class RecordingsActivity extends Activity {
                 if (key == null) return;
                 String scope = library.ownerScope();
                 if (scope == null) return;
-                Bitmap bitmap = library.photoImage(scope + key, false);
+                Bitmap bitmap = PhotoService.thumbnail(scope + key);
                 if (bitmap == null) return;
                 main.post(() -> {
                     int index = iconWrap.indexOfChild(fallbackIcon);

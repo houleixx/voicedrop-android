@@ -11,6 +11,7 @@ public class ReferralManagerTest {
         assertEquals("AbC_123-xy", ReferralManager.shareToken("打开 https://www.voicedrop.cn/AbC_123-xy?s=1"));
         assertEquals("legacy9", ReferralManager.shareToken("https://jianshuo.dev/voicedrop/legacy9"));
         assertEquals("Invite77", ReferralManager.shareToken("https://voicedrop.cn/i/Invite77"));
+        assertEquals("ABC123", ReferralManager.shareToken("https://jianshuo.dev/voicedrop/i/ABC123"));
     }
 
     @Test
@@ -19,5 +20,7 @@ public class ReferralManagerTest {
         assertNull(ReferralManager.shareToken("https://voicedrop.cn/privacy"));
         assertNull(ReferralManager.shareToken("https://example.com/abc123"));
         assertNull(ReferralManager.shareToken("https://voicedrop.cn/abc"));
+        assertNull(ReferralManager.shareToken("https://voicedrop.cn/i/ABC123/extra"));
+        assertNull(ReferralManager.shareToken("https://voicedrop.cn/i/ABCDEF12345678901"));
     }
 }

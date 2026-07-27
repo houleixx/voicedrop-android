@@ -19,14 +19,21 @@ public final class ReferralManager {
     private static final String DONE = "done";
     private static final String FIRST_LAUNCH_AT = "firstLaunchAt";
     private static final long WINDOW_MS = 24L * 60L * 60L * 1000L;
+    // 邀请码链接（voicedrop.cn/i/<码>，2026-07-16 上线的「邀请好友」落地页）比分享
+    // 短链更窄，先判——与 iOS ReferralManager.shareToken 的模式顺序保持一致。
+    private static final Pattern INVITE = Pattern.compile(
+            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn|jianshuo\\.dev/voicedrop)/i/([A-Za-z0-9]{6,16})(?![A-Za-z0-9_/-])");
     private static final Pattern TOKEN = Pattern.compile(
-            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)(?:i/)?([A-Za-z0-9_-]{6,16})");
+            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)([A-Za-z0-9_-]{6,16})");
+    private static final ExecutorService IO = Executors.newSingleThreadExecutor();
+    private static final java.util.concurrent.atomic.AtomicBoolean LAUNCH_STARTED =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static final java.util.concurrent.atomic.AtomicBoolean FOCUSED_CLIPBOARD_STARTED =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private final Context context;
     private final AuthStore auth;
     private final HttpClient http;
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private boolean running;
 
     public ReferralManager(Context context) {
         this(context, new AuthStore(context), new HttpClient());
@@ -38,23 +45,31 @@ public final class ReferralManager {
         this.http = http;
     }
 
+    /** Records the launch-level attribution check once per process. */
     public void runOnLaunch() {
-        if (done() || !withinWindow() || running) return;
-        running = true;
-        io.execute(() -> {
-            try {
-                if (claim("hello", null)) return;
-                String token = clipboardToken();
-                if (token != null) claim("clipboard", token);
-            } finally {
-                running = false;
-            }
+        if (done() || !withinWindow() || !LAUNCH_STARTED.compareAndSet(false, true)) return;
+        IO.execute(() -> {
+            if (!done() && withinWindow()) claim("hello", null);
+        });
+    }
+
+    /**
+     * Reads the clipboard only after an Activity has a window focus. The shared serial executor
+     * makes this run after the launch check even when focus arrives before its network call ends.
+     */
+    public void runWhenWindowFocused() {
+        runOnLaunch();
+        if (done() || !withinWindow() || !FOCUSED_CLIPBOARD_STARTED.compareAndSet(false, true)) return;
+        IO.execute(() -> {
+            if (done() || !withinWindow()) return;
+            String token = clipboardToken();
+            if (token != null) claim("clipboard", token);
         });
     }
 
     public void noteShareToken(String id) {
         if (id == null || id.trim().isEmpty() || done() || !withinWindow()) return;
-        io.execute(() -> claim("link", id.trim()));
+        IO.execute(() -> claim("link", id.trim()));
     }
 
     public InviteLink inviteLink() throws Exception {
@@ -132,6 +147,8 @@ public final class ReferralManager {
 
     public static String shareToken(String text) {
         if (text == null || text.isEmpty()) return null;
+        Matcher invite = INVITE.matcher(text);
+        if (invite.find()) return invite.group(1);
         Matcher matcher = TOKEN.matcher(text);
         while (matcher.find()) {
             String id = matcher.group(1);

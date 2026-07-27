@@ -371,6 +371,18 @@ public final class RecordingsActivity extends Activity {
         }
         showNextLibraryCommandConfirm();
     }
+
+    // Android 10+ 仅允许前台窗口读取剪贴板；首页首次获焦后补做一次归因检查。
+    private static boolean referralClipboardChecked;
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || referralClipboardChecked) return;
+        if (!new PrivacyConsent(this).isAccepted()) return;
+        referralClipboardChecked = true;
+        new ReferralManager(this).runWhenWindowFocused();
+    }
+
     @Override
     protected void onPause() {
         activityResumed = false;
@@ -1094,9 +1106,12 @@ public final class RecordingsActivity extends Activity {
             return true;
         }
         if (link.kind == AppRouter.Kind.INVITE) {
+            // 已装用户点邀请链接：记归因（新账号才会真入账，服务端判定）+ 干净落首页
             new ReferralManager(this).noteShareToken(link.id);
             communityTab = false;
             showHome();
+            refreshAndDrain();
+            if (statusSession != null) statusSession.connect();
             return true;
         }
         if (link.kind == AppRouter.Kind.SHARE_LINK) {

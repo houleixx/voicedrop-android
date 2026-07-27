@@ -98,8 +98,8 @@ public final class AppRouter {
     }
 
     private static final Pattern SHARE_ID = Pattern.compile("^[A-Za-z0-9_-]{6,16}$");
-    private static final Pattern PROMPT_CODE = Pattern.compile("^[1-9][0-9]{6}$");
     private static final Pattern INVITE_CODE = Pattern.compile("^[A-Za-z0-9]{6,16}$");
+    private static final Pattern PROMPT_CODE = Pattern.compile("^[1-9][0-9]{6}$");
 
     private static boolean isStaticPath(String path) {
         return "privacy".equals(path) || "welcome".equals(path) || "help".equals(path);

@@ -75,4 +75,21 @@ public class ArticleEditSessionTest {
         assertTrue(source.contains("preview-done"));
         assertTrue(source.contains("onPreviewDelta"));
     }
+
+    @Test
+    public void terminalEditAlwaysTriggersAuthoritativeDocRefreshAndSocketKeepalive() throws Exception {
+        String session = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
+                "src/main/java/com/baixingai/voicedrop/net/ArticleEditSession.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String detail = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
+                "src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        assertTrue(session.contains("ClientReliability.newLongLivedWebSocketClient()"));
+        assertTrue(session.contains("void onResolved()"));
+        assertTrue(session.contains("listener.onResolved()"));
+        assertTrue(detail.contains("@Override public void onResolved()"));
+        assertTrue(detail.substring(detail.indexOf("@Override public void onResolved()"))
+                .contains("library.fetchDoc(rec)"));
+    }
 }

@@ -47,9 +47,11 @@ import com.baixingai.voicedrop.audio.AudioRecorder;
 import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
+import com.baixingai.voicedrop.core.ArticleRenderPolicy;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.ArticleBody;
 import com.baixingai.voicedrop.core.ArticleSharePayload;
+import com.baixingai.voicedrop.core.PhotoLoadPolicy;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -103,6 +105,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
@@ -153,6 +156,8 @@ public final class RecordingDetailActivity extends Activity {
     public static final String EXTRA_SHARE_ID = "shareId";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
+    protected final ExecutorService photoIo =
+            Executors.newFixedThreadPool(PhotoLoadPolicy.concurrentLoads());
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
     protected AuthStore auth;
     protected Prefs prefs;
@@ -198,6 +203,7 @@ public final class RecordingDetailActivity extends Activity {
     protected final List<View> articleLocatorViews = new ArrayList<>();
     protected final Set<String> locallyFinishedQuestionIds = new HashSet<>();
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
+    protected final Set<String> generatedPhotoKeys = new HashSet<>();
     protected final Map<Integer, RestylePreviewPiece> restylePreviewPieces = new TreeMap<>();
     protected final AtomicBoolean restyleFinishing = new AtomicBoolean(false);
     protected android.app.Dialog restylePreviewDialog;
@@ -346,6 +352,7 @@ public final class RecordingDetailActivity extends Activity {
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
         io.shutdownNow();
+        photoIo.shutdownNow();
         dictationIo.shutdownNow();
     }
     @Override
@@ -545,6 +552,7 @@ public final class RecordingDetailActivity extends Activity {
         clearInlineParagraphEditReferences();
         setArticleLocatorsVisible(false);
         articleLocatorViews.clear();
+        generatedPhotoKeys.clear();
         currentArticleDoc = null;
         currentArticleStem = null;
         deferredArticleRenderRecording = null;
@@ -834,12 +842,27 @@ public final class RecordingDetailActivity extends Activity {
             finish();
             return;
         }
-        showDetailLoading();
         Recording rec = new Recording(audioName, "", true, false);
+        ArticleDoc cached = library.cachedDoc(rec);
+        if (cached != null && cached.articles != null && !cached.articles.isEmpty()) {
+            showArticle(rec, cached, false, false);
+        } else {
+            showDetailLoading();
+        }
         runIoIfActive(() -> {
             ArticleDoc doc = library.fetchDoc(rec);
             main.post(() -> {
-                if (isActivityActive()) showArticle(rec, doc, false);
+                if (!isActivityActive()) return;
+                if (doc != null && doc.articles != null && !doc.articles.isEmpty()) {
+                    if (ArticleRenderPolicy.shouldRebuild(currentArticleDoc, doc)) {
+                        showArticle(rec, doc, false);
+                    } else {
+                        currentArticleDoc = doc;
+                        refreshArticleHistoryState(rec);
+                    }
+                } else if (cached == null) {
+                    showArticle(rec, null, false);
+                }
             });
         });
     }
@@ -866,6 +889,7 @@ public final class RecordingDetailActivity extends Activity {
         if (firstOpenForStem) {
             articleIndex = 0;
             editQueue = new ArrayList<>();
+            generatedPhotoKeys.clear();
             editReply = null;
             deferredArticleRenderRecording = null;
             deferredArticleRenderDoc = null;
@@ -879,7 +903,6 @@ public final class RecordingDetailActivity extends Activity {
 
         FrameLayout articleFrame = new FrameLayout(this);
         articleFrame.setBackgroundColor(Theme.BG);
-        attachPage(articleFrame, animateOpen);
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -932,6 +955,7 @@ public final class RecordingDetailActivity extends Activity {
         SystemBarDefaults.applyScrollableBottomInsetsAbove(
                 content, editPanel, dp(22), dp(12), dp(22), dp(28));
 
+        attachPage(articleFrame, animateOpen);
     }
 
     protected void publishWechat(Recording rec) {
@@ -1373,8 +1397,9 @@ public final class RecordingDetailActivity extends Activity {
         }
         io.execute(() -> {
             try {
-                library.patchHead(rec, head);
-                toast("已切换到 v" + styleVersion + " 风格");
+                boolean ok = library.patchHead(rec, head);
+                if (ok && nextDoc != null) library.cacheDoc(rec, nextDoc);
+                toast(ok ? "已切换到 v" + styleVersion + " 风格" : "切换失败");
             } catch (Exception e) {
                 toast("已切换显示，同步失败：" + e.getMessage());
             } finally {
@@ -1623,7 +1648,8 @@ public final class RecordingDetailActivity extends Activity {
                     }
                 });
                 boolean ok = library.patchHead(rec, target);
-                if (!ok) toast("切换失败");
+                if (ok && nextDoc != null) library.cacheDoc(rec, nextDoc);
+                else if (!ok) toast("切换失败");
             } catch (Exception e) {
                 toast("切换失败：" + e.getMessage());
             }
@@ -2085,16 +2111,20 @@ public final class RecordingDetailActivity extends Activity {
         if (editSession != null) editSession.close();
         editSession = new ArticleEditSession(this, auth, rec.stem(), new ArticleEditSession.Listener() {
             @Override public void onUpdated(ArticleDoc doc) {
+                library.cacheDoc(rec, doc);
                 main.post(() -> {
                     if (!isActivityActive()) return;
+                    boolean shouldRebuild = ArticleRenderPolicy.shouldRebuild(currentArticleDoc, doc);
+                    if (!editQueue.isEmpty()) markGeneratedPhotoKeys(currentArticleDoc, doc);
                     currentArticleDoc = doc;
-                    renderArticleOrDefer(rec, doc);
+                    if (shouldRebuild) renderArticleOrDefer(rec, doc);
                 });
             }
 
             @Override public void onQueueChanged(List<ArticleEditSession.EditRequest> queue) {
                 main.post(() -> {
                     if (!isActivityActive()) return;
+                    if (sameEditQueue(editQueue, queue)) return;
                     editQueue = new ArrayList<>(queue);
                     if (currentArticleDoc != null && rec.stem().equals(currentArticleStem)) {
                         renderArticleOrDefer(rec, currentArticleDoc);
@@ -2136,8 +2166,39 @@ public final class RecordingDetailActivity extends Activity {
             @Override public void onPreviewDone(boolean ok) {
                 if (rec.stem().equals(restylePreviewStem)) finishRestyle(rec, ok);
             }
+
+            @Override public void onResolved() {
+                io.execute(() -> {
+                    ArticleDoc fresh = library.fetchDoc(rec);
+                    if (fresh == null || fresh.articles == null || fresh.articles.isEmpty()) return;
+                    main.post(() -> {
+                        if (!isActivityActive() || !rec.stem().equals(currentArticleStem)) return;
+                        currentArticleDoc = fresh;
+                        renderArticleOrDefer(rec, fresh);
+                    });
+                });
+            }
         });
         editSession.connect();
+    }
+
+    protected boolean sameEditQueue(List<ArticleEditSession.EditRequest> current,
+                                    List<ArticleEditSession.EditRequest> updated) {
+        if (current == updated) return true;
+        if (current == null || updated == null || current.size() != updated.size()) return false;
+        for (int i = 0; i < current.size(); i++) {
+            ArticleEditSession.EditRequest left = current.get(i);
+            ArticleEditSession.EditRequest right = updated.get(i);
+            if (left == right) continue;
+            if (left == null || right == null
+                    || left.articleIndex != right.articleIndex
+                    || !Objects.equals(left.id, right.id)
+                    || !Objects.equals(left.text, right.text)
+                    || !Objects.equals(left.itemId, right.itemId)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     protected void renderArticleOrDefer(Recording rec, ArticleDoc doc) {
@@ -2560,7 +2621,12 @@ public final class RecordingDetailActivity extends Activity {
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(90));
                 p.setMargins(0, dp(12), 0, dp(12));
                 content.addView(photo, p);
-                if (key != null) loadPhotoInto(photo, key);
+                if (key != null) {
+                    PhotoLoadPolicy.Intent intent = generatedPhotoKeys.contains(key)
+                            ? PhotoLoadPolicy.Intent.GENERATED
+                            : PhotoLoadPolicy.Intent.ORIGINAL;
+                    loadPhotoInto(photo, key, intent);
+                }
                 final String relKey = key;
                 if (relKey != null) {
                     photo.setOnLongClickListener(v -> {
@@ -3101,11 +3167,33 @@ public final class RecordingDetailActivity extends Activity {
         return out.toString().trim();
     }
 
-    protected void loadPhotoInto(FrameLayout frame, String relKey) {
-        loadPhotoInto(frame, relKey, false);
+    protected void markGeneratedPhotoKeys(ArticleDoc previous, ArticleDoc updated) {
+        if (previous == null || updated == null) return;
+        Set<String> previousKeys = articlePhotoKeys(previous);
+        for (String key : articlePhotoKeys(updated)) {
+            if (!previousKeys.contains(key)) generatedPhotoKeys.add(key);
+        }
     }
 
-    protected void loadPhotoInto(FrameLayout frame, String relKey, boolean ignoringLocalCache) {
+    protected Set<String> articlePhotoKeys(ArticleDoc doc) {
+        Set<String> keys = new HashSet<>();
+        if (doc == null || doc.articles == null) return keys;
+        for (MinedArticle article : doc.articles) {
+            for (ArticleBody.Segment segment : ArticleBody.segments(article.body)) {
+                if (segment.type != ArticleBody.Segment.Type.PHOTO) continue;
+                String key = ArticleBody.resolvePhotoKey(segment.value, doc.photos);
+                if (key != null && !key.isEmpty()) keys.add(key);
+            }
+        }
+        return keys;
+    }
+
+    protected void loadPhotoInto(FrameLayout frame, String relKey, PhotoLoadPolicy.Intent intent) {
+        loadPhotoInto(frame, relKey, intent, false);
+    }
+
+    protected void loadPhotoInto(FrameLayout frame, String relKey, PhotoLoadPolicy.Intent intent,
+                                 boolean ignoringLocalCache) {
         if (!ignoringLocalCache) {
             Bitmap cached = articlePhotoCache.get(relKey);
             if (cached != null) {
@@ -3118,18 +3206,21 @@ public final class RecordingDetailActivity extends Activity {
         }
         long startedAt = System.currentTimeMillis();
         frame.setTag(startedAt);
-        schedulePhotoMakingState(frame, startedAt);
-        fetchPhotoInto(frame, relKey, startedAt, ignoringLocalCache);
+        schedulePhotoMakingState(frame, startedAt, intent);
+        fetchPhotoInto(frame, relKey, startedAt, intent, ignoringLocalCache);
     }
 
-    protected void schedulePhotoMakingState(FrameLayout frame, long startedAt) {
+    protected void schedulePhotoMakingState(FrameLayout frame, long startedAt,
+                                            PhotoLoadPolicy.Intent intent) {
+        if (!PhotoLoadPolicy.shouldPoll(intent)) return;
         main.postDelayed(() -> {
             if (isPhotoLoadActive(frame, startedAt)) showPhotoMaking(frame);
         }, PHOTO_MAKING_GRACE_MS);
     }
 
-    protected void fetchPhotoInto(FrameLayout frame, String relKey, long startedAt, boolean ignoringLocalCache) {
-        io.execute(() -> {
+    protected void fetchPhotoInto(FrameLayout frame, String relKey, long startedAt,
+                                  PhotoLoadPolicy.Intent intent, boolean ignoringLocalCache) {
+        photoIo.execute(() -> {
             Bitmap bitmap = null;
             try {
                 String scope = library.ownerScope();
@@ -3147,16 +3238,21 @@ public final class RecordingDetailActivity extends Activity {
                     showLoadedPhoto(frame, result);
                     return;
                 }
+                if (!PhotoLoadPolicy.shouldPoll(intent)) {
+                    frame.setTag(null);
+                    showPhotoLoadFailed(frame, relKey, intent);
+                    return;
+                }
                 long elapsed = System.currentTimeMillis() - startedAt;
                 if (elapsed >= PHOTO_POLL_TIMEOUT_MS) {
                     frame.setTag(null);
-                    showPhotoUnavailable(frame, relKey);
+                    showPhotoUnavailable(frame, relKey, intent);
                     return;
                 }
                 long nextDelay = Math.min(PHOTO_POLL_INTERVAL_MS, PHOTO_POLL_TIMEOUT_MS - elapsed);
                 main.postDelayed(() -> {
                     if (isPhotoLoadActive(frame, startedAt)) {
-                        fetchPhotoInto(frame, relKey, startedAt, true);
+                        fetchPhotoInto(frame, relKey, startedAt, intent, true);
                     }
                 }, nextDelay);
             });
@@ -3203,20 +3299,31 @@ public final class RecordingDetailActivity extends Activity {
         frame.addView(status, match());
     }
 
-    protected void showPhotoUnavailable(FrameLayout frame, String relKey) {
+    protected void showPhotoLoadFailed(FrameLayout frame, String relKey,
+                                       PhotoLoadPolicy.Intent intent) {
+        showPhotoFailure(frame, relKey, intent, "图片加载失败");
+    }
+
+    protected void showPhotoUnavailable(FrameLayout frame, String relKey,
+                                        PhotoLoadPolicy.Intent intent) {
+        showPhotoFailure(frame, relKey, intent, "暂时无法显示");
+    }
+
+    protected void showPhotoFailure(FrameLayout frame, String relKey,
+                                    PhotoLoadPolicy.Intent intent, String message) {
         removePhotoState(frame);
         LinearLayout status = new LinearLayout(this);
         status.setTag("photo_status");
         status.setGravity(Gravity.CENTER);
         status.setOrientation(LinearLayout.VERTICAL);
 
-        TextView title = text("暂时无法显示", 14, Theme.SECONDARY, Typeface.BOLD);
+        TextView title = text(message, 14, Theme.SECONDARY, Typeface.BOLD);
         status.addView(title, new LinearLayout.LayoutParams(-2, -2));
         TextView retry = text("重试", 13, Theme.RED, Typeface.BOLD);
         retry.setGravity(Gravity.CENTER);
         retry.setPadding(dp(12), dp(6), dp(12), dp(6));
         retry.setBackground(round(0x14e1493d, 8));
-        retry.setOnClickListener(v -> loadPhotoInto(frame, relKey, true));
+        retry.setOnClickListener(v -> loadPhotoInto(frame, relKey, intent, true));
         LinearLayout.LayoutParams retryLp = new LinearLayout.LayoutParams(-2, -2);
         retryLp.topMargin = dp(8);
         status.addView(retry, retryLp);

@@ -1,4 +1,5 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="exports" path="exports/" />
+    <cache-path name="insert_photos" path="insert_photos/" />
     <cache-path name="updates" path="updates/" />
 </paths>

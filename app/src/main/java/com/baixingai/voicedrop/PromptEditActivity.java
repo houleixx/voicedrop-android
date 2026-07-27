@@ -53,6 +53,7 @@ public final class PromptEditActivity extends Activity {
     private TextView shareVersionWarning;
     private TextView saveButton;
     private boolean saving;
+    private boolean shareBorrowed;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -365,6 +366,7 @@ public final class PromptEditActivity extends Activity {
     private void renderShare(PromptStore.ShareState state, String error) {
         shareArea.removeAllViews();
         shareVersionWarning = null;
+        shareBorrowed = state.borrowed;
 
         LinearLayout card = vertical();
         card.setBackground(rounded(Theme.CARD, 14));
@@ -374,10 +376,17 @@ public final class PromptEditActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout heading = vertical();
         heading.addView(text("分享这条提示词", 15, Typeface.NORMAL, Theme.INK));
-        TextView desc = text(state.sharing
-                        ? "分享中，关闭后分享码立即失效"
-                        : "开启后，任何人对 VoiceDrop 说出分享码，或打开链接，就能看到并一次性使用这条提示词",
-                12, Typeface.NORMAL, Theme.FAINT);
+        // 溯源转发：未修改的导入件分享的是【原作者的】码——文案不能说「关闭后码失效」
+        //（关闭只停止自己这边的转发，码还活在原作者手里）。
+        String descText;
+        if (state.sharing) {
+            descText = state.borrowed
+                    ? "转发中：这是原作者的分享码，关闭只停止转发，码不会失效"
+                    : "分享中：社区可见，关闭后分享码失效、社区帖撤下";
+        } else {
+            descText = "开启后发布到社区，并得到分享码短链";
+        }
+        TextView desc = text(descText, 12, Typeface.NORMAL, Theme.FAINT);
         desc.setLineSpacing(0, 1.15f);
         desc.setPadding(0, dp(2), dp(8), 0);
         heading.addView(desc);
@@ -430,11 +439,19 @@ public final class PromptEditActivity extends Activity {
             actions.addView(shareAction("分享…", R.drawable.ic_share_up, () -> sharePrompt(state.code)),
                     new LinearLayout.LayoutParams(0, dp(40), 1));
 
-            shareVersionWarning = text("分享的始终是已保存的版本", 12, Typeface.NORMAL, Theme.FAINT);
-            shareVersionWarning.setGravity(Gravity.CENTER);
-            shareVersionWarning.setPadding(0, dp(8), 0, 0);
-            card.addView(shareVersionWarning);
-            updateShareVersionWarning();
+            // 溯源转发：未修改的导入件分享的是原作者的码，改动正文保存后会自动停止转发。
+            if (shareBorrowed) {
+                shareVersionWarning = text("转发原作者的版本；改动正文保存后会自动停止转发", 12, Typeface.NORMAL, Theme.FAINT);
+                shareVersionWarning.setGravity(Gravity.CENTER);
+                shareVersionWarning.setPadding(0, dp(8), 0, 0);
+                card.addView(shareVersionWarning);
+            } else {
+                shareVersionWarning = text("分享的始终是已保存的版本", 12, Typeface.NORMAL, Theme.FAINT);
+                shareVersionWarning.setGravity(Gravity.CENTER);
+                shareVersionWarning.setPadding(0, dp(8), 0, 0);
+                card.addView(shareVersionWarning);
+                updateShareVersionWarning();
+            }
         }
 
         shareArea.addView(card, new LinearLayout.LayoutParams(-1, -2));

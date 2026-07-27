@@ -16,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.AccountLocalState;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.WechatLogin;
@@ -346,13 +347,10 @@ public final class AccountActivity extends Activity {
                     toast("删除失败，请稍后再试");
                     return;
                 }
-                getSharedPreferences("voicedrop.auth", MODE_PRIVATE).edit().clear().apply();
+                AccountLocalState.clearDeletedAccount(this);
                 auth.resetAnonymous();
                 toast("账户已删除");
-                runOnUiThread(() -> {
-                    render(0, 0, true);
-                    finishWithPageTransition();
-                });
+                runOnUiThread(() -> openRecordingsAfterAccountChange("账户已删除"));
             } catch (Exception e) {
                 toast("删除失败：" + e.getMessage());
             }
@@ -410,9 +408,7 @@ public final class AccountActivity extends Activity {
         IosDialog dialog = IosDialog.showBottomSheet(this, "登录已有账号", form, 300,
                 "导入", () -> {
                     if (auth.adoptToken(input.getText().toString().trim())) {
-                        toast("已切换到已有账号");
-                        currentAccountId = accountIdFromScope(auth.storageScope());
-                        loadCounts();
+                        openRecordingsAfterAccountChange("已切换到已有账号");
                     } else {
                         toast("请粘贴以 anon_ 开头的访问令牌");
                     }

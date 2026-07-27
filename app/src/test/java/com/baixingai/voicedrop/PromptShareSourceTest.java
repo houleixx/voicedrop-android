@@ -25,7 +25,9 @@ public class PromptShareSourceTest {
         assertTrue(activity.contains("Api.sharePage"));
         assertTrue(activity.contains("Intent.ACTION_SEND"));
         assertTrue(activity.contains("setOnCheckedChangeListener"));
-        assertTrue(activity.contains("分享中，关闭后分享码立即失效"));
+        // 溯源转发：区分自有码和转发码的文案
+        assertTrue(activity.contains("转发中：这是原作者的分享码"));
+        assertTrue(activity.contains("分享中：社区可见，关闭后分享码失效"));
         assertTrue(activity.contains("分享的始终是已保存的版本"));
         assertTrue(activity.contains("updateShareVersionWarning"));
         assertTrue(activity.contains("state.sharing && !state.code.isEmpty()"));

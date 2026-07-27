@@ -11,20 +11,19 @@ import static org.junit.Assert.assertTrue;
 
 public class PhotoMakingStateSourceTest {
     @Test
-    public void photoUsesSpinnerBeforeDelayedMakingStateOnInitialLoadAndRetry() throws Exception {
+    public void ordinaryPhotoFailureDoesNotEnterMakingStateOrPoll() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
         String render = methodBody(source, "protected void renderArticleBody");
-        String load = methodBody(source, "protected void loadPhotoInto(FrameLayout frame, String relKey, boolean ignoringLocalCache)");
+        String load = source;
         String loading = methodBody(source, "protected void showPhotoLoading");
-        String schedule = methodBody(source, "protected void schedulePhotoMakingState");
 
         assertTrue(render.contains("showPhotoLoading(photo)"));
-        assertTrue(load.indexOf("showPhotoLoading(frame)") < load.indexOf("schedulePhotoMakingState(frame, startedAt)"));
+        assertTrue(render.contains("PhotoLoadPolicy.Intent.ORIGINAL"));
+        assertTrue(load.contains("PhotoLoadPolicy.shouldPoll(intent)"));
+        assertTrue(load.contains("showPhotoLoadFailed(frame, relKey, intent)"));
         assertTrue(loading.contains("ProgressBar spinner = new ProgressBar(this)"));
         assertTrue(loading.contains("spinner.setIndeterminate(true)"));
-        assertTrue(schedule.contains("PHOTO_MAKING_GRACE_MS"));
-        assertTrue(schedule.contains("isPhotoLoadActive(frame, startedAt)"));
-        assertTrue(schedule.contains("showPhotoMaking(frame)"));
+        assertTrue(loading.contains("Gravity.CENTER"));
     }
 
     @Test
@@ -34,13 +33,14 @@ public class PhotoMakingStateSourceTest {
         assertTrue(source.contains("PHOTO_MAKING_GRACE_MS"));
         assertTrue(source.contains("PHOTO_POLL_INTERVAL_MS"));
         assertTrue(source.contains("PHOTO_POLL_TIMEOUT_MS"));
-        assertTrue(source.contains("schedulePhotoMakingState(frame, startedAt)"));
+        assertTrue(source.contains("schedulePhotoMakingState(frame, startedAt, intent)"));
         assertTrue(source.contains("showPhotoMaking(frame)"));
         assertTrue(source.contains("正在制作中"));
         assertTrue(source.contains("约 1 分钟完成"));
-        assertTrue(source.contains("fetchPhotoInto(frame, relKey, startedAt, true)"));
+        assertTrue(source.contains("fetchPhotoInto(frame, relKey, startedAt, intent, true)"));
         assertTrue(source.contains("library.photoImage(scope + relKey, ignoringLocalCache)"));
         assertTrue(source.contains("isPhotoLoadActive(frame, startedAt)"));
+        assertTrue(source.contains("markGeneratedPhotoKeys(currentArticleDoc, doc)"));
     }
 
     @Test
@@ -49,7 +49,18 @@ public class PhotoMakingStateSourceTest {
 
         assertTrue(source.contains("暂时无法显示"));
         assertTrue(source.contains("重试"));
-        assertTrue(source.contains("loadPhotoInto(frame, relKey, true)"));
+        assertTrue(source.contains("loadPhotoInto(frame, relKey, intent, true)"));
+    }
+
+    @Test
+    public void detailPhotosUseTheirOwnBoundedConcurrentExecutor() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+        String fetch = methodBody(source, "protected void fetchPhotoInto");
+        String destroy = methodBody(source, "protected void onDestroy");
+
+        assertTrue(source.contains("Executors.newFixedThreadPool(PhotoLoadPolicy.concurrentLoads())"));
+        assertTrue(fetch.contains("photoIo.execute("));
+        assertTrue(destroy.contains("photoIo.shutdownNow()"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

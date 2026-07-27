@@ -22,7 +22,7 @@ public final class StatusSession {
 
     private final AuthStore auth;
     private final Listener listener;
-    private final OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = ClientReliability.newLongLivedWebSocketClient();
     private WebSocket socket;
     private boolean closed;
     private final Handler main = new Handler(Looper.getMainLooper());

@@ -28,4 +28,17 @@ public class LibraryStoreArticleSaveTest {
         assertEquals(4, articles.getJSONObject(0).getInt("style"));
         assertEquals("wx-1", articles.getJSONObject(0).getString("wechatMediaId"));
     }
+
+    @Test
+    public void articleDocCacheRoundTripKeepsEditedContentAndQuestions() throws Exception {
+        ArticleDoc original = ArticleDoc.fromJson("{\"id\":\"r1\",\"articles\":[{\"title\":\"新标题\",\"body\":\"新正文\",\"style\":4}],"
+                + "\"questions\":[{\"id\":\"q1\",\"text\":\"还要补什么？\",\"status\":\"answered\"}],\"tags\":[\"work\"]}");
+        ArticleDoc restored = ArticleDoc.fromJson(original.toJson());
+
+        assertEquals("新标题", restored.articles.get(0).title);
+        assertEquals("新正文", restored.articles.get(0).body);
+        assertEquals(Integer.valueOf(4), restored.articles.get(0).style);
+        assertEquals("answered", restored.questions.get(0).status);
+        assertEquals("work", restored.tags.get(0));
+    }
 }

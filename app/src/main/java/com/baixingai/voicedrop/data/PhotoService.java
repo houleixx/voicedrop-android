@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.util.LruCache;
 
+import com.baixingai.voicedrop.core.PhotoCachePolicy;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 
@@ -15,6 +16,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 
 public final class PhotoService {
     private static final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(128 * 1024 * 1024) {
@@ -22,6 +26,9 @@ public final class PhotoService {
             return value == null ? 0 : value.getByteCount();
         }
     };
+    private static final ConcurrentHashMap<String, FutureTask<Bitmap>> inFlight =
+            new ConcurrentHashMap<>();
+    /** Transform failures are stable for a photo during one process lifetime. */
     private static final Set<String> missingThumbs = Collections.synchronizedSet(new HashSet<>());
     private static volatile File diskDir;
 
@@ -42,6 +49,30 @@ public final class PhotoService {
 
     public static Bitmap image(String fullKey, boolean ignoringLocalCache, HttpClient http) throws Exception {
         if (fullKey == null || fullKey.isEmpty()) return null;
+        String loadKey = fullKey + (ignoringLocalCache ? "#refresh" : "#cached");
+        FutureTask<Bitmap> candidate = new FutureTask<>(
+                () -> loadImage(fullKey, ignoringLocalCache, http));
+        FutureTask<Bitmap> task = inFlight.putIfAbsent(loadKey, candidate);
+        if (task == null) {
+            task = candidate;
+            task.run();
+        }
+        try {
+            return task.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) throw (Exception) cause;
+            throw new RuntimeException(cause);
+        } finally {
+            inFlight.remove(loadKey, task);
+        }
+    }
+
+    private static Bitmap loadImage(String fullKey, boolean ignoringLocalCache,
+                                    HttpClient http) throws Exception {
         if (!ignoringLocalCache) {
             Bitmap hit = cache.get(fullKey);
             if (hit != null) return hit;
@@ -61,13 +92,18 @@ public final class PhotoService {
         if (data == null) return null;
         Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
         if (bitmap != null) {
-            writeDisk(fullKey, data);
+            if (ignoringLocalCache) writeDisk(fullKey, data, true);
+            else writeDisk(fullKey, data);
             cache.put(fullKey, bitmap);
         }
         return bitmap;
     }
 
-    /** Fetch a 512px Cloudflare edge thumbnail, then transparently fall back to the original. */
+    /**
+     * Card/list images use Cloudflare's 512px edge transform. A transform failure
+     * must be invisible to users, so remember it for this run and load the EdgeOne
+     * original instead. Inline article callers use image(), not this method.
+     */
     public static Bitmap thumbnail(String fullKey) throws Exception {
         if (fullKey == null || fullKey.isEmpty()) return null;
         String cacheKey = fullKey + "#w512";
@@ -97,11 +133,13 @@ public final class PhotoService {
                     }
                 }
             } catch (Exception ignored) {
-                // A transform outage must never suppress the original public photo.
+                // The optional transform must never suppress the original image.
             }
             missingThumbs.add(cacheKey);
         }
-        return image(fullKey, false);
+        Bitmap bitmap = image(fullKey, false);
+        if (bitmap != null) cache.put(cacheKey, bitmap);
+        return bitmap;
     }
 
     public static byte[] data(String fullKey, boolean ignoringLocalCache, HttpClient http) throws Exception {
@@ -109,41 +147,42 @@ public final class PhotoService {
         HttpClient.RequestOptions options = ignoringLocalCache
                 ? new HttpClient.RequestOptions().header("Cache-Control", "no-cache")
                 : null;
-        // Originals prefer voicedrop.cn / EdgeOne; fall back to the existing API host when
-        // the CDN, DNS, or the user's current network cannot reach it.
-        try {
-            HttpClient.Response cdn = http.get(Api.photoBase() + "/photo/" + Api.path(fullKey), "", options);
-            if (cdn.ok()) return cdn.body;
-        } catch (java.io.IOException ignored) {
-            // The public origin below remains the compatibility path.
-        }
-        HttpClient.Response origin = http.get(Api.filesBase() + "/photo/" + Api.path(fullKey), "", options);
-        return origin.ok() ? origin.body : null;
+        HttpClient.Response response = http.get(Api.photoBase() + "/photo/" + Api.path(fullKey), "", options);
+        return response.ok() ? response.body : null;
     }
 
     private static byte[] readDisk(String cacheKey) {
         File file = diskFile(cacheKey);
         if (file == null || !file.isFile()) return null;
         try {
-            return Files.readAllBytes(file.toPath());
+            byte[] bytes = Files.readAllBytes(file.toPath());
+            file.setLastModified(System.currentTimeMillis());
+            return bytes;
         } catch (Exception ignored) {
             return null;
         }
     }
 
-    private static synchronized void writeDisk(String cacheKey, byte[] bytes) {
+    private static void writeDisk(String cacheKey, byte[] bytes) {
+        writeDisk(cacheKey, bytes, false);
+    }
+
+    private static synchronized void writeDisk(String cacheKey, byte[] bytes,
+                                               boolean replaceExisting) {
         if (bytes == null || bytes.length == 0) return;
         File target = diskFile(cacheKey);
-        if (target == null || target.isFile()) return;
+        if (target == null || (target.isFile() && !replaceExisting)) return;
         File temp = new File(target.getParentFile(), target.getName() + ".tmp");
         try {
             Files.write(temp.toPath(), bytes);
+            if (replaceExisting && target.isFile()) target.delete();
             if (!temp.renameTo(target) && !target.isFile()) Files.move(temp.toPath(), target.toPath());
         } catch (Exception ignored) {
             // Cache writes are best-effort; network rendering remains the fallback.
         } finally {
             if (temp.isFile()) temp.delete();
         }
+        trimDiskCache(target.getParentFile());
     }
 
     private static void deleteDisk(String cacheKey) {
@@ -169,13 +208,16 @@ public final class PhotoService {
         if (files == null) return;
         long total = 0;
         for (File file : files) total += file.length();
-        if (total <= 512L * 1024 * 1024) return;
+        if (!PhotoCachePolicy.shouldEvict(files.length, total)) return;
         Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
-        long target = 256L * 1024 * 1024;
+        int remaining = files.length;
         for (File file : files) {
             long size = file.length();
-            if (file.delete()) total -= size;
-            if (total <= target) break;
+            if (file.delete()) {
+                total -= size;
+                remaining--;
+            }
+            if (!PhotoCachePolicy.shouldEvict(remaining, total)) break;
         }
     }
 }

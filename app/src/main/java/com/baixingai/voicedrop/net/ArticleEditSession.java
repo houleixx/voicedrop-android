@@ -32,16 +32,22 @@ public final class ArticleEditSession {
         void onPreviewDelta(List<PreviewDelta> deltas);
         void onPreviewReset();
         void onPreviewDone(boolean ok);
+        default void onResolved() {}
     }
 
     private final Context context;
     private final AuthStore auth;
     private final String stem;
     private final Listener listener;
-    private final OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = ClientReliability.newLongLivedWebSocketClient();
     private final List<EditRequest> queue = new ArrayList<>();
     private WebSocket socket;
     private boolean closed;
+    private int generation;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable reconnectRunnable = () -> {
+        if (!closed && socket == null) connect();
+    };
 
     public ArticleEditSession(Context context, AuthStore auth, String stem, Listener listener) {
         this.context = context.getApplicationContext();
@@ -58,33 +64,32 @@ public final class ArticleEditSession {
     public void connect() {
         closed = false;
         if (socket != null) return;
+        main.removeCallbacks(reconnectRunnable);
         listener.onQueueChanged(queueSnapshot());
         listener.onState(queue.isEmpty() ? "连接文章编辑器…" : "正在恢复未完成修改…");
         Request request = new Request.Builder()
                 .url(Api.agentWs() + "/edit?stem=" + Api.path(stem))
                 .header("Authorization", "Bearer " + auth.bearer())
                 .build();
+        final int connectGeneration = ++generation;
         socket = client.newWebSocket(request, new WebSocketListener() {
             @Override public void onOpen(WebSocket webSocket, Response response) {
+                if (!isCurrent(webSocket, connectGeneration)) return;
                 listener.onState("已连接");
                 resubmitAll();
             }
 
             @Override public void onMessage(WebSocket webSocket, String text) {
+                if (!isCurrent(webSocket, connectGeneration)) return;
                 handle(text);
             }
 
             @Override public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                socket = null;
-                if (!closed) {
-                    listener.onState("连接断开，稍后重试");
-                    reconnectLater();
-                }
+                scheduleReconnect(webSocket, connectGeneration, true);
             }
 
             @Override public void onClosed(WebSocket webSocket, int code, String reason) {
-                socket = null;
-                if (!closed) reconnectLater();
+                scheduleReconnect(webSocket, connectGeneration, false);
             }
         });
     }
@@ -203,6 +208,7 @@ public final class ArticleEditSession {
         persist();
         listener.onQueueChanged(queueSnapshot());
         listener.onState(queue.isEmpty() ? "已连接" : "正在改");
+        if (!done.isEmpty()) listener.onResolved();
     }
 
     private void resolve(String id) {
@@ -214,6 +220,7 @@ public final class ArticleEditSession {
         persist();
         listener.onQueueChanged(queueSnapshot());
         listener.onState(queue.isEmpty() ? "已完成" : "正在改");
+        listener.onResolved();
     }
 
     private void remove(String id) {
@@ -225,10 +232,18 @@ public final class ArticleEditSession {
         }
     }
 
-    private void reconnectLater() {
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!closed && socket == null) connect();
-        }, 1500);
+    private boolean isCurrent(WebSocket current, int callbackGeneration) {
+        return !closed
+                && socket == current
+                && ClientReliability.isCurrentGeneration(generation, callbackGeneration);
+    }
+
+    private void scheduleReconnect(WebSocket current, int callbackGeneration, boolean reportDisconnect) {
+        if (!isCurrent(current, callbackGeneration)) return;
+        socket = null;
+        if (reportDisconnect) listener.onState("连接断开，稍后重试");
+        main.removeCallbacks(reconnectRunnable);
+        main.postDelayed(reconnectRunnable, 1500);
     }
 
     private void persist() {
@@ -273,8 +288,11 @@ public final class ArticleEditSession {
 
     public void close() {
         closed = true;
-        if (socket != null) socket.close(1000, "bye");
+        generation++;
+        main.removeCallbacks(reconnectRunnable);
+        WebSocket current = socket;
         socket = null;
+        if (current != null) current.close(1000, "bye");
     }
 
     public static String payloadFor(EditRequest request) {

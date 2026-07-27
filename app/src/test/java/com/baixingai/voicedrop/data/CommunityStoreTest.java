@@ -38,7 +38,7 @@ public class CommunityStoreTest {
         assertTrue(activity.contains("if (!loadCommunity) uploader.drainPending()"));
         assertTrue(activity.contains("restoreCachedCommunityFeed();"));
         assertTrue(photos.contains("new File(context.getApplicationContext().getCacheDir(), \"photo-cache\")"));
-        assertTrue(photos.contains("writeDisk(cacheKey, response.body)"));
+        assertTrue(photos.contains("writeDisk(fullKey, data)"));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.baixingai.voicedrop.data;
 
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.net.Api;
+import com.baixingai.voicedrop.net.ClientReliability;
 import com.baixingai.voicedrop.net.HttpClient;
 
 import android.graphics.Bitmap;
@@ -213,12 +214,19 @@ public final class LibraryStore {
 
     public synchronized void invalidateArticleCaches(List<String> stems) {
         ensureMetadataCache();
-        if (stems == null) return;
+        if (ClientReliability.shouldInvalidateAllArticleCaches(stems)) {
+            titleCache.clear();
+            tagsCache.clear();
+            auth.clearCurrentArticleDocCaches();
+            persistMetadataCache();
+            return;
+        }
         for (String stem : stems) {
             if (stem == null || stem.isEmpty()) continue;
             String key = Recording.articleKey(stem);
             titleCache.remove(key);
             tagsCache.remove(key);
+            auth.removeArticleDocCache(stem);
         }
         persistMetadataCache();
     }
@@ -243,10 +251,29 @@ public final class LibraryStore {
         if (!rec.hasArticles) return null;
         try {
             HttpClient.Response response = http.get(Api.filesBase() + "/articles/" + Api.path(rec.stem()), auth.bearer());
-            return response.ok() ? ArticleDoc.fromJson(response.text()) : null;
+            if (!response.ok()) return null;
+            ArticleDoc doc = ArticleDoc.fromJson(response.text());
+            auth.storeArticleDocCache(rec.stem(), response.text());
+            return doc;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public ArticleDoc cachedDoc(Recording rec) {
+        if (rec == null || !rec.hasArticles) return null;
+        try {
+            String raw = auth.articleDocCache(rec.stem());
+            return raw.isEmpty() ? null : ArticleDoc.fromJson(raw);
+        } catch (Exception ignored) {
+            auth.removeArticleDocCache(rec.stem());
+            return null;
+        }
+    }
+
+    public void cacheDoc(Recording rec, ArticleDoc doc) {
+        if (rec == null || doc == null || doc.articles == null || doc.articles.isEmpty()) return;
+        try { auth.storeArticleDocCache(rec.stem(), doc.toJson()); } catch (Exception ignored) {}
     }
 
     public ArticleDoc fetchDocByArticleKey(String articleKey) {
@@ -298,7 +325,9 @@ public final class LibraryStore {
         boolean srtDeleted = deleteKey(rec.srtKey());
         boolean emptyDeleted = deleteKey(rec.emptyKey());
         deleteKey(rec.tagsKey());
-        return recordingDeleteSucceeded(audioDeleted, articleDeleted, srtDeleted, emptyDeleted);
+        boolean ok = recordingDeleteSucceeded(audioDeleted, articleDeleted, srtDeleted, emptyDeleted);
+        if (ok) invalidateArticleCaches(Collections.singletonList(rec.stem()));
+        return ok;
     }
 
     public static boolean recordingDeleteSucceeded(boolean audioDeleted, boolean articleDeleted, boolean srtDeleted, boolean emptyDeleted) {
@@ -437,6 +466,7 @@ public final class LibraryStore {
         deleteKey(rec.tagsKey());
         titleCache.remove(rec.articleKey());
         tagsCache.remove(rec.articleKey());
+        auth.removeArticleDocCache(rec.stem());
         return ok;
     }
 
@@ -510,17 +540,21 @@ public final class LibraryStore {
                 Api.filesBase() + "/articles/" + Api.path(rec.stem()) + "/head",
                 auth.bearer(),
                 body.toString().getBytes("UTF-8"));
-        return response.ok();
+        boolean ok = response.ok();
+        if (ok) auth.removeArticleDocCache(rec.stem());
+        return ok;
     }
 
     public String ownerScope() throws Exception {
-        String token = auth.bearer();
-        if (token.equals(cachedScopeToken) && cachedScope != null && !cachedScope.isEmpty()) return cachedScope;
-        HttpClient.Response response = http.get(Api.filesBase() + "/whoami", token);
-        if (!response.ok()) return null;
-        cachedScope = new JSONObject(response.text()).optString("scope", null);
-        cachedScopeToken = token;
-        return cachedScope;
+        synchronized (this) {
+            String token = auth.bearer();
+            if (token.equals(cachedScopeToken) && cachedScope != null && !cachedScope.isEmpty()) return cachedScope;
+            HttpClient.Response response = http.get(Api.filesBase() + "/whoami", token);
+            if (!response.ok()) return null;
+            cachedScope = new JSONObject(response.text()).optString("scope", null);
+            cachedScopeToken = token;
+            return cachedScope;
+        }
     }
 
     public byte[] photoData(String fullKey) throws Exception {

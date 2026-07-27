@@ -81,6 +81,32 @@ public final class ArticleDoc {
                 photos, obj.optString("owner", null));
     }
 
+    public String toJson() throws Exception {
+        JSONObject obj = new JSONObject();
+        if (id != null) obj.put("id", id);
+        if (transcript != null) obj.put("transcript", transcript);
+        JSONArray encodedArticles = new JSONArray();
+        for (MinedArticle article : articles) {
+            JSONObject encoded = new JSONObject().put("title", article.title).put("body", article.body);
+            if (article.style != null) encoded.put("style", article.style);
+            if (article.wechatMediaId != null) encoded.put("wechatMediaId", article.wechatMediaId);
+            encodedArticles.put(encoded);
+        }
+        obj.put("articles", encodedArticles);
+        obj.put("tags", new JSONArray(tags));
+        JSONArray encodedQuestions = new JSONArray();
+        for (FollowupQuestion question : questions) {
+            JSONObject encoded = new JSONObject().put("id", question.id).put("text", question.text).put("status", question.status);
+            if (question.articleIndex != null) encoded.put("articleIndex", question.articleIndex);
+            if (question.createdAt != null) encoded.put("createdAt", question.createdAt);
+            encodedQuestions.put(encoded);
+        }
+        obj.put("questions", encodedQuestions);
+        obj.put("photos", new JSONArray(photos == null ? new ArrayList<String>() : photos));
+        if (ownerScope != null) obj.put("owner", ownerScope);
+        return obj.toString();
+    }
+
     public static final class FollowupQuestion {
         public final String id;
         public final Integer articleIndex;

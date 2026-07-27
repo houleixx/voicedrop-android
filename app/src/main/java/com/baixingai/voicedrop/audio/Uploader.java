@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop.audio;
 
 import android.content.Context;
+import android.util.Base64;
 
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -12,10 +13,12 @@ import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public final class Uploader {
     private final Context context;
@@ -60,16 +63,20 @@ public final class Uploader {
 
     public boolean upload(File file) {
         if (!isUploadable(file)) return false;
-        uploadTagsSidecar(file);
+        String bearer = auth.bearer();
+        // Uploading audio immediately starts article mining. Keep every recording
+        // behind its persisted photo queue so a retry can never overtake its photos.
+        if (!uploadPendingPhotosFor(file, bearer)) return false;
+        uploadTagsSidecar(file, bearer);
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
                 HttpClient.Response response = http.putFile(
                         Api.filesBase() + "/upload/" + Api.path(file.getName()),
-                        auth.bearer(),
+                        bearer,
                         "audio/mp4",
                         file);
                 if (response.ok()) {
-                    triggerMine();
+                    triggerMine(bearer);
                     if (prefs.deleteLocalAfterUpload()) {
                         //noinspection ResultOfMethodCallIgnored
                         file.delete();
@@ -132,7 +139,7 @@ public final class Uploader {
         return out;
     }
 
-    private void uploadTagsSidecar(File audio) {
+    private void uploadTagsSidecar(File audio, String bearer) {
         File sidecar = tagsSidecarFile(audio);
         if (!sidecar.isFile()) return;
         String name = audio.getName();
@@ -141,7 +148,7 @@ public final class Uploader {
         try {
             HttpClient.Response response = http.putFile(
                     Api.filesBase() + "/upload/articles/" + Api.path(stem + ".tags"),
-                    auth.bearer(),
+                    bearer,
                     "application/json",
                     sidecar);
             if (response.ok()) {
@@ -152,9 +159,9 @@ public final class Uploader {
         }
     }
 
-    private void triggerMine() {
+    private void triggerMine(String bearer) {
         try {
-            http.postJson(Api.filesBase() + "/mine", auth.bearer(), new byte[0]);
+            http.postJson(Api.filesBase() + "/mine", bearer, new byte[0]);
         } catch (Exception ignored) {
         }
     }
@@ -162,6 +169,158 @@ public final class Uploader {
     public void drainPending() {
         for (File file : pendingFiles()) {
             upload(file);
+        }
+    }
+
+    public boolean stagePhoto(String key, byte[] bytes) {
+        if (key == null || !key.startsWith("photos/") || bytes == null || bytes.length == 0) return false;
+        File dir = pendingPhotoDir();
+        if (!dir.isDirectory() && !dir.mkdirs()) return false;
+        File target = pendingPhotoFile(key);
+        if (target.isFile() && target.length() > 0) return true;
+        File temp = new File(dir, target.getName() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(temp)) {
+            out.write(bytes);
+            out.getFD().sync();
+            if (target.isFile() && !target.delete()) return false;
+            return temp.renameTo(target);
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (temp.isFile()) temp.delete();
+        }
+    }
+
+    public boolean stagePhotos(Map<String, byte[]> photos) {
+        if (photos == null || photos.isEmpty()) return true;
+        String sessionTs = null;
+        JSONArray expected = new JSONArray();
+        for (Map.Entry<String, byte[]> entry : photos.entrySet()) {
+            String currentSession = photoSession(entry.getKey());
+            if (currentSession == null || (sessionTs != null && !sessionTs.equals(currentSession))) return false;
+            sessionTs = currentSession;
+            expected.put(entry.getKey());
+        }
+        File gate = pendingPhotoGateFile(sessionTs);
+        if (!writePhotoGate(gate, expected)) return false;
+        for (Map.Entry<String, byte[]> entry : photos.entrySet()) {
+            if (!stagePhoto(entry.getKey(), entry.getValue())) return false;
+        }
+        // If deletion is interrupted, uploadPendingPhotosFor reconciles the gate
+        // against the fully staged files before allowing audio through.
+        //noinspection ResultOfMethodCallIgnored
+        gate.delete();
+        return !gate.isFile();
+    }
+
+    private boolean uploadPendingPhotosFor(File audio, String bearer) {
+        RecordingName.Parsed parsed = audio == null ? null : RecordingName.parse(audio.getName());
+        if (parsed == null || parsed.sessionTs == null) return true;
+        if (!photoStageComplete(parsed.sessionTs)) return false;
+        String prefix = "photos/" + parsed.sessionTs + "/";
+        File[] pending = pendingPhotoDir().listFiles(file -> file.isFile() && file.getName().endsWith(".jpg"));
+        if (pending == null || pending.length == 0) return true;
+        Arrays.sort(pending, (a, b) -> a.getName().compareTo(b.getName()));
+        boolean complete = true;
+        for (File photo : pending) {
+            String key = pendingPhotoKey(photo);
+            if (key == null || !key.startsWith(prefix)) continue;
+            try {
+                HttpClient.Response response = http.putFile(
+                        Api.filesBase() + "/upload/" + Api.path(key),
+                        bearer,
+                        "image/jpeg",
+                        photo);
+                if (response.ok()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    photo.delete();
+                } else {
+                    complete = false;
+                }
+            } catch (Exception ignored) {
+                complete = false;
+            }
+        }
+        return complete && !hasPendingPhotos(prefix);
+    }
+
+    private boolean hasPendingPhotos(String keyPrefix) {
+        File[] pending = pendingPhotoDir().listFiles(file -> {
+            if (!file.isFile() || !file.getName().endsWith(".jpg")) return false;
+            String key = pendingPhotoKey(file);
+            return key != null && key.startsWith(keyPrefix);
+        });
+        return pending != null && pending.length > 0;
+    }
+
+    private File pendingPhotoDir() {
+        return new File(AudioRecorder.documentsDir(context), "pending-photos");
+    }
+
+    private File pendingPhotoFile(String key) {
+        String encoded = Base64.encodeToString(
+                key.getBytes(StandardCharsets.UTF_8),
+                Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        return new File(pendingPhotoDir(), encoded + ".jpg");
+    }
+
+    private File pendingPhotoGateFile(String sessionTs) {
+        String encoded = Base64.encodeToString(
+                sessionTs.getBytes(StandardCharsets.UTF_8),
+                Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        return new File(pendingPhotoDir(), "gate-" + encoded + ".json");
+    }
+
+    private boolean writePhotoGate(File gate, JSONArray expected) {
+        File dir = pendingPhotoDir();
+        if (!dir.isDirectory() && !dir.mkdirs()) return false;
+        File temp = new File(dir, gate.getName() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(temp)) {
+            out.write(expected.toString().getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+            if (gate.isFile() && !gate.delete()) return false;
+            return temp.renameTo(gate);
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (temp.isFile()) temp.delete();
+        }
+    }
+
+    private boolean photoStageComplete(String sessionTs) {
+        File gate = pendingPhotoGateFile(sessionTs);
+        if (!gate.isFile()) return true;
+        try (FileInputStream in = new FileInputStream(gate)) {
+            JSONArray expected = new JSONArray(new String(HttpClient.readAll(in), StandardCharsets.UTF_8));
+            for (int index = 0; index < expected.length(); index++) {
+                String key = expected.optString(index, "");
+                if (!sessionTs.equals(photoSession(key)) || !pendingPhotoFile(key).isFile()) return false;
+            }
+            //noinspection ResultOfMethodCallIgnored
+            gate.delete();
+            return !gate.isFile();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static String photoSession(String key) {
+        if (key == null || !key.startsWith("photos/")) return null;
+        int end = key.indexOf('/', "photos/".length());
+        if (end <= "photos/".length()) return null;
+        return key.substring("photos/".length(), end);
+    }
+
+    private static String pendingPhotoKey(File file) {
+        String name = file == null ? "" : file.getName();
+        if (!name.endsWith(".jpg")) return null;
+        try {
+            byte[] decoded = Base64.decode(
+                    name.substring(0, name.length() - 4),
+                    Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            return new String(decoded, StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

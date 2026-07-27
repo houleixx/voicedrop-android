@@ -1118,9 +1118,16 @@ public final class InstructionSettingsActivity extends Activity {
 
     private void showError(String message) { errorBanner.setText(message); errorBanner.setVisibility(View.VISIBLE); }
     private void toast(String message) { runOnUiThread(() -> SimpleToast.show(this, message)); }
-    private String normalIntro() { return "一套指令，长按文字或图片时按『适用于』自动筛选。改过的系统项标『已自定义』，自己建的标『自建』。"; }
+    private String normalIntro() { return "一套指令，长按文字或图片时按『适用于』自动筛选。改过的系统项标『已自定义』，自己建的标『自建』，收下别人分享的标『导入』。"; }
     private TextView originBadge(PromptNode node) {
         if (node == null || node.origin == null || "system".equals(node.origin)) return null;
+        // 从分享码收下来的条目 origin 也是 "user"，但对用户来说它是「导入」不是「自建」。
+        if (node.importedFrom != null) {
+            TextView badge = text("导入", 11, Typeface.BOLD, Theme.BLUE);
+            badge.setPadding(dp(6), dp(1), dp(6), dp(1));
+            badge.setBackground(rounded(Theme.BLUE_BG, 4));
+            return badge;
+        }
         boolean custom = "custom".equals(node.origin);
         TextView badge = text(custom ? "已自定义" : "自建", 11, Typeface.BOLD,
                 custom ? Theme.AMBER : Theme.GREEN);

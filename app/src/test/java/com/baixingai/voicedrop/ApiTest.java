@@ -9,10 +9,10 @@ import static org.junit.Assert.*;
 public class ApiTest {
     @Test
     public void apiBasesMatchIosNetworkingContract() {
-        assertEquals("https://jianshuo.dev/files/api", Api.filesBase());
+        assertEquals("https://voicedrop.cn/files/api", Api.filesBase());
         assertEquals("https://voicedrop.cn/files/api", Api.photoBase());
-        assertEquals("https://jianshuo.dev/agent", Api.agentBase());
-        assertEquals("https://jianshuo.dev/reco", Api.recoBase());
+        assertEquals("https://voicedrop.cn/agent", Api.agentBase());
+        assertEquals("https://voicedrop.cn/reco", Api.recoBase());
         assertEquals("wss://jianshuo.dev/agent", Api.agentWs());
         assertEquals("https://voicedrop.cn/abc123", Api.sharePage("abc123"));
     }

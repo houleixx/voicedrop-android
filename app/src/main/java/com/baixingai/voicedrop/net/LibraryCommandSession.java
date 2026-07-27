@@ -37,7 +37,7 @@ public final class LibraryCommandSession {
     private final Context context;
     private final AuthStore auth;
     private final Listener listener;
-    private final OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = ClientReliability.newLongLivedWebSocketClient();
     private final List<CommandRequest> queue = new ArrayList<>();
     private final List<CommandStateStore.Control> controls = new ArrayList<>();
     private final List<CommandStateStore.Confirmation> confirmations = new ArrayList<>();
@@ -136,6 +136,9 @@ public final class LibraryCommandSession {
                 listener.onState("working".equals(obj.optString("state")) ? "正在执行图库指令" : obj.optString("state", "已连接图库指令"));
                 return;
             }
+            if (ClientReliability.commandMessageRequiresRefresh(type)) {
+                listener.onUpdate(strings(obj.optJSONArray("stems")));
+            }
             if ("reply".equals(type)) {
                 listener.onReply(obj.optString("text", ""), obj.optBoolean("ok", true));
                 clearCommandState(id);
@@ -151,7 +154,6 @@ public final class LibraryCommandSession {
             }
             if ("updated".equals(type)) {
                 clearCommandState(id);
-                listener.onUpdate(strings(obj.optJSONArray("stems")));
                 resolve(id);
                 return;
             }
@@ -315,6 +317,18 @@ public final class LibraryCommandSession {
         WebSocket current = socket;
         socket = null;
         if (current != null) current.close(1000, "bye");
+    }
+
+    public void resetForAccountChange() {
+        close();
+        queue.clear();
+        controls.clear();
+        confirmations.clear();
+        persist();
+        CommandStateStore.saveControls(context, controls);
+        CommandStateStore.saveConfirmations(context, confirmations);
+        listener.onQueueChanged(queueSnapshot());
+        connect();
     }
 
     public static String confirmationText(JSONObject obj) {

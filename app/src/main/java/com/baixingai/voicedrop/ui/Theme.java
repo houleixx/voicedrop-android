@@ -14,6 +14,8 @@ public final class Theme {
     public static final int GREEN = 0xff5e8a6a;
     public static final int AMBER_BG = 0xfffbead2;
     public static final int AMBER = 0xffc98a2e;
+    public static final int BLUE_BG = 0xffe3edf8;
+    public static final int BLUE = 0xff4a7fb5;
 
     private Theme() {}
 }

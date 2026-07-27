@@ -13,6 +13,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,7 @@ public final class PromptStore {
     private final String shareBearer;
     private final String baseUrl;
     private final List<PromptNode> builtin;
+    private final String cacheKey;
     private List<PromptNode> items;
     private boolean mutating;
 
@@ -63,6 +65,7 @@ public final class PromptStore {
         this.shareBearer = auth.session();
         this.baseUrl = Api.agentBase();
         this.builtin = PromptDefaults.items();
+        this.cacheKey = cacheKeyFor(this.bearer);
         this.items = loadCached();
     }
 
@@ -78,6 +81,7 @@ public final class PromptStore {
         this.shareBearer = shareBearer;
         this.baseUrl = baseUrl;
         this.builtin = PromptTree.copy(builtin);
+        this.cacheKey = CACHE_KEY;
         this.items = loadCached();
     }
 
@@ -103,7 +107,7 @@ public final class PromptStore {
             if (!response.ok()) return "刷新失败，正在显示上次内容";
             List<PromptNode> fresh = PromptTree.decode(response.text());
             synchronized (lock) { items = fresh; }
-            cache.put(CACHE_KEY, response.text());
+            cache.put(cacheKey, response.text());
             return null;
         } catch (Exception error) {
             return "刷新失败，正在显示上次内容";
@@ -124,7 +128,7 @@ public final class PromptStore {
             if (!response.ok()) throw new IllegalStateException("prompt save HTTP " + response.code);
             List<PromptNode> fresh = PromptTree.decode(response.text());
             synchronized (lock) { items = fresh; }
-            cache.put(CACHE_KEY, response.text());
+            cache.put(cacheKey, response.text());
             return null;
         } catch (Exception error) {
             synchronized (lock) { items = snapshot; }
@@ -189,13 +193,13 @@ public final class PromptStore {
                     List<PromptNode> next = PromptTree.copy(items);
                     if (!PromptTree.flattenIds(next).contains(node.id)) next.add(node);
                     items = next;
-                    cache.put(CACHE_KEY, PromptTree.encodeResolved(items));
+                    cache.put(cacheKey, PromptTree.encodeResolved(items));
                 }
                 return null;
             }
             List<PromptNode> fresh = PromptTree.decode(response.text());
             synchronized (lock) { items = fresh; }
-            cache.put(CACHE_KEY, response.text());
+            cache.put(cacheKey, response.text());
             return null;
         } catch (Exception error) {
             return "操作失败，请重试";
@@ -278,7 +282,7 @@ public final class PromptStore {
             for (int i = 0; i < names.length(); i++) {
                 String id = names.optString(i);
                 JSONObject value = byItem.optJSONObject(id);
-                if (value != null) result.put(id, new ShareState(value.optString("code", ""), value.optBoolean("sharing", false)));
+                if (value != null) result.put(id, new ShareState(value.optString("code", ""), value.optBoolean("sharing", false), null, value.optBoolean("borrowed", false)));
             }
         } catch (Exception ignored) {}
         return result;
@@ -302,18 +306,30 @@ public final class PromptStore {
                 return new ShareState("", false, remote);
             }
             JSONObject body = new JSONObject(response.text());
-            return new ShareState(body.optString("code", ""), body.optBoolean("sharing", sharing));
+            return new ShareState(body.optString("code", ""), body.optBoolean("sharing", sharing), null, body.optBoolean("borrowed", false));
         } catch (Exception error) {
             return new ShareState("", false, "提示词分享操作失败");
         }
     }
 
     private List<PromptNode> loadCached() {
-        String raw = cache.get(CACHE_KEY);
+        String raw = cache.get(cacheKey);
         if (raw != null && !raw.isEmpty()) {
             try { return PromptTree.decode(raw); } catch (Exception ignored) {}
         }
         return PromptTree.copy(builtin);
+    }
+
+    public static String cacheKeyFor(String bearer) {
+        String value = bearer == null ? "" : bearer;
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder suffix = new StringBuilder();
+            for (int i = 0; i < 12; i++) suffix.append(String.format("%02x", digest[i]));
+            return CACHE_KEY + "." + suffix;
+        } catch (Exception ignored) {
+            return CACHE_KEY + "." + Integer.toHexString(value.hashCode());
+        }
     }
 
     public static final class Preview {
@@ -342,11 +358,16 @@ public final class PromptStore {
         public final String code;
         public final boolean sharing;
         public final String error;
-        public ShareState(String code, boolean sharing) { this(code, sharing, null); }
-        public ShareState(String code, boolean sharing, String error) {
+        /// 溯源转发（2026-07-22）：true = 未修改的导入件在转发【原作者的】码——不是
+        /// 自有码，关闭只是停止转发，码本身不会失效。老服务端响应无此字段 → false。
+        public final boolean borrowed;
+        public ShareState(String code, boolean sharing) { this(code, sharing, null, false); }
+        public ShareState(String code, boolean sharing, String error) { this(code, sharing, error, false); }
+        public ShareState(String code, boolean sharing, String error, boolean borrowed) {
             this.code = code == null ? "" : code;
             this.sharing = sharing;
             this.error = error;
+            this.borrowed = borrowed;
         }
     }
 }

@@ -22,6 +22,23 @@ public final class SystemBarDefaults {
         applyInsets(view, baseLeft, baseTop, baseRight, baseBottom, true, false);
     }
 
+    /** Keeps controls below the status bar/cutout even while immersive mode hides the bars. */
+    public static void applyTopInsetsIgnoringVisibility(View view, int baseLeft, int baseTop,
+                                                        int baseRight, int baseBottom) {
+        if (view == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(view, (target, windowInsets) -> {
+            Insets safe = windowInsets.getInsetsIgnoringVisibility(
+                    WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.displayCutout());
+            target.setPadding(
+                    baseLeft + safe.left,
+                    baseTop + safe.top,
+                    baseRight + safe.right,
+                    baseBottom);
+            return windowInsets;
+        });
+        requestInsetsWhenAttached(view);
+    }
+
     /** Adds the live navigation-bar and display-cutout safe area to bottom-aligned content. */
     public static void applyBottomInsets(View view, int baseLeft, int baseTop, int baseRight, int baseBottom) {
         applyInsets(view, baseLeft, baseTop, baseRight, baseBottom, false, true);
@@ -117,14 +134,85 @@ public final class SystemBarDefaults {
         }
         flags |= lightSystemBarFlags(true);
         window.getDecorView().setSystemUiVisibility(flags);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+                window, window.getDecorView());
+        controller.setAppearanceLightStatusBars(true);
+        controller.setAppearanceLightNavigationBars(true);
         if (edgeToEdge) {
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
-                    window, window.getDecorView());
             controller.setSystemBarsBehavior(
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             controller.hide(WindowInsetsCompat.Type.navigationBars());
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars());
         }
         window.setBackgroundDrawableResource(android.R.color.transparent);
+        relayoutSystemBars(window);
+    }
+
+    /** Keeps content edge-to-edge while showing light-background system bars. */
+    public static void applyLightEdgeToEdgeVisible(Window window) {
+        if (window == null) return;
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        allowDisplayCutout(window);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(Color.TRANSPARENT);
+            window.setNavigationBarColor(Color.TRANSPARENT);
+        }
+        disableContrast(window);
+        int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | lightSystemBarFlags(true);
+        window.getDecorView().setSystemUiVisibility(flags);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+                window, window.getDecorView());
+        controller.setAppearanceLightStatusBars(true);
+        controller.setAppearanceLightNavigationBars(true);
+        controller.show(WindowInsetsCompat.Type.systemBars());
+        relayoutSystemBars(window);
+    }
+
+    /** Makes the in-app camera preview fully immersive across status and navigation bars. */
+    public static void applyCameraImmersive(Window window) {
+        if (window == null) return;
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        allowDisplayCutout(window);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(Color.TRANSPARENT);
+            window.setNavigationBarColor(Color.TRANSPARENT);
+        }
+        disableContrast(window);
+        int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        window.getDecorView().setSystemUiVisibility(flags);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+                window, window.getDecorView());
+        controller.setAppearanceLightStatusBars(false);
+        controller.setAppearanceLightNavigationBars(false);
+        controller.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        controller.hide(WindowInsetsCompat.Type.systemBars());
+        relayoutSystemBars(window);
+    }
+
+    private static void allowDisplayCutout(Window window) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
+        WindowManager.LayoutParams attributes = window.getAttributes();
+        attributes.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        window.setAttributes(attributes);
+    }
+
+    private static void relayoutSystemBars(Window window) {
+        ViewCompat.requestApplyInsets(window.getDecorView());
+        window.getDecorView().requestLayout();
     }
 
     public static void applyModal(Window window, int statusBarColor, int navigationBarColor, boolean lightNavigationBar) {

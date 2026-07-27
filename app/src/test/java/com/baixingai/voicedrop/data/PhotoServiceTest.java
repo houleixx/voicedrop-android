@@ -19,11 +19,9 @@ public class PhotoServiceTest {
         assertTrue(source.contains("Cache-Control"));
         assertTrue(source.contains("no-cache"));
         assertTrue(source.contains("Api.photoBase() + \"/photo/\""));
-        assertTrue(source.contains("Api.filesBase() + \"/photo/\""));
-        assertTrue(source.indexOf("Api.photoBase() + \"/photo/\"")
-                < source.indexOf("Api.filesBase() + \"/photo/\""));
         assertTrue(source.contains("/cdn-cgi/image/width=512,quality=60/files/api/photo/"));
         assertTrue(source.contains("Api.WS_HOST"));
+        assertTrue(source.contains("missingThumbs.add(cacheKey)"));
     }
 
     @Test
@@ -32,6 +30,26 @@ public class PhotoServiceTest {
 
         assertTrue(source.contains("PhotoService.image(fullKey, ignoringLocalCache)"));
         assertTrue(source.contains("photoImage(String fullKey, boolean ignoringLocalCache)"));
+        assertTrue(source.contains("public String ownerScope()"));
+        assertTrue(source.contains("synchronized (this)"));
+    }
+
+    @Test
+    public void diskCacheUsesRecentAccessAndTrimsAfterEveryNewPhoto() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/data/PhotoService.java");
+
+        assertTrue(source.contains("PhotoCachePolicy.shouldEvict(files.length, total)"));
+        assertTrue(source.contains("file.setLastModified(System.currentTimeMillis())"));
+        assertTrue(source.contains("trimDiskCache(target.getParentFile())"));
+    }
+
+    @Test
+    public void simultaneousRequestsForTheSamePhotoShareOneLoad() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/data/PhotoService.java");
+
+        assertTrue(source.contains("inFlight.putIfAbsent(loadKey, candidate)"));
+        assertTrue(source.contains("task.get()"));
+        assertTrue(source.contains("inFlight.remove(loadKey, task)"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

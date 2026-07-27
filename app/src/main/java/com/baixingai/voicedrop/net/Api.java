@@ -4,9 +4,11 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 
 public final class Api {
-    public static final String HOST = "jianshuo.dev";
-    /** Public immutable photo originals use the EdgeOne-backed domestic CDN. */
-    public static final String PHOTO_HOST = "voicedrop.cn";
+    /** HTTP APIs and public photos use the EdgeOne-backed domestic entry. */
+    public static final String HOST = "voicedrop.cn";
+    public static final String PHOTO_HOST = HOST;
+    /** EdgeOne WebSocket passthrough is not verified; keep the known-good direct host. */
+    public static final String WS_HOST = "jianshuo.dev";
 
     private Api() {}
 
@@ -27,7 +29,7 @@ public final class Api {
     }
 
     public static String agentWs() {
-        return "wss://" + HOST + "/agent";
+        return "wss://" + WS_HOST + "/agent";
     }
 
     public static String sharePage(String id) {

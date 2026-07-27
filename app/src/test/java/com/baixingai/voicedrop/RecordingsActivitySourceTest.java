@@ -333,6 +333,23 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void deletingARecordingRemovesOnlyItsExistingRowsWithoutReloadingOtherIcons() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String row = methodBody(source, "protected View recordingRow");
+        String remove = methodBody(source, "protected void removeRecordingFromHome");
+
+        assertTrue(row.contains("container.setTag(rec.audioName)"));
+        assertTrue(row.contains("confirmDeleteRecording(rec, () -> removeRecordingFromHome(rec))"));
+        assertFalse(row.contains("confirmDeleteRecording(rec, null)"));
+        assertTrue(remove.contains("recordingsListsByPage.values()"));
+        assertTrue(remove.contains("list.removeViewAt(i)"));
+        assertTrue(remove.contains("rec.audioName.equals(child.getTag())"));
+        assertFalse(remove.contains("refreshAndDrain()"));
+        assertFalse(remove.contains("refreshHomePages()"));
+        assertFalse(remove.contains("populateRecordingList("));
+    }
+
+    @Test
     public void universalShareLinksResolveThroughFilesApi() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
 
@@ -367,6 +384,23 @@ public class RecordingsActivitySourceTest {
         assertTrue(create.contains("if (prefs.classicRecorder())"));
         assertTrue(create.contains("new AudioRecorder(this)"));
         assertTrue(create.contains("new EngineRecorder(this)"));
+    }
+
+    @Test
+    public void recordingPhotoButtonUsesTheFullPickerAndKeepsPhotoUploadBeforeAudio() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String openCamera = methodBody(source, "protected void openCamera");
+        String result = methodBody(source, "protected void onActivityResult");
+        String upload = methodBody(source, "protected void uploadTake");
+
+        assertTrue(openCamera.contains("new Intent(this, InsertPhotoActivity.class)"));
+        assertFalse(openCamera.contains("resolveActivity"));
+        assertTrue(result.contains("InsertPhotoActivity.EXTRA_PHOTO_PATHS"));
+        assertTrue(result.contains("InsertPhotoActivity.EXTRA_CAPTURE_TIMES"));
+        assertTrue(result.contains("addRecordingPhotoPath"));
+        assertTrue(upload.indexOf("uploadCapturedPhotos(take.file.getName(), photos)") < upload.indexOf("uploader.upload(take.file)"));
+        assertTrue(upload.contains("if (!uploadCapturedPhotos(take.file.getName(), photos))"));
+        assertTrue(upload.contains("if (!uploader.upload(take.file))"));
     }
 
     @Test

@@ -50,6 +50,7 @@ import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.RecordingName;
+import com.baixingai.voicedrop.core.RecordingWaveform;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BlockStore;
@@ -62,6 +63,7 @@ import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
 import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.PendingReplyStore;
+import com.baixingai.voicedrop.data.PhotoMarkerRepairStore;
 import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.Prefs;
 import com.baixingai.voicedrop.data.PrivacyConsent;
@@ -71,6 +73,7 @@ import com.baixingai.voicedrop.data.SettingsStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
+import com.baixingai.voicedrop.net.ClientReliability;
 import com.baixingai.voicedrop.net.LibraryCommandSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
@@ -92,6 +95,7 @@ import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.time.ZonedDateTime;
@@ -116,9 +120,11 @@ public final class RecordingsActivity extends Activity {
     protected final ExecutorService metadataIo = Executors.newSingleThreadExecutor();
     protected int recordingMetadataGeneration;
     protected AuthStore auth;
+    protected String connectedBearer = "";
     protected Prefs prefs;
     protected HttpClient http;
     protected LibraryStore library;
+    protected PhotoMarkerRepairStore photoMarkerRepairs;
     protected CommunityStore community;
     protected PendingReplyStore pendingReplies;
     protected BlockStore blockStore;
@@ -248,10 +254,12 @@ public final class RecordingsActivity extends Activity {
         businessInitialized = true;
         ((VoiceDropApplication) getApplication()).activateConsentedServices();
         auth = new AuthStore(this);
+        connectedBearer = auth.bearer();
         PhotoService.configure(this);
         prefs = new Prefs(this);
         http = new HttpClient();
         library = new LibraryStore(auth, http);
+        photoMarkerRepairs = new PhotoMarkerRepairStore(this);
         community = new CommunityStore(auth, http);
         pendingReplies = new PendingReplyStore(this);
         blockStore = new BlockStore(this);
@@ -348,6 +356,7 @@ public final class RecordingsActivity extends Activity {
         super.onResume();
         activityResumed = true;
         if (!businessInitialized) return;
+        reconnectAccountSessionsIfNeeded();
         if (!isDetailActivity()) {
             if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
                 refreshAndDrain();
@@ -1011,8 +1020,37 @@ public final class RecordingsActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         if (!businessInitialized) return;
+        reconnectAccountSessionsIfNeeded();
         if (handleDeepLink(intent)) return;
         handleShareIntent(intent);
+    }
+
+    protected void reconnectAccountSessionsIfNeeded() {
+        String currentBearer = auth == null ? "" : auth.bearer();
+        if (!ClientReliability.accountIdentityChanged(connectedBearer, currentBearer)) return;
+        connectedBearer = currentBearer;
+        if (statusSession != null) {
+            statusSession.close();
+            statusSession.connect();
+        }
+        if (editSession != null) {
+            editSession.close();
+            editSession = null;
+        }
+        editQueue.clear();
+        commandQueue.clear();
+        recordings.clear();
+        pendingLibraryCommandConfirms.clear();
+        activeLibraryCommandConfirm = null;
+        if (libraryCommandConfirmDialog != null) {
+            libraryCommandConfirmDialog.dismiss();
+            libraryCommandConfirmDialog = null;
+        }
+        if (commandSession != null) {
+            commandSession.setRefs(currentCommandRefs());
+            commandSession.resetForAccountChange();
+        }
+        if (library != null) library.invalidateArticleCaches(new ArrayList<>());
     }
 
     protected boolean handleDeepLink(Intent intent) {
@@ -1200,6 +1238,7 @@ public final class RecordingsActivity extends Activity {
 
     protected boolean loadRecordingsAndPublishPendingReplies() throws Exception {
         recordings = library.load(uploader.pendingNames(), uploader.pendingTagsByName());
+        photoMarkerRepairs.repairReady(recordings, library);
         scheduleRecordingMetadataEnrichment(recordings);
         boolean tagsChanged = refreshHomeTagsFromRecordings();
         int published = pendingReplies.publishReadyReplies(recordings,
@@ -2061,6 +2100,7 @@ public final class RecordingsActivity extends Activity {
         container.setLayoutParams(containerLp);
         container.setClipChildren(false);
         container.setBackground(null);
+        container.setTag(rec.audioName);
 
         TextView deleteBtn = new TextView(this);
         deleteBtn.setText("删除");
@@ -2228,7 +2268,7 @@ public final class RecordingsActivity extends Activity {
 
         deleteBtn.setOnClickListener(v -> {
             row.animate().translationX(0).withEndAction(() -> openSwipeRows.remove(row)).setDuration(200).start();
-            confirmDeleteRecording(rec, null);
+            confirmDeleteRecording(rec, () -> removeRecordingFromHome(rec));
         });
 
         row.setOnClickListener(v -> {
@@ -2240,6 +2280,36 @@ public final class RecordingsActivity extends Activity {
         });
 
         return container;
+    }
+
+    protected void removeRecordingFromHome(Recording rec) {
+        if (rec == null || rec.audioName == null) return;
+        for (int i = recordings.size() - 1; i >= 0; i--) {
+            Recording item = recordings.get(i);
+            if (rec.audioName.equals(item.audioName)) recordings.remove(i);
+        }
+        for (LinearLayout list : recordingsListsByPage.values()) {
+            boolean removed = false;
+            for (int i = list.getChildCount() - 1; i >= 0; i--) {
+                View child = list.getChildAt(i);
+                if (rec.audioName.equals(child.getTag())) {
+                    list.removeViewAt(i);
+                    removed = true;
+                }
+            }
+            if (removed && list.getChildCount() == 0) {
+                String emptyText = "暂无录音";
+                for (Map.Entry<String, LinearLayout> entry : recordingsListsByPage.entrySet()) {
+                    if (entry.getValue() != list) continue;
+                    String configured = emptyListTextByPage.get(entry.getKey());
+                    if (configured != null) emptyText = configured;
+                    break;
+                }
+                TextView empty = text(emptyText, 16, Theme.SECONDARY, Typeface.NORMAL);
+                empty.setGravity(Gravity.CENTER);
+                list.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
+            }
+        }
     }
 
     protected TextView commandNumberBadge(int n) {
@@ -2428,8 +2498,7 @@ public final class RecordingsActivity extends Activity {
         long elapsed = recorder.elapsedSeconds();
         recordingTimerText.setText(String.format("%02d:%02d", elapsed / 60, elapsed % 60));
         int amp = recorder.sampleCurrentAmplitude();
-        // Normalize amplitude: MediaRecorder max is 32767
-        double level = amp / 32767.0;
+        double level = RecordingWaveform.visualLevel(amp);
         recordingWaveformHost.removeAllViews();
         recordingWaveformHost.addView(buildWaveform(level),
                 new FrameLayout.LayoutParams(-2, dp(46), Gravity.CENTER));
@@ -2458,7 +2527,7 @@ public final class RecordingsActivity extends Activity {
                 gap.setLayoutParams(new LinearLayout.LayoutParams(dp(3), 1));
                 row.addView(gap);
             }
-            double frac = pattern[i] * (0.22 + level * 0.95);
+            double frac = pattern[i] * RecordingWaveform.heightScale(level);
             // Clamp frac to 0..1
             frac = Math.max(0.0, Math.min(1.0, frac));
             int height = Math.max(dp(6), (int) (dp(46) * frac));
@@ -2487,7 +2556,7 @@ public final class RecordingsActivity extends Activity {
             CapturedPhoto photo = capturedPhotos.get(i);
             FrameLayout tile = new FrameLayout(this);
             tile.setBackground(round(Theme.CARD, 10));
-            ImageView image = new ImageView(this);
+            ImageView image = new RoundedImageView(this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setImageBitmap(photo.bitmap);
             tile.addView(image, match());
@@ -2751,12 +2820,20 @@ public final class RecordingsActivity extends Activity {
 
     protected void uploadTake(AudioRecorder.Take take, List<CapturedPhoto> photos) {
         io.execute(() -> {
-            uploadCapturedPhotos(photos);
+            if (!uploadCapturedPhotos(take.file.getName(), photos)) {
+                toast("照片暂未保存，录音已保留");
+                main.post(this::showHome);
+                return;
+            }
             if (defaultRecordTag != null && !defaultRecordTag.isEmpty()) {
                 Uploader.writeTagsSidecar(take.file, java.util.Collections.singletonList(defaultRecordTag));
                 defaultRecordTag = null;
             }
-            uploader.upload(take.file);
+            if (!uploader.upload(take.file)) {
+                toast("照片或录音等待续传");
+                main.post(this::showHome);
+                return;
+            }
             try {
                 loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
@@ -2778,16 +2855,10 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void openCamera() {
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.CAMERA}, 11);
-            return;
-        }
-        Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-        if (intent.resolveActivity(getPackageManager()) == null) {
-            toast("没有可用相机");
-            return;
-        }
-        startActivityForResult(intent, 20);
+        // Keep the primary recorder running while the same full-screen photo picker used
+        // by article editing handles camera permission, full-resolution capture, gallery
+        // multi-select, filmstrip preview, and deletion.
+        startActivityForResult(new Intent(this, InsertPhotoActivity.class), 20);
     }
 
     protected void pickRecordingPhotos() {
@@ -2798,6 +2869,20 @@ public final class RecordingsActivity extends Activity {
     }
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 20 && resultCode == RESULT_OK && data != null && recordingStart != null) {
+            ArrayList<String> paths = data.getStringArrayListExtra(InsertPhotoActivity.EXTRA_PHOTO_PATHS);
+            long[] captureTimes = data.getLongArrayExtra(InsertPhotoActivity.EXTRA_CAPTURE_TIMES);
+            if (paths != null) {
+                for (int i = 0; i < paths.size(); i++) {
+                    long capturedAt = captureTimes != null && i < captureTimes.length
+                            ? captureTimes[i] : System.currentTimeMillis();
+                    addRecordingPhotoPath(paths.get(i), capturedAt);
+                }
+            }
+            toast("已加入照片 " + capturedPhotos.size());
+            showRecording(false);
+            return;
+        }
         if (requestCode == 22 && resultCode == RESULT_OK && data != null && recordingStart != null) {
             if (data.getClipData() != null) {
                 for (int i = 0; i < data.getClipData().getItemCount(); i++) {
@@ -2810,17 +2895,26 @@ public final class RecordingsActivity extends Activity {
             showRecording(false);
             return;
         }
-        if (requestCode != 20 || resultCode != RESULT_OK || data == null || recordingStart == null) return;
-        Object extra = data.getExtras() == null ? null : data.getExtras().get("data");
-        if (!(extra instanceof Bitmap)) return;
-        Bitmap bitmap = (Bitmap) extra;
-        byte[] bytes = ArticlePhotoInsert.squareJpeg(bitmap, 1080, 86);
-        if (bytes == null) return;
-        long offset = Math.max(0, java.time.Duration.between(recordingStart, java.time.ZonedDateTime.now()).getSeconds());
-        String key = RecordingName.photoKey(RecordingName.timestamp(recordingStart), (int) offset);
-        capturedPhotos.add(new CapturedPhoto(key, bytes, bitmap));
-        toast("已加入照片 " + capturedPhotos.size());
-        showRecording(false);
+    }
+
+    protected void addRecordingPhotoPath(String path, long capturedAtMillis) {
+        if (recordingStart == null || path == null || path.isEmpty()) return;
+        File source = new File(path);
+        try (InputStream in = new FileInputStream(source)) {
+            byte[] bytes = HttpClient.readAll(in);
+            Bitmap bitmap = ArticlePhotoInsert.decodeSampledBitmap(bytes, 1200);
+            if (bitmap == null) throw new IllegalStateException("无法解码图片");
+            long startMillis = recordingStart.toInstant().toEpochMilli();
+            long offset = Math.max(0, (capturedAtMillis - startMillis) / 1000);
+            String key = RecordingName.photoKey(RecordingName.timestamp(recordingStart), (int) offset);
+            capturedPhotos.add(new CapturedPhoto(key, bytes, bitmap));
+        } catch (Exception e) {
+            toast("照片读取失败：" + e.getMessage());
+        } finally {
+            // InsertPhotoActivity returns app-owned cache files, not user gallery files.
+            // CapturedPhoto now owns the JPEG bytes, so the picker cache can be released.
+            source.delete();
+        }
     }
 
     protected void addRecordingPhoto(android.net.Uri uri) {
@@ -2842,15 +2936,15 @@ public final class RecordingsActivity extends Activity {
         }
     }
 
-    protected void uploadCapturedPhotos(List<CapturedPhoto> photos) {
+    protected boolean uploadCapturedPhotos(String recordingName, List<CapturedPhoto> photos) {
+        java.util.Map<String, byte[]> staged = new java.util.LinkedHashMap<>();
+        List<String> photoKeys = new ArrayList<>();
         for (CapturedPhoto photo : photos) {
-            try {
-                http.putBytes(com.baixingai.voicedrop.net.Api.filesBase() + "/upload/" + com.baixingai.voicedrop.net.Api.path(photo.key),
-                        auth.bearer(), "image/jpeg", photo.bytes);
-            } catch (Exception e) {
-                toast("照片上传失败：" + e.getMessage());
-            }
+            staged.put(photo.key, photo.bytes);
+            photoKeys.add(photo.key);
         }
+        if (!uploader.stagePhotos(staged)) return false;
+        return photoKeys.isEmpty() || photoMarkerRepairs.remember(recordingName, photoKeys);
     }
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);

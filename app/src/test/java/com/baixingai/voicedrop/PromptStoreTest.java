@@ -18,11 +18,18 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class PromptStoreTest {
+    @Test
+    public void promptCacheKeysAreIsolatedByAccount() {
+        assertFalse(PromptStore.cacheKeyFor("anon_first").equals(PromptStore.cacheKeyFor("anon_second")));
+        assertEquals(PromptStore.cacheKeyFor("anon_first"), PromptStore.cacheKeyFor("anon_first"));
+    }
+
     private static final String RESOLVED = "{\"schema\":1,\"items\":[{\"id\":\"sys_concise\",\"type\":\"action\",\"label\":\"精简\",\"origin\":\"system\",\"prompt\":\"P\",\"appliesTo\":[\"text\"]}]}";
     private static final String IMPORTED_GROUPED = "{\"schema\":1,\"items\":[{\"id\":\"g_shared\",\"type\":\"group\",\"label\":\"共享组\",\"origin\":\"user\",\"children\":[{\"id\":\"p_12345678\",\"type\":\"action\",\"label\":\"共享\",\"origin\":\"user\",\"prompt\":\"P\",\"appliesTo\":[\"text\"],\"importedFrom\":\"1234567\"}]}]}";
     private FakeTransport transport;

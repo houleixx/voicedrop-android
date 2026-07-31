@@ -51,12 +51,15 @@ public final class AudioRecorder implements RecordingBackend {
         recorder.release();
         recorder = null;
         double duration = Math.max(0, (System.currentTimeMillis() - startedAtMs) / 1000.0);
-        String finalName = RecordingName.make(start, duration, place);
-        File finalFile = new File(documentsDir(context), finalName);
-        if (!currentFile.renameTo(finalFile)) {
-            finalFile = currentFile;
+        File takeFile = currentFile;
+        // Keep too-short takes under the staging prefix so a failed best-effort delete
+        // can never make Uploader.drainPending() treat them as uploadable recordings.
+        if (!RecordingQuality.isTooShort(duration)) {
+            String finalName = RecordingName.make(start, duration, place);
+            File finalFile = new File(documentsDir(context), finalName);
+            if (currentFile.renameTo(finalFile)) takeFile = finalFile;
         }
-        Take take = new Take(finalFile, start, duration, peakAmplitude);
+        Take take = new Take(takeFile, start, duration, peakAmplitude);
         currentFile = null;
         start = null;
         peakAmplitude = 0;

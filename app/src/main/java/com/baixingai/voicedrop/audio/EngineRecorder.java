@@ -92,12 +92,15 @@ public final class EngineRecorder implements RecordingBackend {
             resetTakeState();
             return null;
         }
-        String finalName = RecordingName.make(start, duration, place);
-        File finalFile = new File(AudioRecorder.documentsDir(context), finalName);
-        if (!currentFile.renameTo(finalFile)) {
-            finalFile = currentFile;
+        File takeFile = currentFile;
+        // A too-short file remains a non-uploadable staging file until the caller
+        // deletes it, preventing a failed delete from leaking into pending uploads.
+        if (!RecordingQuality.isTooShort(duration)) {
+            String finalName = RecordingName.make(start, duration, place);
+            File finalFile = new File(AudioRecorder.documentsDir(context), finalName);
+            if (currentFile.renameTo(finalFile)) takeFile = finalFile;
         }
-        AudioRecorder.Take take = new AudioRecorder.Take(finalFile, start, duration, peakAmplitude);
+        AudioRecorder.Take take = new AudioRecorder.Take(takeFile, start, duration, peakAmplitude);
         resetTakeState();
         return take;
     }

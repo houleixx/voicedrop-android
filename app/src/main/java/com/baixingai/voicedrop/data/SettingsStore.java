@@ -3,12 +3,9 @@ package com.baixingai.voicedrop.data;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 
 public final class SettingsStore {
     private final AuthStore auth;
@@ -23,10 +20,7 @@ public final class SettingsStore {
         HttpClient.Response response = http.get(Api.filesBase() + "/style", auth.bearer());
         if (!response.ok()) throw new IllegalStateException("style HTTP " + response.code);
         JSONObject obj = new JSONObject(response.text());
-        List<Integer> styles = new ArrayList<>();
-        JSONArray arr = obj.optJSONArray("styles");
-        if (arr != null) for (int i = 0; i < arr.length(); i++) styles.add(arr.optInt(i));
-        return new Style(obj.optString("style", ""), obj.optString("name", ""), styles);
+        return new Style(obj.optString("style", ""), obj.optString("name", ""));
     }
 
     public void saveStyle(String style) throws Exception {
@@ -54,18 +48,6 @@ public final class SettingsStore {
         JSONObject body = new JSONObject().put("head", head);
         HttpClient.Response response = http.patchJson(Api.filesBase() + "/style/head", auth.bearer(), body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("style head HTTP " + response.code);
-    }
-
-    public void saveStyleSelection(List<Integer> styles) throws Exception {
-        JSONObject body = styleSelectionBody(styles);
-        HttpClient.Response response = http.putBytes(Api.filesBase() + "/style", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
-        if (!response.ok()) throw new IllegalStateException("style selection HTTP " + response.code);
-    }
-
-    public static JSONObject styleSelectionBody(List<Integer> styles) throws Exception {
-        JSONArray arr = new JSONArray();
-        if (styles != null) for (Integer style : styles) arr.put(style);
-        return new JSONObject().put("styles", arr);
     }
 
     public JSONObject loadWechat() throws Exception {
@@ -155,12 +137,10 @@ public final class SettingsStore {
     public static final class Style {
         public final String style;
         public final String name;
-        public final List<Integer> selectedStyles;
 
-        Style(String style, String name, List<Integer> selectedStyles) {
+        Style(String style, String name) {
             this.style = style;
             this.name = name == null ? "" : name;
-            this.selectedStyles = selectedStyles;
         }
     }
 }

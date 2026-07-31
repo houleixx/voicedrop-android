@@ -26,14 +26,14 @@ public class SettingsActivitySourceTest {
     }
 
     @Test
-    public void writingStyleSheetExposesMultiStyleSelection() throws Exception {
+    public void writingStyleSheetUsesSingleStyleSelection() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
 
-        assertTrue(source.contains("多风格对比"));
         assertTrue(source.contains("settingsStore.loadStyleHistory()"));
-        assertTrue(source.contains("settingsStore.saveStyleSelection(snapshot)"));
-        assertTrue(source.contains("最多选择 3 个风格版本"));
-        assertTrue(source.contains("selectedStyles.clear()"));
+        assertFalse(source.contains("多风格对比"));
+        assertFalse(source.contains("saveStyleSelection"));
+        assertFalse(source.contains("selectedStyles"));
+        assertFalse(source.contains("最多选择 3 个风格版本"));
         assertTrue(source.contains("IosDialog.showBottomSheet(this, \"写作风格\", form, 560"));
         assertTrue(source.contains("FrameLayout editorFrame = new FrameLayout(this)"));
         assertTrue(source.contains("frameLp.setMargins(0, dp(12), 0, 0)"));
@@ -51,9 +51,8 @@ public class SettingsActivitySourceTest {
         assertFalse(source.contains("if (selected) rowLp.setMargins"));
         assertTrue(source.contains("R.drawable.ic_chevron_up_flat"));
         assertTrue(source.contains("R.drawable.ic_chevron_down_flat"));
-        assertTrue(source.contains("R.drawable.ic_checkbox_checked_flat"));
-        assertTrue(source.contains("R.drawable.ic_checkbox_unchecked_flat"));
-        assertTrue(source.contains("new LinearLayout.LayoutParams(dp(28), dp(28))"));
+        assertFalse(source.contains("R.drawable.ic_checkbox_checked_flat"));
+        assertFalse(source.contains("R.drawable.ic_checkbox_unchecked_flat"));
         assertTrue(source.contains("R.drawable.ic_check_flat"));
         assertFalse(source.contains("☑"));
         assertFalse(source.contains("☐"));

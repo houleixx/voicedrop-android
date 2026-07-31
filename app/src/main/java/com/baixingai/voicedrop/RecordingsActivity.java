@@ -2668,7 +2668,9 @@ public final class RecordingsActivity extends Activity {
         clearHomePagerRefs();
         showHome();
         if (take != null) {
-            if (RecordingQuality.looksSilent(take.peakAmplitude, take.duration)) {
+            if (RecordingQuality.discardIfTooShort(take)) {
+                showTooShortRecordingMessage();
+            } else if (RecordingQuality.looksSilent(take.peakAmplitude, take.duration)) {
                 confirmSilentRecording(take, photos);
             } else {
                 uploadTake(take, photos);
@@ -2816,12 +2818,18 @@ public final class RecordingsActivity extends Activity {
 
         // Handle the stopped recording — do NOT defer, upload immediately
         if (take != null) {
-            if (RecordingQuality.looksSilent(take.peakAmplitude, take.duration)) {
+            if (RecordingQuality.discardIfTooShort(take)) {
+                showTooShortRecordingMessage();
+            } else if (RecordingQuality.looksSilent(take.peakAmplitude, take.duration)) {
                 confirmSilentRecording(take, photos);
             } else {
                 uploadTake(take, photos);
             }
         }
+    }
+
+    protected void showTooShortRecordingMessage() {
+        IosDialog.show(this, "录音太短", "时间太短，不足以产生文章，这条录音不会上传。");
     }
 
     protected void confirmSilentRecording(AudioRecorder.Take take, List<CapturedPhoto> photos) {
@@ -2841,6 +2849,10 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void uploadTake(AudioRecorder.Take take, List<CapturedPhoto> photos) {
+        if (RecordingQuality.discardIfTooShort(take)) {
+            showTooShortRecordingMessage();
+            return;
+        }
         io.execute(() -> {
             if (!uploadCapturedPhotos(take.file.getName(), photos)) {
                 toast("照片暂未保存，录音已保留");

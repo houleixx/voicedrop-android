@@ -21,7 +21,9 @@ public class IosSwitchSourceTest {
         assertFalse(settings.contains("new Switch("));
         assertFalse(wechat.contains("new Switch("));
         assertTrue(settings.contains("new IosSwitch(this)"));
-        assertTrue(wechat.contains("new IosSwitch(this)"));
+        // The third-party authorization page no longer exposes a credential
+        // configuration switch. It must not regress to Android's native switch.
+        assertFalse(wechat.contains("new Switch("));
     }
 
     @Test

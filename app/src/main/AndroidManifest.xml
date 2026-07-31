@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".VoiceDropApplication"
@@ -116,6 +119,10 @@
             android:theme="@style/AppTheme" />
         <activity
             android:name=".WechatSettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".WechatAuthorizationActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity

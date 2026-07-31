@@ -11,16 +11,21 @@ import static org.junit.Assert.*;
 
 public class WechatSettingsActivitySourceTest {
     @Test
-    public void credentialHelpUsesProvidedIconsAndOfficialConsoleFlow() throws Exception {
+    public void officialAccountPageUsesThirdPartyAuthorizationInsteadOfCollectingSecrets() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/WechatSettingsActivity.java");
 
-        assertTrue(source.contains("R.drawable.ic_wechat_help_compass"));
-        assertTrue(source.contains("R.drawable.ic_arrow_up_right_flat"));
-        assertTrue(source.contains("https://developers.weixin.qq.com/console/"));
-        assertTrue(source.contains("扫一扫 → 右上角相册"));
-        assertTrue(source.contains("IP 白名单"));
-        assertFalse(source.contains("⊘ 去哪里找 AppID / AppSecret?  ↗"));
-        assertFalse(source.contains("Get_access_token.html"));
+        assertTrue(source.contains("Api.filesBase() + \"/wechat/bind-status\""));
+        assertTrue(source.contains("new AuthStore(this).bearer()"));
+        assertTrue(source.contains("/wechat/unbind"));
+        assertFalse(source.contains("wechat.voicedrop.cn"));
+        assertFalse(source.contains("bind_status?user"));
+        assertTrue(source.contains("未连接微信公众号"));
+        assertTrue(source.contains("取消连接"));
+        assertTrue(source.contains("connectionContent.setVisibility(LinearLayout.INVISIBLE)"));
+        assertTrue(source.contains("R.drawable.ic_check_flat"));
+        assertTrue(source.contains("WechatAuthorizationActivity.class"));
+        assertFalse(source.contains("AppSecret"));
+        assertFalse(source.contains("IP 白名单"));
     }
 
     @Test

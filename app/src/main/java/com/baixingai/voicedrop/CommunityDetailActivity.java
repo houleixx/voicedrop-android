@@ -1527,6 +1527,11 @@ public final class CommunityDetailActivity extends Activity {
         recordingStart = null;
 
         if (take != null) {
+            if (RecordingQuality.discardIfTooShort(take)) {
+                showCommunityDetailFromIntent();
+                SimpleToast.show(this, "时间太短，不足以产生文章");
+                return;
+            }
             if (replyId != null) pendingReplies.put(take.file.getName(), replyId);
             io.execute(() -> {
                 uploadCapturedPhotos(photos);

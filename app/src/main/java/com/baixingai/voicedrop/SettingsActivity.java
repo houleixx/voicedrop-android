@@ -723,14 +723,12 @@ public class SettingsActivity extends Activity {
         styleOverlay.setClipChildren(false);
         editorFrame.addView(styleOverlay, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
 
-        final List<Integer> selectedStyles = new ArrayList<>();
         final JSONArray[] versionsRef = {new JSONArray()};
-        final boolean[] compareOn = {false};
         final boolean[] listOpen = {true};
         final boolean[] styleLoading = {true};
         final int[] selectedHead = {-1};
         final String[] selectedHeadStyle = {""};
-        buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
+        buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
         io.execute(() -> {
             try {
                 SettingsStore.Style style = settingsStore.loadStyle();
@@ -738,20 +736,17 @@ public class SettingsActivity extends Activity {
                 runOnUiThread(() -> {
                     styleLoading[0] = false;
                     input.setText(style.style);
-                    selectedStyles.clear();
-                    selectedStyles.addAll(style.selectedStyles);
                     JSONArray versions = history.optJSONArray("versions");
                     versionsRef[0] = versions == null ? new JSONArray() : versions;
-                    compareOn[0] = !selectedStyles.isEmpty();
                     selectedHead[0] = history.optInt("head", newestStyleVersion(versionsRef[0]));
                     JSONObject current = findStyleVersion(versionsRef[0], selectedHead[0]);
                     selectedHeadStyle[0] = current == null ? style.style : current.optString("style", style.style);
-                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
+                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     styleLoading[0] = false;
-                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
+                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
                     toast("写作风格加载失败：" + e.getMessage());
                 });
             }
@@ -834,25 +829,25 @@ public class SettingsActivity extends Activity {
         });
     }
 
-    private void buildStyleVersionPanel(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions, List<Integer> selectedStyles,
-                                        boolean[] compareOn, boolean[] listOpen, boolean[] styleLoading, int[] selectedHead, String[] selectedHeadStyle,
+    private void buildStyleVersionPanel(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions,
+                                        boolean[] listOpen, boolean[] styleLoading, int[] selectedHead, String[] selectedHeadStyle,
                                         android.widget.EditText input) {
         barBox.removeAllViews();
-        View modeBar = styleModeBar(versions, selectedStyles, compareOn[0], listOpen[0], selectedHead[0]);
+        View modeBar = styleModeBar(versions, listOpen[0], selectedHead[0]);
         modeBar.setOnClickListener(v -> {
             listOpen[0] = !listOpen[0];
-            buildStyleVersionPanel(barBox, overlayBox, versions, selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
+            buildStyleVersionPanel(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
         });
         barBox.addView(modeBar, new LinearLayout.LayoutParams(-1, dp(52)));
 
         overlayBox.removeAllViews();
         overlayBox.setVisibility(listOpen[0] ? View.VISIBLE : View.GONE);
         if (listOpen[0]) {
-            overlayBox.addView(styleVersionCard(barBox, overlayBox, versions, selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input), new LinearLayout.LayoutParams(-1, -2));
+            overlayBox.addView(styleVersionCard(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input), new LinearLayout.LayoutParams(-1, -2));
         }
     }
 
-    private View styleModeBar(JSONArray versions, List<Integer> selectedStyles, boolean compareOn, boolean listOpen, int selectedHead) {
+    private View styleModeBar(JSONArray versions, boolean listOpen, int selectedHead) {
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(12), 0, dp(12), 0);
@@ -860,26 +855,23 @@ public class SettingsActivity extends Activity {
         bg.setStroke(dp(1), 0xffb9b0a6);
         bar.setBackground(bg);
 
-        bar.addView(styleModePill(compareOn, listOpen, selectedHead),
-                new LinearLayout.LayoutParams(compareOn ? dp(96) : dp(88), dp(36)));
+        bar.addView(styleModePill(listOpen, selectedHead), new LinearLayout.LayoutParams(dp(88), dp(36)));
 
-        String title = compareOn
-                ? (selectedStyles.isEmpty() ? "未选版本" : selectedStyleLabel(selectedStyles))
-                : styleVersionName(findStyleVersion(versions, selectedHead));
-        TextView label = text(title == null || title.isEmpty() ? "当前风格" : title, 15, compareOn ? Theme.SECONDARY : Theme.INK, Typeface.BOLD);
+        String title = styleVersionName(findStyleVersion(versions, selectedHead));
+        TextView label = text(title == null || title.isEmpty() ? "当前风格" : title, 15, Theme.INK, Typeface.BOLD);
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(0, -2, 1);
         labelLp.setMargins(dp(12), 0, dp(8), 0);
         bar.addView(label, labelLp);
 
-        TextView count = text(compareOn ? selectedStyles.size() + " / 3" : "共 " + Math.max(0, versions == null ? 0 : versions.length()) + " 版",
+        TextView count = text("共 " + Math.max(0, versions == null ? 0 : versions.length()) + " 版",
                 15, Theme.FAINT, Typeface.BOLD);
         bar.addView(count);
         return bar;
     }
 
-    private View styleVersionCard(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions, List<Integer> selectedStyles, boolean[] compareOn, boolean[] listOpen,
+    private View styleVersionCard(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions, boolean[] listOpen,
                                   boolean[] styleLoading,
                                   int[] selectedHead, String[] selectedHeadStyle, android.widget.EditText input) {
         LinearLayout card = new LinearLayout(this);
@@ -887,35 +879,6 @@ public class SettingsActivity extends Activity {
         card.setBackground(round(Theme.CARD, 10));
         card.setElevation(dp(8));
         card.setTranslationZ(dp(8));
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(14), dp(10), dp(12), dp(10));
-
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.addView(text("多风格对比", 14, Theme.INK, Typeface.BOLD));
-        TextView sub = text("勾选 2-3 个版本，成文时各生成一篇并排挑", 12, Theme.FAINT, Typeface.NORMAL);
-        sub.setPadding(0, dp(2), 0, 0);
-        copy.addView(sub);
-        header.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-
-        IosSwitch toggle = new IosSwitch(this);
-        toggle.setChecked(compareOn[0]);
-        header.addView(toggle);
-        card.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        toggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            compareOn[0] = isChecked;
-            if (!isChecked) {
-                selectedStyles.clear();
-                saveStyleSelectionSnapshot(selectedStyles);
-            }
-            buildStyleVersionPanel(barBox, overlayBox, versions, selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-        });
-
-        View divider = new View(this);
-        divider.setBackgroundColor(0xffeee7dd);
-        card.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
 
         if (styleLoading[0]) {
             LoadingStateView loading = new LoadingStateView(this, "正在加载写作风格...");
@@ -925,7 +888,7 @@ public class SettingsActivity extends Activity {
         }
 
         if (versions == null || versions.length() == 0) {
-            TextView empty = text("暂无可选风格版本。先保存几个写作风格版本后再开启。", 12, Theme.FAINT, Typeface.NORMAL);
+            TextView empty = text("暂无可选风格版本。先保存一份写作风格。", 12, Theme.FAINT, Typeface.NORMAL);
             empty.setPadding(dp(12), dp(10), dp(12), 0);
             card.addView(empty);
             return card;
@@ -940,26 +903,15 @@ public class SettingsActivity extends Activity {
             JSONObject item = versions.optJSONObject(i);
             if (item == null) continue;
             int version = item.optInt("v", i);
-            boolean selected = compareOn[0] ? selectedStyles.contains(version) : version == selectedHead[0];
-            LinearLayout row = styleVersionRow(item, version, selected, compareOn[0]);
+            boolean selected = version == selectedHead[0];
+            LinearLayout row = styleVersionRow(item, version, selected);
             row.setOnClickListener(v -> {
-                if (compareOn[0]) {
-                    if (selectedStyles.contains(version)) {
-                        selectedStyles.remove(Integer.valueOf(version));
-                    } else if (selectedStyles.size() < 3) {
-                        selectedStyles.add(version);
-                    } else {
-                        toast("最多选择 3 个风格版本");
-                        return;
-                    }
-                    saveStyleSelectionSnapshot(selectedStyles);
-                } else {
-                    selectedHead[0] = version;
-                    selectedHeadStyle[0] = item.optString("style", "");
-                    input.setText(selectedHeadStyle[0]);
-                    input.setSelection(input.getText().length());
-                }
-                buildStyleVersionPanel(barBox, overlayBox, versions, selectedStyles, compareOn, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
+                selectedHead[0] = version;
+                selectedHeadStyle[0] = item.optString("style", "");
+                input.setText(selectedHeadStyle[0]);
+                input.setSelection(input.getText().length());
+                listOpen[0] = false;
+                buildStyleVersionPanel(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
             });
             LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, dp(56));
             rowLp.setMargins(dp(8), rowIndex == 0 ? dp(8) : dp(2),
@@ -968,38 +920,16 @@ public class SettingsActivity extends Activity {
             rowIndex++;
         }
 
-        if (compareOn[0]) {
-            View bottomDivider = new View(this);
-            bottomDivider.setBackgroundColor(0xffeee7dd);
-            card.addView(bottomDivider, new LinearLayout.LayoutParams(-1, dp(1)));
-            String footer = selectedStyles.isEmpty()
-                    ? "勾选 2-3 个版本。"
-                    : "将分别用 " + selectedStyleLabel(selectedStyles) + " 生成文章。";
-            TextView note = text(footer + " 关闭开关会清空多风格选择。", 12, Theme.FAINT, Typeface.NORMAL);
-            note.setPadding(dp(14), dp(10), dp(14), dp(10));
-            card.addView(note);
-        }
         return card;
     }
 
-    private String selectedStyleLabel(List<Integer> selectedStyles) {
-        List<Integer> copy = new ArrayList<>(selectedStyles);
-        java.util.Collections.sort(copy, java.util.Collections.reverseOrder());
-        StringBuilder out = new StringBuilder();
-        for (Integer version : copy) {
-            if (out.length() > 0) out.append("、");
-            out.append("v").append(version);
-        }
-        return out.toString();
-    }
-
-    private View styleModePill(boolean compareOn, boolean listOpen, int selectedHead) {
+    private View styleModePill(boolean listOpen, int selectedHead) {
         LinearLayout pill = new LinearLayout(this);
         pill.setGravity(Gravity.CENTER);
         pill.setPadding(dp(10), 0, dp(8), 0);
         pill.setBackground(round(Theme.ACCENT, 7));
 
-        TextView label = text(compareOn ? "对比" : "v" + Math.max(0, selectedHead), 14, 0xffffffff, Typeface.BOLD);
+        TextView label = text("v" + Math.max(0, selectedHead), 14, 0xffffffff, Typeface.BOLD);
         pill.addView(label);
 
         ImageView arrow = new ImageView(this);
@@ -1010,7 +940,7 @@ public class SettingsActivity extends Activity {
         return pill;
     }
 
-    private LinearLayout styleVersionRow(JSONObject item, int version, boolean selected, boolean compareOn) {
+    private LinearLayout styleVersionRow(JSONObject item, int version, boolean selected) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(14), dp(10), dp(12), dp(10));
@@ -1035,14 +965,9 @@ public class SettingsActivity extends Activity {
         row.addView(meta, metaLp);
 
         ImageView state = new ImageView(this);
-        if (compareOn) {
-            state.setImageResource(selected ? R.drawable.ic_checkbox_checked_flat : R.drawable.ic_checkbox_unchecked_flat);
-            row.addView(state, new LinearLayout.LayoutParams(dp(28), dp(28)));
-        } else {
-            state.setImageResource(R.drawable.ic_check_flat);
-            state.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
-            row.addView(state, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        }
+        state.setImageResource(R.drawable.ic_check_flat);
+        state.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+        row.addView(state, new LinearLayout.LayoutParams(dp(24), dp(24)));
         return row;
     }
 
@@ -1071,18 +996,6 @@ public class SettingsActivity extends Activity {
         String first = lines.length == 0 ? "" : lines[0].trim();
         if (first.length() > 12) return first.substring(0, 12) + "…";
         return first;
-    }
-
-    private void saveStyleSelectionSnapshot(List<Integer> selectedStyles) {
-        List<Integer> snapshot = new ArrayList<>(selectedStyles);
-        io.execute(() -> {
-            try {
-                settingsStore.saveStyleSelection(snapshot);
-                toast(snapshot.isEmpty() ? "已关闭多风格对比" : "多风格选择已保存");
-            } catch (Exception e) {
-                toast("多风格保存失败：" + e.getMessage());
-            }
-        });
     }
 
     private void exportAllData() {

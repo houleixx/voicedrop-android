@@ -1,62 +1,59 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
-import com.baixingai.voicedrop.data.SettingsStore;
+import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
-import com.baixingai.voicedrop.ui.IosSwitch;
-import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
+import com.baixingai.voicedrop.ui.Theme;
 
 import org.json.JSONObject;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/** Connects a VoiceDrop data space to a WeChat Official Account. */
 public class WechatSettingsActivity extends Activity {
-    private SettingsStore settingsStore;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private LinearLayout connectionContent;
+    private FrameLayout iconSlot;
+    private TextView stateIcon;
+    private ImageView successIcon;
+    private TextView status;
+    private TextView detail;
+    private TextView primary;
+    private LinearLayout accountCard;
+    private TextView accountName;
+    private TextView accountMeta;
+    private TextView note;
+    private boolean connected;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        AuthStore auth = new AuthStore(this);
-        HttpClient http = new HttpClient();
-        settingsStore = new SettingsStore(auth, http);
-
-        configureEdgeToEdge();
+        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
 
         FrameLayout root = new FrameLayout(this);
-        root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
-        configureEdgeToEdge();
-
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(Theme.BG);
         root.addView(page, new FrameLayout.LayoutParams(-1, -1));
 
         FrameLayout top = new FrameLayout(this);
         SystemBarDefaults.applyTopInsets(top, dp(12), dp(8), dp(16), dp(8));
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
-
         FrameLayout backTouch = new FrameLayout(this);
         backTouch.setClickable(true);
         FrameLayout back = new FrameLayout(this);
@@ -73,248 +70,157 @@ public class WechatSettingsActivity extends Activity {
         backTouch.addView(back, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
         backTouch.setOnClickListener(v -> finishWithPageTransition());
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
-
         TextView title = text("微信公众号", 22, Theme.INK, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         top.addView(title, new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER));
 
         BouncyScrollView scroll = new BouncyScrollView(this);
-        scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        SystemBarDefaults.applyBottomInsets(content, dp(20), dp(6), dp(20), dp(28));
+        SystemBarDefaults.applyBottomInsets(content, dp(20), dp(22), dp(20), dp(28));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        buildWechatForm(content);
-    }
+        connectionContent = new LinearLayout(this);
+        connectionContent.setOrientation(LinearLayout.VERTICAL);
+        connectionContent.setVisibility(LinearLayout.INVISIBLE);
+        content.addView(connectionContent, new LinearLayout.LayoutParams(-1, -2));
 
-    @Override public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) configureEdgeToEdge();
-    }
+        iconSlot = new FrameLayout(this);
+        connectionContent.addView(iconSlot, new LinearLayout.LayoutParams(-1, dp(62)));
+        stateIcon = text("✈", 42, Theme.ACCENT, Typeface.NORMAL);
+        stateIcon.setGravity(Gravity.CENTER);
+        iconSlot.addView(stateIcon, new FrameLayout.LayoutParams(-1, -1));
+        successIcon = new ImageView(this);
+        successIcon.setImageResource(R.drawable.ic_check_flat);
+        successIcon.setColorFilter(0xffffffff);
+        successIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        successIcon.setPadding(dp(12), dp(12), dp(12), dp(12));
+        successIcon.setBackground(round(Theme.GREEN, 28));
+        iconSlot.addView(successIcon, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
+        successIcon.setVisibility(ImageView.GONE);
+        status = text("正在检查绑定状态…", 22, Theme.INK, Typeface.BOLD);
+        status.setGravity(Gravity.CENTER);
+        connectionContent.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        detail = text("连接后，VoiceDrop 可以将文章保存到你的公众号草稿箱。不会自动群发。", 15, Theme.SECONDARY, Typeface.NORMAL);
+        detail.setGravity(Gravity.CENTER);
+        detail.setLineSpacing(dp(4), 1f);
+        LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, -2);
+        detailLp.setMargins(dp(18), dp(10), dp(18), dp(28));
+        connectionContent.addView(detail, detailLp);
 
-    @Override public void onBackPressed() {
-        finishWithPageTransition();
-    }
+        accountCard = new LinearLayout(this);
+        accountCard.setOrientation(LinearLayout.VERTICAL);
+        accountCard.setBackground(strokedRound(0xfff1f7f2, 14, 0xffd3e4d7));
+        accountCard.setPadding(dp(18), dp(14), dp(18), dp(14));
+        TextView accountLabel = text("已授权账号", 12, Theme.GREEN, Typeface.BOLD);
+        accountCard.addView(accountLabel, new LinearLayout.LayoutParams(-1, -2));
+        accountName = text("", 18, Theme.INK, Typeface.BOLD);
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(-1, -2);
+        nameLp.topMargin = dp(4);
+        accountCard.addView(accountName, nameLp);
+        accountMeta = text("草稿箱已就绪 · VoiceDrop 不会自动群发", 13, Theme.SECONDARY, Typeface.NORMAL);
+        LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(-1, -2);
+        metaLp.topMargin = dp(5);
+        accountCard.addView(accountMeta, metaLp);
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+        cardLp.setMargins(dp(12), dp(-10), dp(12), dp(24));
+        connectionContent.addView(accountCard, cardLp);
+        accountCard.setVisibility(LinearLayout.GONE);
 
-    private void buildWechatForm(LinearLayout content) {
-        LinearLayout intro = new LinearLayout(this);
-        intro.setGravity(Gravity.CENTER_VERTICAL);
-        intro.setPadding(dp(16), 0, dp(16), 0);
-        intro.setBackground(strokedRound(Theme.CARD, 9, 0xffe5ded2));
-        TextView paper = text("✈", 26, Theme.SECONDARY, Typeface.NORMAL);
-        intro.addView(paper, new LinearLayout.LayoutParams(dp(34), -2));
-        intro.addView(text("填入公众号 AppID / AppSecret 即可连接。", 15, Theme.SECONDARY, Typeface.NORMAL),
-                new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout.LayoutParams introLp = new LinearLayout.LayoutParams(-1, dp(50));
-        introLp.setMargins(0, 0, 0, dp(24));
-        content.addView(intro, introLp);
+        primary = text("连接微信公众号", 18, 0xffffffff, Typeface.BOLD);
+        primary.setGravity(Gravity.CENTER);
+        primary.setBackground(round(0xffdf5d49, 10));
+        primary.setOnClickListener(v -> { if (connected) disconnect(); else openAuthorization(); });
+        LinearLayout.LayoutParams primaryLp = new LinearLayout.LayoutParams(-1, dp(56));
+        primaryLp.setMargins(dp(12), 0, dp(12), 0);
+        connectionContent.addView(primary, primaryLp);
 
-        LinearLayout autoRow = new LinearLayout(this);
-        autoRow.setGravity(Gravity.CENTER_VERTICAL);
-        autoRow.setPadding(dp(16), 0, dp(16), 0);
-        autoRow.setBackground(strokedRound(Theme.CARD, 9, 0xffe5ded2));
-        LinearLayout autoTexts = new LinearLayout(this);
-        autoTexts.setOrientation(LinearLayout.VERTICAL);
-        autoTexts.addView(text("自动推草稿", 17, Theme.INK, Typeface.BOLD));
-        TextView autoSub = text("挖出新文章后自动发到公众号草稿箱", 14, Theme.SECONDARY, Typeface.NORMAL);
-        autoSub.setPadding(0, dp(3), 0, 0);
-        autoTexts.addView(autoSub);
-        autoRow.addView(autoTexts, new LinearLayout.LayoutParams(0, -2, 1));
-        IosSwitch autoDraft = new IosSwitch(this);
-        autoRow.addView(autoDraft, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout.LayoutParams autoLp = new LinearLayout.LayoutParams(-1, dp(70));
-        autoLp.setMargins(0, 0, 0, dp(24));
-        content.addView(autoRow, autoLp);
-
-        TextView creds = text("凭据", 18, Theme.INK, Typeface.BOLD);
-        LinearLayout.LayoutParams credsLp = new LinearLayout.LayoutParams(-1, -2);
-        credsLp.setMargins(0, 0, 0, dp(10));
-        content.addView(creds, credsLp);
-
-        android.widget.EditText appid = wechatInput("AppID（wx...）", false);
-        content.addView(appid, inputLp(0, dp(10)));
-
-        FrameLayout secretWrap = new FrameLayout(this);
-        android.widget.EditText secret = wechatInput("AppSecret", true);
-        secret.setPadding(dp(14), 0, dp(52), 0);
-        secretWrap.addView(secret, new FrameLayout.LayoutParams(-1, -1));
-        TextView eye = text("⊙", 28, Theme.SECONDARY, Typeface.NORMAL);
-        eye.setGravity(Gravity.CENTER);
-        secretWrap.addView(eye, new FrameLayout.LayoutParams(dp(52), -1, Gravity.RIGHT));
-        eye.setOnClickListener(v -> {
-            boolean hidden = (secret.getInputType() & android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0;
-            secret.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                    | (hidden ? android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                    : android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD));
-            secret.setSelection(secret.getText().length());
-        });
-        content.addView(secretWrap, inputLp(0, dp(10)));
-
-        TextView note = text("凭证只保存在你的设备与服务器的加密配置里，不会出现在文章中。", 14, Theme.FAINT, Typeface.NORMAL);
+        note = text("1. 在授权页面打开二维码后，点右上角截图保存\n2. 打开微信「扫一扫」后，点击页面上的「相册」，选择刚才保存的二维码完成授权", 13, Theme.FAINT, Typeface.NORMAL);
+        note.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
-        noteLp.setMargins(0, dp(2), 0, dp(6));
-        content.addView(note, noteLp);
+        noteLp.setMargins(dp(16), dp(16), dp(16), 0);
+        connectionContent.addView(note, noteLp);
+    }
 
-        TextView error = text("", 13, 0xffc66a35, Typeface.NORMAL);
-        error.setVisibility(View.GONE);
-        LinearLayout.LayoutParams errorLp = new LinearLayout.LayoutParams(-1, -2);
-        errorLp.setMargins(0, 0, 0, dp(8));
-        content.addView(error, errorLp);
+    @Override protected void onResume() { super.onResume(); refreshStatus(); }
 
-        LinearLayout help = new LinearLayout(this);
-        help.setGravity(Gravity.CENTER_VERTICAL);
-        help.setClickable(true);
-        ImageView helpIcon = new ImageView(this);
-        helpIcon.setImageResource(R.drawable.ic_wechat_help_compass);
-        helpIcon.setColorFilter(Theme.ACCENT);
-        help.addView(helpIcon, new LinearLayout.LayoutParams(dp(18), dp(18)));
-        TextView helpText = text("去哪里找 AppID / AppSecret？", 15, Theme.ACCENT, Typeface.BOLD);
-        LinearLayout.LayoutParams helpTextLp = new LinearLayout.LayoutParams(-2, -2);
-        helpTextLp.setMargins(dp(6), 0, 0, 0);
-        help.addView(helpText, helpTextLp);
-        ImageView helpArrow = new ImageView(this);
-        helpArrow.setImageResource(R.drawable.ic_arrow_up_right_flat);
-        helpArrow.setColorFilter(Theme.ACCENT);
-        LinearLayout.LayoutParams helpArrowLp = new LinearLayout.LayoutParams(dp(14), dp(14));
-        helpArrowLp.setMargins(dp(5), 0, 0, 0);
-        help.addView(helpArrow, helpArrowLp);
-        help.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://developers.weixin.qq.com/console/"));
-            try { startActivity(intent); } catch (Exception e) { toast("无法打开浏览器"); }
-        });
-        LinearLayout.LayoutParams helpLp = new LinearLayout.LayoutParams(-1, -2);
-        helpLp.setMargins(0, 0, 0, dp(10));
-        content.addView(help, helpLp);
-
-        TextView helpSteps = text("点上方链接打开公众平台后台，出现登录二维码时先截屏，再打开微信「扫一扫 → 右上角相册」选中截图，选择要绑定的公众号完成登录；进「设置与开发 → 基本配置」：AppID 直接复制，AppSecret 需点「生成」（或「重置」）、管理员扫码确认后显示；同时在该页把下方的 IP 地址加入「IP 白名单」。",
-                13, Theme.FAINT, Typeface.NORMAL);
-        helpSteps.setLineSpacing(dp(3), 1.0f);
-        LinearLayout.LayoutParams helpStepsLp = new LinearLayout.LayoutParams(-1, -2);
-        helpStepsLp.setMargins(0, 0, 0, dp(24));
-        content.addView(helpSteps, helpStepsLp);
-
-        View divider = new View(this);
-        divider.setBackgroundColor(0x1a000000);
-        LinearLayout.LayoutParams dividerLp = new LinearLayout.LayoutParams(-1, dp(1));
-        dividerLp.setMargins(0, 0, 0, dp(24));
-        content.addView(divider, dividerLp);
-
-        TextView ipTitle = text("IP 白名单", 18, Theme.INK, Typeface.BOLD);
-        LinearLayout.LayoutParams ipTitleLp = new LinearLayout.LayoutParams(-1, -2);
-        ipTitleLp.setMargins(0, 0, 0, dp(10));
-        content.addView(ipTitle, ipTitleLp);
-
-        TextView ipDesc = text("在公众号后台 → 开发 → 基本配置 → IP 白名单中加入以下地址，服务器才能正常调用接口推草稿。",
-                14, Theme.SECONDARY, Typeface.NORMAL);
-        ipDesc.setLineSpacing(dp(3), 1.0f);
-        LinearLayout.LayoutParams ipDescLp = new LinearLayout.LayoutParams(-1, -2);
-        ipDescLp.setMargins(0, 0, 0, dp(14));
-        content.addView(ipDesc, ipDescLp);
-
-        LinearLayout ipRow = new LinearLayout(this);
-        ipRow.setGravity(Gravity.CENTER_VERTICAL);
-        ipRow.setPadding(dp(14), 0, dp(10), 0);
-        ipRow.setBackground(strokedRound(Theme.CARD, 7, 0xffe5ded2));
-        TextView ipValue = text("66.42.45.128", 18, Theme.INK, Typeface.NORMAL);
-        ipValue.setTypeface(Typeface.MONOSPACE, Typeface.NORMAL);
-        ipRow.addView(ipValue, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView copy = text("⧉", 26, Theme.SECONDARY, Typeface.NORMAL);
-        copy.setGravity(Gravity.CENTER);
-        ipRow.addView(copy, new LinearLayout.LayoutParams(dp(44), -1));
-        copy.setOnClickListener(v -> {
-            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            if (clipboard != null) {
-                clipboard.setPrimaryClip(ClipData.newPlainText("wechat-ip", "66.42.45.128"));
-                toast("IP 已复制");
-            }
-        });
-        LinearLayout.LayoutParams ipRowLp = new LinearLayout.LayoutParams(-1, dp(54));
-        ipRowLp.setMargins(0, 0, 0, dp(24));
-        content.addView(ipRow, ipRowLp);
-
-        TextView save = text("保存", 18, 0x55ffffff, Typeface.BOLD);
-        save.setGravity(Gravity.CENTER);
-        save.setEnabled(false);
-        save.setBackground(round(0xffeba092, 10));
-        content.addView(save, new LinearLayout.LayoutParams(-1, dp(56)));
-
-        final boolean[] savingWechat = {false};
-        final boolean[] savedWechat = {false};
-        Runnable clearSaveMessage = () -> {
-            savedWechat[0] = false;
-            error.setVisibility(View.GONE);
-            error.setText("");
-        };
-        Runnable updateSaveState = () -> {
-            boolean canSave = appid.getText().toString().trim().length() > 0
-                    && secret.getText().toString().trim().length() > 0
-                    && !savingWechat[0];
-            save.setEnabled(canSave);
-            save.setText(savingWechat[0] ? "保存中…" : (savedWechat[0] ? "已保存" : "保存"));
-            save.setTextColor(canSave || savingWechat[0] || savedWechat[0] ? android.graphics.Color.WHITE : 0x55ffffff);
-            save.setBackground(round(canSave || savingWechat[0] || savedWechat[0] ? 0xffdf5d49 : 0xffeba092, 10));
-        };
-        android.text.TextWatcher saveWatcher = new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                clearSaveMessage.run();
-                updateSaveState.run();
-            }
-            @Override public void afterTextChanged(android.text.Editable s) {}
-        };
-        appid.addTextChangedListener(saveWatcher);
-        secret.addTextChangedListener(saveWatcher);
-
+    private void refreshStatus() {
+        status.setText("正在检查绑定状态…");
         io.execute(() -> {
             try {
-                JSONObject cfg = settingsStore.loadWechat();
-                runOnUiThread(() -> {
-                    appid.setText(cfg.optString("appid"));
-                    secret.setText(cfg.optString("secret"));
-                    autoDraft.setChecked(cfg.optBoolean("enabled", false));
-                    updateSaveState.run();
-                });
-            } catch (Exception ignored) {}
+                HttpClient.Response response = new HttpClient().get(
+                        Api.filesBase() + "/wechat/bind-status", new AuthStore(this).bearer());
+                JSONObject body = response.ok() ? new JSONObject(response.text()) : new JSONObject();
+                boolean connected = body.optBoolean("connected", false);
+                runOnUiThread(() -> showStatus(connected, body));
+            } catch (Exception ignored) {
+                runOnUiThread(() -> showStatus(false, null));
+            }
         });
-        save.setOnClickListener(v -> {
-            String cleanAppid = appid.getText().toString().trim();
-            String cleanSecret = secret.getText().toString().trim();
-            boolean enabled = autoDraft.isChecked();
-            savingWechat[0] = true;
-            savedWechat[0] = false;
-            error.setVisibility(View.GONE);
-            error.setText("");
-            updateSaveState.run();
-            io.execute(() -> {
-                try {
-                    String validation = settingsStore.validateWechatCreds(cleanAppid, cleanSecret);
-                    if (validation != null) {
-                        runOnUiThread(() -> {
-                            savingWechat[0] = false;
-                            error.setText(validation);
-                            error.setVisibility(View.VISIBLE);
-                            updateSaveState.run();
-                        });
-                        return;
-                    }
-                    settingsStore.saveWechat(cleanAppid, cleanSecret, enabled);
-                    runOnUiThread(() -> {
-                        savingWechat[0] = false;
-                        savedWechat[0] = true;
-                        updateSaveState.run();
-                        toast("公众号配置已保存");
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        savingWechat[0] = false;
-                        error.setText("公众号配置失败：" + e.getMessage());
-                        error.setVisibility(View.VISIBLE);
-                        updateSaveState.run();
-                    });
-                }
-            });
+    }
+
+    private void showStatus(boolean connected, JSONObject body) {
+        connectionContent.setVisibility(LinearLayout.VISIBLE);
+        this.connected = connected;
+        if (!connected) {
+            stateIcon.setText("✈");
+            stateIcon.setTextSize(42);
+            stateIcon.setTextColor(Theme.ACCENT);
+            stateIcon.setPadding(0, 0, 0, 0);
+            stateIcon.setBackground(null);
+            stateIcon.setVisibility(TextView.VISIBLE);
+            successIcon.setVisibility(ImageView.GONE);
+            status.setText("未连接微信公众号");
+            detail.setText("连接后，VoiceDrop 可以将文章保存到你的公众号草稿箱。不会自动群发。");
+            primary.setText("连接微信公众号");
+            primary.setTextSize(18);
+            primary.setTextColor(0xffffffff);
+            primary.setBackground(round(0xffdf5d49, 10));
+            accountCard.setVisibility(LinearLayout.GONE);
+            note.setVisibility(LinearLayout.VISIBLE);
+            return;
+        }
+        String name = body == null ? "微信公众号" : body.optString("account_name", "微信公众号");
+        stateIcon.setVisibility(TextView.GONE);
+        successIcon.setVisibility(ImageView.VISIBLE);
+        status.setText("已连接微信公众号");
+        detail.setText("授权成功，现在可以将文章保存或更新到公众号草稿箱。 ");
+        accountName.setText(name);
+        accountCard.setVisibility(LinearLayout.VISIBLE);
+        primary.setText("取消连接");
+        primary.setTextSize(16);
+        primary.setTextColor(Theme.SECONDARY);
+        primary.setBackground(strokedRound(Theme.BG, 10, 0xffded6ca));
+        note.setVisibility(LinearLayout.GONE);
+    }
+
+    private void openAuthorization() {
+        startActivity(new Intent(this, WechatAuthorizationActivity.class));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    private void disconnect() {
+        primary.setEnabled(false);
+        primary.setText("正在取消连接…");
+        io.execute(() -> {
+            try {
+                HttpClient.Response response = new HttpClient().postJson(
+                        Api.filesBase() + "/wechat/unbind", new AuthStore(this).bearer(),
+                        "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                if (!response.ok()) throw new IllegalStateException("解绑失败");
+                runOnUiThread(() -> {
+                    primary.setEnabled(true);
+                    toast("已取消公众号连接");
+                    refreshStatus();
+                });
+            } catch (Exception ignored) {
+                runOnUiThread(() -> {
+                    primary.setEnabled(true);
+                    showStatus(true, null);
+                    toast("取消连接失败，请稍后重试");
+                });
+            }
         });
     }
 
@@ -323,58 +229,11 @@ public class WechatSettingsActivity extends Activity {
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
 
-    private void configureEdgeToEdge() {
-        SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
-    }
-
     private TextView text(String value, int sp, int color, int style) {
-        TextView view = new TextView(this);
-        view.setText(value);
-        view.setTextSize(sp);
-        view.setTextColor(color);
-        view.setTypeface(Typeface.DEFAULT, style);
-        return view;
+        TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
     }
-
-    private android.widget.EditText wechatInput(String hint, boolean password) {
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint(hint);
-        input.setTextSize(17);
-        input.setTextColor(Theme.INK);
-        input.setHintTextColor(0xffc9c6c1);
-        input.setSingleLine(true);
-        input.setPadding(dp(14), 0, dp(14), 0);
-        input.setBackground(strokedRound(Theme.CARD, 7, 0xffe5ded2));
-        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | (password ? android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                : android.text.InputType.TYPE_TEXT_VARIATION_NORMAL));
-        return input;
-    }
-
-    private LinearLayout.LayoutParams inputLp(int top, int bottom) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(54));
-        lp.setMargins(0, top, 0, bottom);
-        return lp;
-    }
-
-    private GradientDrawable round(int color, int radiusDp) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(radiusDp));
-        return drawable;
-    }
-
-    private GradientDrawable strokedRound(int color, int radiusDp, int strokeColor) {
-        GradientDrawable drawable = round(color, radiusDp);
-        drawable.setStroke(dp(1), strokeColor);
-        return drawable;
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private void toast(String message) {
-        runOnUiThread(() -> com.baixingai.voicedrop.ui.SimpleToast.show(this, message));
-    }
+    private GradientDrawable round(int color, int radius) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d; }
+    private GradientDrawable strokedRound(int color, int radius, int stroke) { GradientDrawable d = round(color, radius); d.setStroke(dp(1), stroke); return d; }
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private void toast(String message) { com.baixingai.voicedrop.ui.SimpleToast.show(this, message); }
 }

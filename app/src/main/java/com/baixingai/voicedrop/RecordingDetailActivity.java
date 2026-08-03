@@ -651,6 +651,9 @@ public final class RecordingDetailActivity extends Activity {
     protected void openCommunityPost(CommunityStore.Post post) {
         Intent intent = new Intent(this, CommunityDetailActivity.class);
         intent.putExtra(EXTRA_SHARE_ID, post.shareId);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_TITLE, post.title);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_AUTHOR, post.author);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_DATE, post.firstSharedAt);
         startActivity(intent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
@@ -850,7 +853,7 @@ public final class RecordingDetailActivity extends Activity {
         if (cached != null && cached.articles != null && !cached.articles.isEmpty()) {
             showArticle(rec, cached, false, false);
         } else {
-            showDetailLoading();
+            showDetailLoading(rec);
         }
         runIoIfActive(() -> {
             ArticleDoc doc = library.fetchDoc(rec);
@@ -956,7 +959,7 @@ public final class RecordingDetailActivity extends Activity {
         renderCurrentArticle(content, rec, doc);
         LinearLayout editPanel = renderArticleEditBar(articleFrame, rec);
         SystemBarDefaults.applyScrollableBottomInsetsAbove(
-                content, editPanel, dp(22), dp(12), dp(22), dp(28));
+                content, editPanel, dp(22), dp(0), dp(22), dp(28));
 
         attachPage(articleFrame, animateOpen);
     }
@@ -2713,7 +2716,7 @@ public final class RecordingDetailActivity extends Activity {
                 articleLocatorViews.add(badge);
                 badge.setAlpha(articleLocatorsVisible ? 1f : 0f);
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(90));
-                p.setMargins(0, dp(12), 0, dp(12));
+                p.setMargins(0, 0, 0, dp(12));
                 content.addView(photo, p);
                 if (key != null) {
                     PhotoLoadPolicy.Intent intent = generatedPhotoKeys.contains(key)
@@ -2745,8 +2748,7 @@ public final class RecordingDetailActivity extends Activity {
                     locatorLp.setMargins(-dp(24), dp(4), 0, 0);
                     row.addView(locator, locatorLp);
                     TextView body = text(paragraph, 16, 0xff5d574f, Typeface.NORMAL);
-                    body.setLineSpacing(dp(9), 1.0f);
-                    body.setPadding(0, 0, 0, dp(22));
+                    body.setLineSpacing(dp(6), 1.0f);
                     row.addView(body, new FrameLayout.LayoutParams(-1, -2));
                     row.setOnLongClickListener(v -> {
                         Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
@@ -2758,7 +2760,9 @@ public final class RecordingDetailActivity extends Activity {
                         showConfiguredTextMenu(row, rec, paragraphLine, paragraphText, bodyText, row, body);
                         return true;
                     });
-                    content.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                    LinearLayout.LayoutParams paraLp = new LinearLayout.LayoutParams(-1, -2);
+                    paraLp.setMargins(0, 0, 0, dp(20));
+                    content.addView(row, paraLp);
                 }
             }
         }
@@ -3452,6 +3456,10 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showDetailLoading() {
+        showDetailLoading(null);
+    }
+
+    protected void showDetailLoading(Recording rec) {
         root.removeAllViews();
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -3467,13 +3475,28 @@ public final class RecordingDetailActivity extends Activity {
         Space toolbarSpace = new Space(this);
         bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
 
-        FrameLayout content = new FrameLayout(this);
-        SystemBarDefaults.applyBottomInsets(content, 0, 0, 0, 0);
-        page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout scrollContent = new LinearLayout(this);
+        scrollContent.setOrientation(LinearLayout.VERTICAL);
+        SystemBarDefaults.applyBottomInsets(scrollContent, dp(22), dp(0), dp(22), dp(24));
+        page.addView(scrollContent, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        if (rec != null) {
+            TextView titleView = text(rec.rowTitle(), 23, Theme.INK, Typeface.BOLD);
+            titleView.setIncludeFontPadding(false);
+            titleView.setLineSpacing(dp(5), 1.0f);
+            scrollContent.addView(titleView);
+
+            String subtitle = formatArticleSubtitle(rec);
+            if (subtitle != null && !subtitle.isEmpty()) {
+                TextView subView = text(subtitle, 13, Theme.FAINT, Typeface.NORMAL);
+                subView.setPadding(0, dp(8), 0, dp(20));
+                scrollContent.addView(subView);
+            }
+        }
 
         FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
-        loadingLp.topMargin = dp(50);
-        content.addView(new LoadingStateView(this), loadingLp);
+        loadingLp.topMargin = dp(20);
+        scrollContent.addView(new LoadingStateView(this), loadingLp);
     }
 
     protected void tintLoadingSpinner(ProgressBar spinner) {

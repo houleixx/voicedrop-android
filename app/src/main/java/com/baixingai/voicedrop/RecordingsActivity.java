@@ -789,6 +789,9 @@ public final class RecordingsActivity extends Activity {
     protected void openCommunityPost(CommunityStore.Post post) {
         Intent intent = new Intent(this, CommunityDetailActivity.class);
         intent.putExtra(EXTRA_SHARE_ID, post.shareId);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_TITLE, post.title);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_AUTHOR, post.author);
+        intent.putExtra(CommunityDetailActivity.EXTRA_POST_DATE, post.firstSharedAt);
         startActivity(intent);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }

@@ -118,6 +118,9 @@ public final class CommunityDetailActivity extends Activity {
     private static final int COMMUNITY_TOOLBAR_MORE_SLOT_DP = 56;
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
+    public static final String EXTRA_POST_TITLE = "postTitle";
+    public static final String EXTRA_POST_AUTHOR = "postAuthor";
+    public static final String EXTRA_POST_DATE = "postDate";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
@@ -1004,7 +1007,7 @@ public final class CommunityDetailActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(12), dp(22), dp(24));
+        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(0), dp(22), dp(24));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -1237,7 +1240,7 @@ public final class CommunityDetailActivity extends Activity {
         BouncyScrollView scroll = new BouncyScrollView(this);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(12), dp(22), dp(24));
+        SystemBarDefaults.applyBottomInsets(content, dp(22), dp(0), dp(22), dp(24));
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
@@ -1918,7 +1921,7 @@ public final class CommunityDetailActivity extends Activity {
                 articleLocatorViews.add(badge);
                 badge.setAlpha(articleLocatorsVisible ? 1f : 0f);
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(90));
-                p.setMargins(0, dp(12), 0, dp(12));
+                p.setMargins(0, 0, 0, dp(12));
                 content.addView(photo, p);
                 if (key != null) loadPhotoInto(photo, key, doc.ownerScope);
             } else {
@@ -1935,10 +1938,11 @@ public final class CommunityDetailActivity extends Activity {
                     locatorLp.setMargins(-dp(24), dp(4), 0, 0);
                     row.addView(locator, locatorLp);
                     TextView body = text(paragraph, 16, 0xff5d574f, Typeface.NORMAL);
-                    body.setLineSpacing(dp(9), 1.0f);
-                    body.setPadding(0, 0, 0, dp(22));
+                    body.setLineSpacing(dp(6), 1.0f);
                     row.addView(body, new FrameLayout.LayoutParams(-1, -2));
-                    content.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                    LinearLayout.LayoutParams paraLp = new LinearLayout.LayoutParams(-1, -2);
+                    paraLp.setMargins(0, 0, 0, dp(20));
+                    content.addView(row, paraLp);
                 }
             }
         }
@@ -2054,13 +2058,48 @@ public final class CommunityDetailActivity extends Activity {
         Space toolbarSpace = new Space(this);
         bar.addView(toolbarSpace, new LinearLayout.LayoutParams(0, dp(48), 1));
 
-        FrameLayout content = new FrameLayout(this);
-        SystemBarDefaults.applyBottomInsets(content, 0, 0, 0, 0);
-        page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout scrollContent = new LinearLayout(this);
+        scrollContent.setOrientation(LinearLayout.VERTICAL);
+        SystemBarDefaults.applyBottomInsets(scrollContent, dp(22), dp(0), dp(22), dp(24));
+        page.addView(scrollContent, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        // Show title + author during loading when passed from the feed.
+        String loadingTitle = getIntent().getStringExtra(EXTRA_POST_TITLE);
+        String loadingAuthor = getIntent().getStringExtra(EXTRA_POST_AUTHOR);
+        double loadingDate = getIntent().getDoubleExtra(EXTRA_POST_DATE, 0);
+        if (loadingTitle != null && !loadingTitle.isEmpty()) {
+            TextView titleView = text(loadingTitle, 26, Theme.INK, Typeface.BOLD);
+            titleView.setLineSpacing(dp(5), 1.0f);
+            scrollContent.addView(titleView);
+
+            StringBuilder meta = new StringBuilder();
+            if (loadingAuthor != null && !loadingAuthor.trim().isEmpty()) {
+                meta.append(loadingAuthor.trim());
+            } else {
+                meta.append("匿名作者");
+            }
+            if (loadingDate > 0) {
+                String date = formatCommunityDate(loadingDate);
+                if (!date.isEmpty()) {
+                    meta.append("  ").append(date);
+                }
+            }
+            SpannableString metaSpan = new SpannableString(meta.toString());
+            String authorPart = loadingAuthor != null && !loadingAuthor.trim().isEmpty()
+                    ? loadingAuthor.trim() : "匿名作者";
+            metaSpan.setSpan(new ForegroundColorSpan(Theme.RED), 0, authorPart.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            metaSpan.setSpan(new StyleSpan(Typeface.BOLD), 0, authorPart.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            TextView metaView = text("", 14, Theme.FAINT, Typeface.NORMAL);
+            metaView.setText(metaSpan);
+            metaView.setPadding(0, dp(9), 0, dp(14));
+            scrollContent.addView(metaView);
+        }
 
         FrameLayout.LayoutParams loadingLp = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
-        loadingLp.topMargin = dp(50);
-        content.addView(new LoadingStateView(this), loadingLp);
+        loadingLp.topMargin = dp(20);
+        scrollContent.addView(new LoadingStateView(this), loadingLp);
     }
 
     protected void tintLoadingSpinner(ProgressBar spinner) {

@@ -68,7 +68,7 @@ public class SettingsUpdateRowSourceTest {
         String layoutParams = methodBody(source, "private LinearLayout.LayoutParams cardDividerLayoutParams");
 
         assertTrue(layoutParams.contains("new LinearLayout.LayoutParams(-1, dp(1))"));
-        assertTrue(layoutParams.contains("lp.setMargins(dp(56), 0, 0, 0)"));
+        assertTrue(layoutParams.contains("lp.setMargins(dp(70), 0, 0, 0)"));
         assertTrue(primary.contains("card.addView(divider, cardDividerLayoutParams())"));
         assertTrue(divider.contains("card.addView(divider, cardDividerLayoutParams())"));
     }

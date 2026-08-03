@@ -46,4 +46,21 @@ public class SettingsIconTest {
         assertTrue(xml.contains("M8,10l4,4l4,-4"));
         assertFalse(xml.contains("M8,8l4,-4l4,4"));
     }
+
+    @Test
+    public void settingsIconTilesMatchIosSizeAndPalette() throws Exception {
+        assertEquals(42, SettingsActivity.SETTINGS_TILE_SIZE_DP);
+        assertEquals(8, SettingsActivity.SETTINGS_TILE_CORNER_DP);
+        assertEquals(0xfff1ece3, SettingsActivity.SETTINGS_TILE_NEUTRAL_BG);
+        assertEquals(0xffeaf1ec, SettingsActivity.SETTINGS_TILE_COMMUNITY_BG);
+
+        String source = new String(Files.readAllBytes(Paths.get(
+                "src/main/java/com/baixingai/voicedrop/SettingsActivity.java")), StandardCharsets.UTF_8);
+        assertTrue(source.contains("settingIcon(R.drawable.ic_settings_account, Theme.INK, 0xffffffff)"));
+        assertTrue(source.contains("settingIcon(R.drawable.ic_settings_bolt, Theme.AMBER_BG, Theme.AMBER)"));
+        assertTrue(source.contains("R.drawable.ic_settings_community, Theme.ACCENT_SOFT, Theme.ACCENT"));
+        assertTrue(source.contains("settingIcon(iconResId, SETTINGS_TILE_COMMUNITY_BG, Theme.GREEN)"));
+        assertTrue(source.contains("icon.setBackground(round(tileColor, SETTINGS_TILE_CORNER_DP))"));
+        assertTrue(source.contains("lp.setMargins(dp(70), 0, 0, 0)"));
+    }
 }

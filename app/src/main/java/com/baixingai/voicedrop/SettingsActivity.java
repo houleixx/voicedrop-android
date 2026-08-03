@@ -52,6 +52,10 @@ public class SettingsActivity extends Activity {
 
     public static final String EXTRA_SHOW_WECHAT = "showWechat";
     private static final int REQ_CREATE_EXPORT_ZIP = 301;
+    static final int SETTINGS_TILE_SIZE_DP = 42;
+    static final int SETTINGS_TILE_CORNER_DP = 8;
+    static final int SETTINGS_TILE_NEUTRAL_BG = 0xfff1ece3;
+    static final int SETTINGS_TILE_COMMUNITY_BG = 0xffeaf1ec;
     static final int[] SETTING_ROW_ICON_RES_IDS = {
             R.drawable.ic_settings_account,
             R.drawable.ic_settings_pen,
@@ -171,7 +175,8 @@ public class SettingsActivity extends Activity {
         // 发布
         addSection(content, "发布");
         addCard(content, card -> {
-            addCardRow(card, R.drawable.ic_settings_broadcast, "微信公众号", "成文一键推送到草稿箱", this::openWechatSettings);
+            addCardRow(card, R.drawable.ic_settings_broadcast, Theme.ACCENT_SOFT, Theme.ACCENT,
+                    "微信公众号", "成文一键推送到草稿箱", this::openWechatSettings);
             addCardDivider(card);
             addCardSwitchRow(card, R.drawable.ic_settings_community);
         });
@@ -196,7 +201,7 @@ public class SettingsActivity extends Activity {
         accountRow.setOrientation(LinearLayout.HORIZONTAL);
         accountRow.setGravity(Gravity.CENTER_VERTICAL);
         accountRow.setPadding(dp(16), dp(13), dp(16), dp(13));
-        accountRow.addView(settingIcon(R.drawable.ic_settings_account));
+        accountRow.addView(settingIcon(R.drawable.ic_settings_account, Theme.INK, 0xffffffff));
         LinearLayout accountTexts = new LinearLayout(this);
         accountTexts.setOrientation(LinearLayout.VERTICAL);
         accountTexts.setGravity(Gravity.CENTER_VERTICAL);
@@ -223,7 +228,7 @@ public class SettingsActivity extends Activity {
         usageRow.setOrientation(LinearLayout.HORIZONTAL);
         usageRow.setGravity(Gravity.CENTER_VERTICAL);
         usageRow.setPadding(dp(16), dp(13), dp(16), dp(13));
-        usageRow.addView(settingIcon(R.drawable.ic_settings_bolt));
+        usageRow.addView(settingIcon(R.drawable.ic_settings_bolt, Theme.AMBER_BG, Theme.AMBER));
         LinearLayout usageTexts = new LinearLayout(this);
         usageTexts.setOrientation(LinearLayout.VERTICAL);
         usageRow.addView(usageTexts, new LinearLayout.LayoutParams(0, -2, 1));
@@ -250,7 +255,7 @@ public class SettingsActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(settingsCardBackground());
-        addCardRow(card, R.drawable.ic_settings_community,
+        addCardRow(card, R.drawable.ic_settings_community, Theme.ACCENT_SOFT, Theme.ACCENT,
                 "邀请好友", "朋友装上，双方都得算力", this::shareInvite);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -292,11 +297,16 @@ public class SettingsActivity extends Activity {
     }
 
     private void addCardRow(LinearLayout card, int iconResId, String title, String subtitle, Runnable action) {
+        addCardRow(card, iconResId, SETTINGS_TILE_NEUTRAL_BG, Theme.SECONDARY, title, subtitle, action);
+    }
+
+    private void addCardRow(LinearLayout card, int iconResId, int tileColor, int iconColor,
+                            String title, String subtitle, Runnable action) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
-        row.addView(settingIcon(iconResId));
+        row.addView(settingIcon(iconResId, tileColor, iconColor));
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
@@ -350,7 +360,7 @@ public class SettingsActivity extends Activity {
 
     private LinearLayout.LayoutParams cardDividerLayoutParams() {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
-        lp.setMargins(dp(56), 0, 0, 0);
+        lp.setMargins(dp(70), 0, 0, 0);
         return lp;
     }
 
@@ -359,7 +369,7 @@ public class SettingsActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(16), dp(13), dp(16), dp(13));
-        row.addView(settingIcon(iconResId));
+        row.addView(settingIcon(iconResId, SETTINGS_TILE_COMMUNITY_BG, Theme.GREEN));
 
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
@@ -669,11 +679,18 @@ public class SettingsActivity extends Activity {
     }
 
     private ImageView settingIcon(int iconResId) {
+        return settingIcon(iconResId, SETTINGS_TILE_NEUTRAL_BG, Theme.SECONDARY);
+    }
+
+    private ImageView settingIcon(int iconResId, int tileColor, int iconColor) {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconResId);
-        icon.setColorFilter(Theme.ACCENT);
+        icon.setColorFilter(iconColor);
         icon.setScaleType(ImageView.ScaleType.CENTER);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        icon.setBackground(round(tileColor, SETTINGS_TILE_CORNER_DP));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(SETTINGS_TILE_SIZE_DP), dp(SETTINGS_TILE_SIZE_DP));
         lp.setMargins(0, 0, dp(12), 0);
         icon.setLayoutParams(lp);
         return icon;

@@ -477,6 +477,17 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void completedUploadReplacesOnlyItsRecordingRowUnlessTagsChanged() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String upload = methodBody(source, "protected void uploadTake");
+
+        assertFalse(upload.contains("main.post(this::showHome)"));
+        assertTrue(upload.contains("tagsChanged = loadRecordingsAndPublishPendingReplies()"));
+        assertTrue(upload.contains("if (rebuildHome) refreshHomeAfterRecordingLoad(true)"));
+        assertTrue(upload.contains("else if (refreshed != null) replaceRecordingRows(refreshed)"));
+    }
+
+    @Test
     public void aiInterviewButtonUsesIosLikeWaveformMicIcon() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String icon = readSource("src/main/res/drawable/ic_waveform_mic.xml");

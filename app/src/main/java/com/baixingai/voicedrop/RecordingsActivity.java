@@ -3021,12 +3021,27 @@ public final class RecordingsActivity extends Activity {
                 toast("照片或录音等待续传");
                 return;
             }
+            boolean tagsChanged = false;
+            Recording uploaded = null;
             try {
-                loadRecordingsAndPublishPendingReplies();
+                tagsChanged = loadRecordingsAndPublishPendingReplies();
+                for (Recording recording : recordings) {
+                    if (take.file.getName().equals(recording.audioName)) {
+                        uploaded = recording;
+                        break;
+                    }
+                }
             } catch (Exception e) {
                 toast("刷新失败：" + e.getMessage());
             }
-            main.post(this::showHome);
+            final boolean rebuildHome = tagsChanged;
+            final Recording refreshed = uploaded;
+            main.post(() -> {
+                // The home page is already visible. Rebuilding every row here makes their
+                // icons flash after a recording finishes uploading.
+                if (rebuildHome) refreshHomeAfterRecordingLoad(true);
+                else if (refreshed != null) replaceRecordingRows(refreshed);
+            });
         });
     }
 

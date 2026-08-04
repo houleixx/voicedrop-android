@@ -350,6 +350,42 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void phaseUpdatesChangeOnlyTheMatchingMountedRow() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String markPhase = methodBody(source, "protected void markPhase");
+        String updateRows = methodBody(source, "protected void updateRecordingPhaseRows");
+        String row = methodBody(source, "protected View recordingRow");
+
+        assertTrue(markPhase.contains("updateRecordingPhaseRows(changed)"));
+        assertFalse(markPhase.contains("showHome()"));
+        assertFalse(markPhase.contains("refreshHomePages()"));
+        assertTrue(updateRows.contains("recordingsListsByPage.values()"));
+        assertTrue(updateRows.contains("rec.audioName.equals(row.getTag())"));
+        assertTrue(updateRows.contains("ROW_STATUS_LABEL_TAG"));
+        assertTrue(updateRows.contains("label.setText(rec.statusLabel())"));
+        assertFalse(updateRows.contains("populateRecordingList("));
+        assertTrue(row.contains("chip.setTag(ROW_STATUS_LABEL_TAG)"));
+    }
+
+    @Test
+    public void completedStatusRefreshesOnlyItsRecordingRow() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String statusListener = source.substring(source.indexOf("statusSession = new StatusSession"),
+                source.indexOf("commandSession = new LibraryCommandSession"));
+        String complete = methodBody(source, "protected void refreshCompletedRecording");
+        String replace = methodBody(source, "protected void replaceRecordingRows");
+
+        assertTrue(statusListener.contains("refreshCompletedRecording(stem, status)"));
+        assertFalse(statusListener.contains("RecordingsActivity.this::refreshAndDrain"));
+        assertFalse(complete.contains("showHome()"));
+        assertFalse(complete.contains("refreshHomePages()"));
+        assertTrue(complete.contains("replaceRecordingRows(refreshed)"));
+        assertTrue(source.contains("previousAudioName.equals(row.getTag())"));
+        assertTrue(source.contains("list.removeViewAt(i)"));
+        assertTrue(source.contains("list.addView(recordingRow(rec), i)"));
+    }
+
+    @Test
     public void universalShareLinksResolveThroughFilesApi() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
 
@@ -417,8 +453,27 @@ public class RecordingsActivitySourceTest {
                 < showHome.indexOf("root.removeAllViews();"));
         assertTrue(stopRecording.contains("boolean refreshDeferred = homeRefreshDeferredWhileRecording;"));
         assertTrue(stopRecording.contains("main.post(() -> completeStopRecording"));
-        assertTrue(completeStop.contains("showHome();"));
+        assertTrue(stopRecording.indexOf("showHome();") < stopRecording.indexOf("io.execute(() ->"));
+        assertFalse(completeStop.contains("showHome();"));
         assertTrue(completeStop.contains("if (refreshDeferred) refreshHomePages();"));
+    }
+
+    @Test
+    public void stoppedRecordingAppearsAsSavingBeforeItsBackgroundUpload() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String completeStop = methodBody(source, "protected void completeStopRecording");
+        String addSaving = methodBody(source, "protected void addSavingRecording");
+        String markUploading = methodBody(source, "protected void markRecordingUploading");
+        String upload = methodBody(source, "protected void uploadTake");
+
+        String stop = methodBody(source, "protected void stopRecordingFlow");
+        String beginSaving = methodBody(source, "protected Recording beginSavingRecording");
+        assertTrue(stop.indexOf("beginSavingRecording(start, elapsedSeconds)") < stop.indexOf("showHome();"));
+        assertTrue(beginSaving.contains("saving.saving = true;"));
+        assertTrue(markUploading.contains("rec.saving = false;"));
+        assertTrue(markUploading.contains("rec.uploading = true;"));
+        assertTrue(upload.indexOf("markRecordingUploading(take.file.getName())")
+                < upload.indexOf("uploader.upload(take.file)"));
     }
 
     @Test

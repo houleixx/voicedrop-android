@@ -19,7 +19,7 @@ public class SharedArticleActivitySourceTest {
         assertTrue(source.contains("EXTRA_SHARED_JSON"));
         assertTrue(source.contains("ArticleDoc.fromJson"));
         assertTrue(source.contains("ArticleBody.segments"));
-        assertTrue(source.contains("library.photoImage"));
+        assertTrue(source.contains("library.photoDetailImage"));
         assertFalse(source.contains("feed("));
         assertFalse(source.contains("startHoldArticleEdit"));
         assertTrue(manifest.contains(".SharedArticleActivity"));

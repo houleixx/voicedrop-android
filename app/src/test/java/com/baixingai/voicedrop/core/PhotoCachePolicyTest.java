@@ -7,9 +7,9 @@ import static org.junit.Assert.assertTrue;
 
 public class PhotoCachePolicyTest {
     @Test
-    public void diskCacheKeepsUpToOneHundredRecentlyUsedPhotos() {
-        assertFalse(PhotoCachePolicy.shouldEvict(100, 100L * 1024 * 1024));
-        assertTrue(PhotoCachePolicy.shouldEvict(101, 100L * 1024 * 1024));
+    public void diskCacheKeepsUpToThreeHundredRecentlyUsedPhotos() {
+        assertFalse(PhotoCachePolicy.shouldEvict(300, 100L * 1024 * 1024));
+        assertTrue(PhotoCachePolicy.shouldEvict(301, 100L * 1024 * 1024));
     }
 
     @Test

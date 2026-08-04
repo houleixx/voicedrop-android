@@ -22,6 +22,7 @@ public final class AuthStore {
     private static final String LIBRARY_LIST_PREFIX = "library_list_v1_";
     private static final String COMMUNITY_FEED_PREFIX = "community_feed_v1_";
     private static final String ARTICLE_DOC_CACHE_DIR = "article-doc-cache-v1";
+    private static final String COMMUNITY_POST_CACHE_DIR = "community-post-cache-v1";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final Context context;
@@ -143,6 +144,33 @@ public final class AuthStore {
     public void clearCurrentArticleDocCaches() { deleteRecursively(articleDocCacheDirectory()); }
     public void clearAllArticleDocCaches() { deleteRecursively(new File(context.getCacheDir(), ARTICLE_DOC_CACHE_DIR)); }
 
+    public String communityPostCache(String shareId) {
+        File file = new File(communityPostCacheDirectory(), cacheComponent(shareId) + ".json");
+        if (!file.isFile()) return "";
+        try (FileInputStream input = new FileInputStream(file);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int read;
+            while ((read = input.read(buffer)) >= 0) output.write(buffer, 0, read);
+            return output.toString("UTF-8");
+        } catch (Exception ignored) { return ""; }
+    }
+
+    public void storeCommunityPostCache(String shareId, String json) {
+        if (shareId == null || shareId.isEmpty() || json == null || json.isEmpty()) return;
+        File dir = communityPostCacheDirectory();
+        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        File target = new File(dir, cacheComponent(shareId) + ".json");
+        File temporary = new File(dir, target.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary)) {
+            output.write(json.getBytes("UTF-8")); output.flush();
+            if (!temporary.renameTo(target)) { try (FileOutputStream direct = new FileOutputStream(target)) { direct.write(json.getBytes("UTF-8")); } temporary.delete(); }
+        } catch (Exception ignored) { temporary.delete(); }
+    }
+
+    private File communityPostCacheDirectory() {
+        return new File(new File(context.getCacheDir(), COMMUNITY_POST_CACHE_DIR), cacheComponent(libraryCacheIdentity()));
+    }
+
     private File articleDocCacheFile(String stem) { return new File(articleDocCacheDirectory(), cacheComponent(stem) + ".json"); }
     private File articleDocCacheDirectory() {
         return new File(new File(context.getCacheDir(), ARTICLE_DOC_CACHE_DIR), cacheComponent(libraryCacheIdentity()));
@@ -221,6 +249,7 @@ public final class AuthStore {
 
     public void resetAnonymous() {
         clearAllArticleDocCaches();
+        deleteRecursively(new File(context.getCacheDir(), COMMUNITY_POST_CACHE_DIR));
         clearAllLibraryListCaches();
         AccountLocalState.clearPendingWork(context);
         prefs.edit().putString(ANON, newAnon())
@@ -232,6 +261,7 @@ public final class AuthStore {
         if (!token.equals(anonymousBearer())) {
             AccountLocalState.clearPendingWork(context);
             clearAllArticleDocCaches();
+            deleteRecursively(new File(context.getCacheDir(), COMMUNITY_POST_CACHE_DIR));
             clearAllLibraryListCaches();
         }
         prefs.edit().putString(ANON, token).remove(SESSION).remove(PRE_WECHAT_ANON).apply();
@@ -248,6 +278,7 @@ public final class AuthStore {
         if (!isSessionToken(token)) return false;
         AccountLocalState.clearPendingWork(context);
         clearAllArticleDocCaches();
+        deleteRecursively(new File(context.getCacheDir(), COMMUNITY_POST_CACHE_DIR));
         clearAllLibraryListCaches();
         prefs.edit()
                 .putString(PRE_WECHAT_ANON, anonymousBearer())
@@ -261,6 +292,7 @@ public final class AuthStore {
         if (previous != null && previous.startsWith("anon_") && previous.length() >= 20) {
             AccountLocalState.clearPendingWork(context);
             clearAllArticleDocCaches();
+            deleteRecursively(new File(context.getCacheDir(), COMMUNITY_POST_CACHE_DIR));
             clearAllLibraryListCaches();
         }
         SharedPreferences.Editor editor = prefs.edit()

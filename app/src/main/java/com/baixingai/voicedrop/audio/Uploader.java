@@ -19,8 +19,21 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class Uploader {
+    /**
+     * Photos are independently durable.  Do not make the recording PUT wait for
+     * them: the server backfills a late photo marker for the recording session.
+     * A separate coordinator keeps at most one global drain active while the
+     * pool bounds photo traffic so it cannot starve an audio PUT.
+     */
+    private static final ExecutorService PHOTO_DRAIN_COORDINATOR = Executors.newSingleThreadExecutor();
+    private static final ExecutorService PHOTO_UPLOADS = Executors.newFixedThreadPool(3);
+    private static final ExecutorService TAG_UPLOADS = Executors.newSingleThreadExecutor();
+    private static boolean photoDrainScheduled;
     private final Context context;
     private final AuthStore auth;
     private final Prefs prefs;
@@ -64,10 +77,10 @@ public final class Uploader {
     public boolean upload(File file) {
         if (!isUploadable(file)) return false;
         String bearer = auth.bearer();
-        // Uploading audio immediately starts article mining. Keep every recording
-        // behind its persisted photo queue so a retry can never overtake its photos.
-        if (!uploadPendingPhotosFor(file, bearer)) return false;
-        uploadTagsSidecar(file, bearer);
+        // Audio must not wait for photos.  A late photo is persisted locally and
+        // the server's Miner backfills its marker after its PUT succeeds.
+        schedulePendingPhotoDrain(bearer);
+        scheduleTagsSidecarUpload(file, bearer);
         for (int attempt = 1; attempt <= 3; attempt++) {
             try {
                 HttpClient.Response response = http.putFile(
@@ -86,8 +99,6 @@ public final class Uploader {
                         //noinspection ResultOfMethodCallIgnored
                         file.renameTo(new File(dir, file.getName()));
                     }
-                    //noinspection ResultOfMethodCallIgnored
-                    tagsSidecarFile(file).delete();
                     return true;
                 }
                 if (response.code >= 400 && response.code < 500) return false;
@@ -159,6 +170,21 @@ public final class Uploader {
         }
     }
 
+    private void scheduleTagsSidecarUpload(File audio, String bearer) {
+        TAG_UPLOADS.execute(() -> uploadTagsSidecar(audio, bearer));
+    }
+
+    /** Tags can outlive a successfully uploaded/deleted audio file, so scan them independently. */
+    private void schedulePendingTagDrain(String bearer) {
+        File[] sidecars = AudioRecorder.documentsDir(context).listFiles(
+                file -> file.isFile() && file.getName().endsWith(".tags.json"));
+        if (sidecars == null) return;
+        for (File sidecar : sidecars) {
+            String stem = sidecar.getName().substring(0, sidecar.getName().length() - ".tags.json".length());
+            scheduleTagsSidecarUpload(new File(sidecar.getParentFile(), stem + ".m4a"), bearer);
+        }
+    }
+
     private void triggerMine(String bearer) {
         try {
             http.postJson(Api.filesBase() + "/mine", bearer, new byte[0]);
@@ -167,6 +193,8 @@ public final class Uploader {
     }
 
     public void drainPending() {
+        schedulePendingPhotoDrain(auth.bearer());
+        schedulePendingTagDrain(auth.bearer());
         for (File file : pendingFiles()) {
             upload(file);
         }
@@ -242,6 +270,48 @@ public final class Uploader {
             }
         }
         return complete && !hasPendingPhotos(prefix);
+    }
+
+    /** Starts a best-effort drain without coupling it to a particular audio. */
+    private void schedulePendingPhotoDrain(String bearer) {
+        synchronized (Uploader.class) {
+            if (photoDrainScheduled) return;
+            photoDrainScheduled = true;
+        }
+        PHOTO_DRAIN_COORDINATOR.execute(() -> {
+            try {
+                drainAllPendingPhotos(bearer);
+            } finally {
+                synchronized (Uploader.class) { photoDrainScheduled = false; }
+            }
+        });
+    }
+
+    private void drainAllPendingPhotos(String bearer) {
+        File[] pending = pendingPhotoDir().listFiles(file -> file.isFile() && file.getName().endsWith(".jpg"));
+        if (pending == null || pending.length == 0) return;
+        List<Future<?>> uploads = new ArrayList<>();
+        for (File photo : pending) {
+            uploads.add(PHOTO_UPLOADS.submit(() -> uploadPendingPhoto(photo, bearer)));
+        }
+        for (Future<?> upload : uploads) {
+            try { upload.get(); } catch (Exception ignored) { }
+        }
+    }
+
+    private void uploadPendingPhoto(File photo, String bearer) {
+        String key = pendingPhotoKey(photo);
+        if (key == null || key.isEmpty()) return;
+        try {
+            HttpClient.Response response = http.putFile(
+                    Api.filesBase() + "/upload/" + Api.path(key), bearer, "image/jpeg", photo);
+            if (response.ok()) {
+                //noinspection ResultOfMethodCallIgnored
+                photo.delete();
+            }
+        } catch (Exception ignored) {
+            // Leave it on disk. The next foreground drain retries it.
+        }
     }
 
     private boolean hasPendingPhotos(String keyPrefix) {

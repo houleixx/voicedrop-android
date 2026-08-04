@@ -162,7 +162,17 @@ public final class CommunityStore {
         if (!response.ok()) return null;
         JSONObject root = new JSONObject(response.text());
         JSONObject post = root.optJSONObject("post");
-        return Post.from(post == null ? root : post);
+        JSONObject resolved = post == null ? root : post;
+        auth.storeCommunityPostCache(shareId, resolved.toString());
+        return Post.from(resolved);
+    }
+
+    /** Last successful full community-post snapshot for SWR detail rendering. */
+    public Post cachedPost(String shareId) {
+        try {
+            String raw = auth.communityPostCache(shareId);
+            return raw.isEmpty() ? null : Post.from(new JSONObject(raw));
+        } catch (Exception ignored) { return null; }
     }
 
     public String sharedShareId(Recording rec) throws Exception {

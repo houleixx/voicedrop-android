@@ -41,6 +41,7 @@ import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.PhotoLoadPolicy;
 import com.baixingai.voicedrop.core.PromptTree;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.data.ArticleDoc;
@@ -123,6 +124,8 @@ public final class CommunityDetailActivity extends Activity {
     public static final String EXTRA_POST_DATE = "postDate";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
+    protected final ExecutorService photoIo =
+            Executors.newFixedThreadPool(PhotoLoadPolicy.concurrentLoads());
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
     protected AuthStore auth;
     protected Prefs prefs;
@@ -285,6 +288,7 @@ public final class CommunityDetailActivity extends Activity {
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
         io.shutdownNow();
+        photoIo.shutdownNow();
         dictationIo.shutdownNow();
     }
     @Override
@@ -860,7 +864,9 @@ public final class CommunityDetailActivity extends Activity {
             finish();
             return;
         }
-        showDetailLoading();
+        CommunityStore.Post cached = community.cachedPost(shareId);
+        if (cached != null && cached.doc != null) showCommunityPost(cached, cached.doc, false);
+        else showDetailLoading();
         io.execute(() -> {
             try {
                 CommunityStore.Post post = community.get(shareId);
@@ -882,6 +888,7 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void showCommunityPost(CommunityStore.Post post, ArticleDoc doc, boolean animateOpen) {
+        main.post(() -> warmCommunityArticlePhotos(doc));
         // Prompt posts have their own collectible-resource detail layout. Keep the
         // article renderer below unchanged so prompt presentation cannot regress
         // article bodies, photos, replies, or reply recording.
@@ -1110,6 +1117,18 @@ public final class CommunityDetailActivity extends Activity {
         root.setTag(new Object[]{post, recordingBarContainer, scroll, content});
     }
 
+    protected void warmCommunityArticlePhotos(ArticleDoc doc) {
+        if (doc == null || doc.photos == null || doc.ownerScope == null || doc.ownerScope.isEmpty()) return;
+        final String scope = doc.ownerScope.endsWith("/") ? doc.ownerScope : doc.ownerScope + "/";
+        for (String key : doc.photos) {
+            if (key == null || key.isEmpty()) continue;
+            final String fullKey = key.startsWith("users/") ? key : scope + key;
+            photoIo.execute(() -> {
+                try { library.photoDetailImage(fullKey, false); } catch (Exception ignored) {}
+            });
+        }
+    }
+
     protected void showCommunityPromptPost(CommunityStore.Post post, ArticleDoc doc, boolean animateOpen) {
         FrameLayout communityFrame = new FrameLayout(this);
         communityFrame.setBackgroundColor(Theme.BG);
@@ -1145,7 +1164,7 @@ public final class CommunityDetailActivity extends Activity {
         LinearLayout.LayoutParams feedLp = new LinearLayout.LayoutParams(
                 dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
         bar.addView(feedBtn, feedLp);
-        io.execute(() -> {
+        photoIo.execute(() -> {
             try {
                 List<String> ids = new ArrayList<>();
                 ids.add(shareId);
@@ -1993,7 +2012,7 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void loadPhotoInto(FrameLayout frame, String relKey, String preferredScope) {
-        io.execute(() -> {
+        photoIo.execute(() -> {
             try {
                 String scope = normalizePhotoScope(
                         preferredScope == null || preferredScope.isEmpty() ? library.ownerScope() : preferredScope);
@@ -2004,7 +2023,7 @@ public final class CommunityDetailActivity extends Activity {
                     main.post(() -> showLoadedPhoto(frame, cached));
                     return;
                 }
-                Bitmap bitmap = library.photoImage(scope + relKey, false);
+                Bitmap bitmap = library.photoDetailImage(scope + relKey, false);
                 if (bitmap == null) return;
                 articlePhotoCache.put(cacheKey, bitmap);
                 main.post(() -> showLoadedPhoto(frame, bitmap));

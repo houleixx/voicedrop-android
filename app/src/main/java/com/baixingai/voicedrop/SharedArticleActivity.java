@@ -148,7 +148,7 @@ public final class SharedArticleActivity extends Activity {
             try {
                 if (doc.ownerScope == null || doc.ownerScope.isEmpty()) return;
                 String scope = doc.ownerScope.endsWith("/") ? doc.ownerScope : doc.ownerScope + "/";
-                Bitmap bitmap = library.photoImage(scope + relKey, false);
+                Bitmap bitmap = library.photoDetailImage(scope + relKey, false);
                 if (bitmap == null) return;
                 main.post(() -> {
                     frame.removeAllViews();

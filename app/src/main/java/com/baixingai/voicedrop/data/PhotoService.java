@@ -142,6 +142,49 @@ public final class PhotoService {
         return bitmap;
     }
 
+    /**
+     * Article images are displayed at phone width, so avoid downloading and decoding the
+     * original camera image on a cold cache.  Keep a separate cache entry from the 512px
+     * list thumbnail and fall back to the original if the optional edge transform fails.
+     */
+    public static Bitmap detailImage(String fullKey, boolean ignoringLocalCache) throws Exception {
+        if (fullKey == null || fullKey.isEmpty()) return null;
+        String cacheKey = fullKey + "#w1080";
+        if (!ignoringLocalCache) {
+            Bitmap hit = cache.get(cacheKey);
+            if (hit != null) return hit;
+            byte[] cached = readDisk(cacheKey);
+            if (cached != null) {
+                Bitmap bitmap = BitmapFactory.decodeByteArray(cached, 0, cached.length);
+                if (bitmap != null) {
+                    cache.put(cacheKey, bitmap);
+                    return bitmap;
+                }
+                deleteDisk(cacheKey);
+            }
+        }
+        try {
+            String url = "https://" + Api.WS_HOST
+                    + "/cdn-cgi/image/width=1080,quality=75/files/api/photo/" + Api.path(fullKey);
+            HttpClient.RequestOptions options = new HttpClient.RequestOptions().readTimeoutMs(20_000);
+            if (ignoringLocalCache) options.header("Cache-Control", "no-cache");
+            HttpClient.Response response = new HttpClient().get(url, "", options);
+            if (response.ok()) {
+                Bitmap bitmap = BitmapFactory.decodeByteArray(response.body, 0, response.body.length);
+                if (bitmap != null) {
+                    writeDisk(cacheKey, response.body, ignoringLocalCache);
+                    cache.put(cacheKey, bitmap);
+                    return bitmap;
+                }
+            }
+        } catch (Exception ignored) {
+            // The edge resize is an optimization only; original-image loading remains reliable.
+        }
+        Bitmap bitmap = image(fullKey, ignoringLocalCache);
+        if (bitmap != null) cache.put(cacheKey, bitmap);
+        return bitmap;
+    }
+
     public static byte[] data(String fullKey, boolean ignoringLocalCache, HttpClient http) throws Exception {
         if (fullKey == null || fullKey.isEmpty()) return null;
         HttpClient.RequestOptions options = ignoringLocalCache

@@ -3323,7 +3323,7 @@ public final class RecordingDetailActivity extends Activity {
             try {
                 String scope = library.ownerScope();
                 if (scope != null) {
-                    bitmap = library.photoImage(scope + relKey, ignoringLocalCache);
+                    bitmap = library.photoDetailImage(scope + relKey, ignoringLocalCache);
                 }
             } catch (Exception ignored) {
             }

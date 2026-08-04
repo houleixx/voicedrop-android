@@ -7,28 +7,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class UploaderPhotoGateSourceTest {
     @Test
-    public void persistedPhotosGateEveryAudioUploadAndPendingDrain() throws Exception {
+    public void persistedPhotosUploadIndependentlyWithoutGatingAudio() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/audio/Uploader.java");
         String upload = methodBody(source, "public boolean upload(File file)");
         String drain = methodBody(source, "public void drainPending()");
-        String photoUpload = methodBody(source, "private boolean uploadPendingPhotosFor(File audio, String bearer)");
+        String photoDrain = methodBody(source, "private void drainAllPendingPhotos(String bearer)");
 
         assertTrue(source.contains("new File(AudioRecorder.documentsDir(context), \"pending-photos\")"));
         assertTrue(source.contains("public boolean stagePhoto(String key, byte[] bytes)"));
         assertTrue(source.contains("public boolean stagePhotos(Map<String, byte[]> photos)"));
-        assertTrue(source.contains("if (!photoStageComplete(parsed.sessionTs)) return false"));
         assertTrue(upload.contains("String bearer = auth.bearer()"));
-        assertTrue(upload.indexOf("uploadPendingPhotosFor(file, bearer)") < upload.indexOf("uploadTagsSidecar(file, bearer)"));
-        assertTrue(upload.indexOf("uploadPendingPhotosFor(file, bearer)") < upload.indexOf("http.putFile("));
-        assertTrue(!photoUpload.contains("auth.bearer()"));
-        assertTrue(photoUpload.contains("bearer,"));
-        assertTrue(photoUpload.contains("String prefix = \"photos/\" + parsed.sessionTs + \"/\""));
-        assertTrue(photoUpload.contains("photo.delete()"));
-        assertTrue(photoUpload.contains("return complete && !hasPendingPhotos(prefix)"));
+        assertTrue(upload.contains("schedulePendingPhotoDrain(bearer)"));
+        assertFalse(upload.contains("uploadPendingPhotosFor(file, bearer)"));
+        assertTrue(source.contains("newFixedThreadPool(3)"));
+        assertTrue(photoDrain.contains("PHOTO_UPLOADS.submit"));
+        assertTrue(photoDrain.contains("upload.get()"));
+        assertTrue(source.contains("photo.delete()"));
+        assertTrue(drain.contains("schedulePendingPhotoDrain(auth.bearer())"));
+        assertTrue(drain.contains("schedulePendingTagDrain(auth.bearer())"));
+        assertTrue(source.contains("endsWith(\".tags.json\")"));
         assertTrue(drain.contains("upload(file)"));
     }
 

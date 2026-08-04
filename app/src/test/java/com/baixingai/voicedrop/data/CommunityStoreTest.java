@@ -39,6 +39,9 @@ public class CommunityStoreTest {
         assertTrue(activity.contains("restoreCachedCommunityFeed();"));
         assertTrue(photos.contains("new File(context.getApplicationContext().getCacheDir(), \"photo-cache\")"));
         assertTrue(photos.contains("writeDisk(fullKey, data)"));
+        assertTrue(store.contains("public Post cachedPost(String shareId)"));
+        assertTrue(store.contains("auth.storeCommunityPostCache(shareId, resolved.toString())"));
+        assertTrue(auth.contains("COMMUNITY_POST_CACHE_DIR"));
     }
 
     @Test

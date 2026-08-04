@@ -38,7 +38,7 @@ public class PhotoMakingStateSourceTest {
         assertTrue(source.contains("正在制作中"));
         assertTrue(source.contains("约 1 分钟完成"));
         assertTrue(source.contains("fetchPhotoInto(frame, relKey, startedAt, intent, true)"));
-        assertTrue(source.contains("library.photoImage(scope + relKey, ignoringLocalCache)"));
+        assertTrue(source.contains("library.photoDetailImage(scope + relKey, ignoringLocalCache)"));
         assertTrue(source.contains("isPhotoLoadActive(frame, startedAt)"));
         assertTrue(source.contains("markGeneratedPhotoKeys(currentArticleDoc, doc)"));
     }

@@ -113,6 +113,7 @@ import java.util.regex.Pattern;
 public final class RecordingsActivity extends Activity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
+    private static final String ROW_STATUS_LABEL_TAG = "recording_row_status_label";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
     protected final ExecutorService communityIo = Executors.newSingleThreadExecutor();
@@ -279,7 +280,7 @@ public final class RecordingsActivity extends Activity {
             }
 
             @Override public void onDone(String stem, String status) {
-                main.post(RecordingsActivity.this::refreshAndDrain);
+                main.post(() -> refreshCompletedRecording(stem, status));
             }
 
             @Override public void onLinkRequest(String pairingId, String code, String pubkey) {
@@ -432,10 +433,74 @@ public final class RecordingsActivity extends Activity {
         }
     }
     protected void markPhase(String stem, String status) {
+        Recording changed = null;
         for (Recording rec : recordings) {
-            if (rec.stem().equals(stem)) rec.phase = status;
+            if (rec.stem().equals(stem)) {
+                rec.phase = status;
+                changed = rec;
+                break;
+            }
         }
-        if (!communityTab) showHome();
+        if (changed != null) updateRecordingPhaseRows(changed);
+    }
+
+    /** Updates only the already-mounted row(s), preserving icons, covers and scroll position. */
+    protected void updateRecordingPhaseRows(Recording rec) {
+        for (LinearLayout list : recordingsListsByPage.values()) {
+            for (int i = 0; i < list.getChildCount(); i++) {
+                View row = list.getChildAt(i);
+                if (!rec.audioName.equals(row.getTag())) continue;
+                View statusView = row.findViewWithTag(ROW_STATUS_LABEL_TAG);
+                if (statusView instanceof TextView) {
+                    TextView label = (TextView) statusView;
+                    label.setText(rec.statusLabel());
+                }
+            }
+        }
+    }
+
+    /** Fetches the finished recording's latest data without re-rendering unrelated rows. */
+    protected void refreshCompletedRecording(String stem, String status) {
+        recordingsLoadAttempted = true;
+        io.execute(() -> {
+            boolean tagsChanged = false;
+            Recording updated = null;
+            try {
+                uploader.drainPending();
+                tagsChanged = loadRecordingsAndPublishPendingReplies();
+                for (Recording rec : recordings) {
+                    if (rec.stem().equals(stem)) {
+                        updated = rec;
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                toast("加载失败：" + e.getMessage());
+            }
+            final boolean rebuildHome = tagsChanged;
+            final Recording refreshed = updated;
+            main.post(() -> {
+                if (rebuildHome) refreshHomeAfterRecordingLoad(true);
+                else if (refreshed != null) replaceRecordingRows(refreshed);
+            });
+        });
+    }
+
+    /** Recreates only the affected row, keeping every other row's icon and cover view intact. */
+    protected void replaceRecordingRows(Recording rec) {
+        replaceRecordingRows(rec.audioName, rec);
+    }
+
+    protected void replaceRecordingRows(String previousAudioName, Recording rec) {
+        for (LinearLayout list : recordingsListsByPage.values()) {
+            for (int i = 0; i < list.getChildCount(); i++) {
+                View row = list.getChildAt(i);
+                if (!previousAudioName.equals(row.getTag())) continue;
+                list.removeViewAt(i);
+                list.addView(recordingRow(rec), i);
+                break;
+            }
+        }
     }
     protected boolean isDetailActivity() {
         return isRecordingDetailPage() || isCommunityDetailPage();
@@ -1274,14 +1339,35 @@ public final class RecordingsActivity extends Activity {
 
     protected void scheduleRecordingMetadataEnrichment(List<Recording> snapshot) {
         final int generation = ++recordingMetadataGeneration;
+        final Map<String, String> metadataBefore = recordingMetadataKeys(snapshot);
         metadataIo.execute(() -> {
             if (!library.enrichMissingMetadata(snapshot)) return;
             main.post(() -> {
                 if (generation != recordingMetadataGeneration || recordings != snapshot || isFinishing()) return;
                 boolean tagsChanged = refreshHomeTagsFromRecordings();
-                refreshHomeAfterRecordingLoad(tagsChanged);
+                if (tagsChanged) refreshHomeAfterRecordingLoad(true);
+                else refreshMetadataChangedRows(snapshot, metadataBefore);
             });
         });
+    }
+
+    protected Map<String, String> recordingMetadataKeys(List<Recording> items) {
+        Map<String, String> keys = new HashMap<>();
+        for (Recording rec : items) {
+            String tags = rec.tags == null ? "" : TextUtils.join("\u001f", rec.tags);
+            keys.put(rec.audioName, String.valueOf(rec.articleTitle) + "\u001e" + tags + "\u001e"
+                    + String.valueOf(rec.coverPhotoKey));
+        }
+        return keys;
+    }
+
+    protected void refreshMetadataChangedRows(List<Recording> items, Map<String, String> before) {
+        Map<String, String> after = recordingMetadataKeys(items);
+        for (Recording rec : items) {
+            String previous = before.get(rec.audioName);
+            String current = after.get(rec.audioName);
+            if (previous == null ? current != null : !previous.equals(current)) replaceRecordingRows(rec);
+        }
     }
 
     protected boolean refreshHomeTagsFromRecordings() {
@@ -2217,6 +2303,7 @@ public final class RecordingsActivity extends Activity {
             sub.addView(chip, chipLp);
         } else {
             chip = text(rec.statusLabel(), 13, statusColor, Typeface.NORMAL);
+            chip.setTag(ROW_STATUS_LABEL_TAG);
             LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
             sub.addView(chip, chipLp);
         }
@@ -2652,34 +2739,97 @@ public final class RecordingsActivity extends Activity {
 
         boolean refreshDeferred = homeRefreshDeferredWhileRecording;
         RecordingBackend stoppingRecorder = recorder;
+        ZonedDateTime start = recordingStart;
+        long elapsedSeconds = stoppingRecorder.elapsedSeconds();
         List<CapturedPhoto> photos = new ArrayList<>(capturedPhotos);
         capturedPhotos.clear();
         recordingStart = null;
+        // Leave the recording screen immediately, just like HarmonyOS.  The recorder itself
+        // is finalized on io below; clearing this reference lets showHome render right away.
+        recorder = null;
+        Recording saving = beginSavingRecording(start, elapsedSeconds);
+        closeOpenSwipes();
+        clearHomePagerRefs();
+        showHome();
 
         io.execute(() -> {
             AudioRecorder.Take take = stoppingRecorder.stop(null);
-            main.post(() -> completeStopRecording(take, photos, refreshDeferred));
+            main.post(() -> completeStopRecording(take, photos, refreshDeferred, saving));
         });
     }
 
     protected void completeStopRecording(AudioRecorder.Take take, List<CapturedPhoto> photos,
-                                         boolean refreshDeferred) {
+                                         boolean refreshDeferred, Recording saving) {
         recordingStopInProgress = false;
         if (isFinishing() || isDestroyed()) return;
-        // Immediately return to the normal tab container so tab switching keeps using ViewPager.
-        closeOpenSwipes();
-        clearHomePagerRefs();
-        showHome();
         if (take != null) {
             if (RecordingQuality.discardIfTooShort(take)) {
+                removeSavingRecording(saving);
                 showTooShortRecordingMessage();
             } else if (RecordingQuality.looksSilent(take.peakAmplitude, take.duration)) {
+                removeSavingRecording(saving);
                 confirmSilentRecording(take, photos);
             } else {
+                finalizeSavingRecording(saving, take);
                 uploadTake(take, photos);
             }
+        } else {
+            removeSavingRecording(saving);
+            toast("录音保存失败，请重试");
         }
         if (refreshDeferred) refreshHomePages();
+    }
+
+    /**
+     * Mirrors HarmonyOS: show a local row before the recorder is finalized in the background.
+     * The provisional name is immediately replaced with the final filename once it is known.
+     */
+    protected Recording beginSavingRecording(ZonedDateTime start, long elapsedSeconds) {
+        if (start == null || RecordingQuality.isTooShort(elapsedSeconds)) return null;
+        String provisionalName = RecordingName.make(start, elapsedSeconds, null);
+        for (Recording rec : recordings) {
+            if (provisionalName.equals(rec.audioName)) return rec;
+        }
+        Recording saving = new Recording(provisionalName, "", false, false);
+        saving.saving = true;
+        if (defaultRecordTag != null && !defaultRecordTag.isEmpty()) {
+            saving.tags = java.util.Collections.singletonList(defaultRecordTag);
+        }
+        recordings.add(0, saving);
+        return saving;
+    }
+
+    protected void finalizeSavingRecording(Recording saving, AudioRecorder.Take take) {
+        if (take == null || take.file == null) return;
+        if (saving == null) {
+            addSavingRecording(take);
+            return;
+        }
+        String provisionalName = saving.audioName;
+        saving.audioName = take.file.getName();
+        replaceRecordingRows(provisionalName, saving);
+    }
+
+    protected void addSavingRecording(AudioRecorder.Take take) {
+        if (take == null || take.file == null) return;
+        Recording saving = new Recording(take.file.getName(), "", false, false);
+        saving.saving = true;
+        recordings.add(0, saving);
+    }
+
+    protected void removeSavingRecording(Recording saving) {
+        if (saving != null) removeRecordingFromHome(saving);
+    }
+
+    /** Changes the existing local row in place, keeping its icon and scroll position stable. */
+    protected void markRecordingUploading(String audioName) {
+        for (Recording rec : recordings) {
+            if (!audioName.equals(rec.audioName)) continue;
+            rec.saving = false;
+            rec.uploading = true;
+            updateRecordingPhaseRows(rec);
+            return;
+        }
     }
 
     protected void toggleInterview() {
@@ -2858,17 +3008,17 @@ public final class RecordingsActivity extends Activity {
         }
         io.execute(() -> {
             if (!uploadCapturedPhotos(take.file.getName(), photos)) {
+                main.post(() -> markRecordingUploading(take.file.getName()));
                 toast("照片暂未保存，录音已保留");
-                main.post(this::showHome);
                 return;
             }
             if (defaultRecordTag != null && !defaultRecordTag.isEmpty()) {
                 Uploader.writeTagsSidecar(take.file, java.util.Collections.singletonList(defaultRecordTag));
                 defaultRecordTag = null;
             }
+            main.post(() -> markRecordingUploading(take.file.getName()));
             if (!uploader.upload(take.file)) {
                 toast("照片或录音等待续传");
-                main.post(this::showHome);
                 return;
             }
             try {

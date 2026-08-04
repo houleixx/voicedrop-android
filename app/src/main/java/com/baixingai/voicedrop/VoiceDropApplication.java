@@ -4,6 +4,7 @@ import android.app.Application;
 import android.app.Activity;
 import android.os.Bundle;
 import android.text.TextUtils;
+import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
@@ -43,6 +44,9 @@ public class VoiceDropApplication extends Application {
     public synchronized void activateConsentedServices() {
         if (consentedServicesActivated) return;
         consentedServicesActivated = true;
+        // Configure the persistent image cache once for every entry point, including
+        // article/detail activities that are not reached through the library screen.
+        PhotoService.configure(this);
         initUmengAnalytics();
         new ReferralManager(this).runOnLaunch();
     }

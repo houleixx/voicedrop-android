@@ -5,7 +5,8 @@ import com.baixingai.voicedrop.core.RecordingName;
 import java.util.List;
 
 public final class Recording {
-    public final String audioName;
+    /** Mutable only while a just-stopped recording changes from its local provisional name. */
+    public String audioName;
     public final String uploaded;
     public final boolean hasArticles;
     public final boolean isEmpty;
@@ -13,6 +14,8 @@ public final class Recording {
     /** First article photo, relative to the recording owner's storage scope. */
     public String coverPhotoKey;
     public boolean uploading;
+    /** The audio file has been finalized locally but has not entered the uploader yet. */
+    public boolean saving;
     public String phase;
     public String blockReason;
     public List<String> tags;
@@ -103,6 +106,7 @@ public final class Recording {
     }
 
     public String statusLabel() {
+        if (saving) return "正在保存";
         if (uploading) return "正在上传";
         if (hasArticles) return "已成文";
         if (isEmpty) return "无语音";

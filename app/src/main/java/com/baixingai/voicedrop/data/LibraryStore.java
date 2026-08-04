@@ -30,9 +30,9 @@ public final class LibraryStore {
     private final Map<String, String> titleCache = new HashMap<>();
     private final Map<String, List<String>> tagsCache = new HashMap<>();
     private final Map<String, String> coverCache = new HashMap<>();
-    private String metadataIdentity = "";
     private String cachedScope;
     private String cachedScopeToken;
+    private String metadataIdentity = "";
 
     public LibraryStore(AuthStore auth, HttpClient http) {
         this.auth = auth;
@@ -599,13 +599,12 @@ public final class LibraryStore {
         return ok;
     }
 
-    public String ownerScope() throws Exception {
+    /** The JWT/anonymous identity already carries the stable photo owner prefix. */
+    public String ownerScope() {
         synchronized (this) {
             String token = auth.bearer();
             if (token.equals(cachedScopeToken) && cachedScope != null && !cachedScope.isEmpty()) return cachedScope;
-            HttpClient.Response response = http.get(Api.filesBase() + "/whoami", token);
-            if (!response.ok()) return null;
-            cachedScope = new JSONObject(response.text()).optString("scope", null);
+            cachedScope = auth.storageScope();
             cachedScopeToken = token;
             return cachedScope;
         }
@@ -617,6 +616,10 @@ public final class LibraryStore {
 
     public Bitmap photoImage(String fullKey, boolean ignoringLocalCache) throws Exception {
         return PhotoService.image(fullKey, ignoringLocalCache);
+    }
+
+    public Bitmap photoDetailImage(String fullKey, boolean ignoringLocalCache) throws Exception {
+        return PhotoService.detailImage(fullKey, ignoringLocalCache);
     }
 
     public byte[] download(String key) throws Exception {

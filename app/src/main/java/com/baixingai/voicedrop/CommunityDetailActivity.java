@@ -113,6 +113,7 @@ import java.util.List;
 import java.time.ZonedDateTime;
 
 public final class CommunityDetailActivity extends Activity {
+    public static final String EXTRA_COMMUNITY_DATA_CHANGED = "communityDataChanged";
     private static final int COMMUNITY_TOOLBAR_ICON_DP = 24;
     private static final int COMMUNITY_TOOLBAR_BARE_SLOT_DP = 36;
     private static final int COMMUNITY_TOOLBAR_MORE_BOX_DP = 34;
@@ -150,6 +151,9 @@ public final class CommunityDetailActivity extends Activity {
     protected MediaPlayer mediaPlayer;
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
+    protected boolean communityDataChanged;
+    protected int communityLikePendingRequests;
+    protected boolean communityFinishRequested;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
     protected List<ArticleEditSession.EditRequest> editQueue = new ArrayList<>();
@@ -455,9 +459,39 @@ public final class CommunityDetailActivity extends Activity {
         }
     }
     protected void finishDetailActivity() {
+        if (communityLikePendingRequests > 0) {
+            communityFinishRequested = true;
+            return;
+        }
+        finishDetailActivityNow();
+    }
+
+    private void finishDetailActivityNow() {
+        communityFinishRequested = false;
+        if (communityDataChanged) {
+            Intent result = new Intent();
+            result.putExtra(EXTRA_COMMUNITY_DATA_CHANGED, true);
+            setResult(RESULT_OK, result);
+        }
         cleanupDetailResources();
         finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    protected void beginCommunityLikeRequest(String shareId, boolean liked) {
+        communityLikePendingRequests++;
+        io.execute(() -> {
+            try {
+                community.engage(shareId, "like", liked);
+            } finally {
+                main.post(() -> {
+                    communityLikePendingRequests = Math.max(0, communityLikePendingRequests - 1);
+                    if (communityLikePendingRequests == 0 && communityFinishRequested && !isFinishing()) {
+                        finishDetailActivityNow();
+                    }
+                });
+            }
+        });
     }
     protected void cleanupDetailResources() {
         main.removeCallbacks(timerTick);
@@ -995,14 +1029,11 @@ public final class CommunityDetailActivity extends Activity {
         bar.addView(likeBtn, likeLp);
         likeBtn.setOnClickListener(v -> {
             liked[0] = !liked[0];
+            communityDataChanged = true;
             prefs.setLikedCommunityPost(shareId, liked[0]);
             AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
                     liked[0] ? Theme.RED : Theme.INK);
-            io.execute(() -> {
-                try {
-                    community.engage(shareId, "like", liked[0]);
-                } catch (Exception ignored) {}
-            });
+            beginCommunityLikeRequest(shareId, liked[0]);
         });
 
         // ... menu
@@ -1244,11 +1275,12 @@ public final class CommunityDetailActivity extends Activity {
         likeBtn.setOnClickListener(v -> {
             likeTouched[0] = true;
             liked[0] = !liked[0];
+            communityDataChanged = true;
             prefs.setLikedCommunityPost(shareId, liked[0]);
             AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
                     liked[0] ? Theme.RED : Theme.INK);
             likeBtn.setContentDescription(liked[0] ? "取消赞" : "赞");
-            io.execute(() -> community.engage(shareId, "like", liked[0]));
+            beginCommunityLikeRequest(shareId, liked[0]);
         });
 
         toolbarIconButton(bar, Theme.INK, 11, AliIconFont.MORE, Color.WHITE,
@@ -1786,8 +1818,9 @@ public final class CommunityDetailActivity extends Activity {
         IosDialog.show(this, "举报这篇分享？", "举报后这篇会立即从社区下架，并在 24 小时内由人工审核处理。", "举报并下架", () -> {
             io.execute(() -> {
                 try {
-                    community.report(post.shareId);
+                    if (!community.report(post.shareId)) throw new IllegalStateException("举报请求失败");
                     main.post(() -> {
+                        communityDataChanged = true;
                         toast("已举报，内容已下架待审核");
                         posts.removeIf(p -> p.shareId.equals(post.shareId));
                         leaveDetailPage();
@@ -1803,6 +1836,7 @@ public final class CommunityDetailActivity extends Activity {
         IosDialog.show(this, "屏蔽此用户？", "屏蔽后，你将不再看到 " + authorName + " 的任何社区内容。可在「设置」>「关于」>「已屏蔽用户」中取消屏蔽。",
                 "屏蔽", () -> {
                     blockStore.block(post.author);
+                    communityDataChanged = true;
                     posts.removeIf(p -> (p.author == null ? "" : p.author).equals(post.author));
                     toast("已屏蔽，TA 的内容将不再显示");
                     leaveDetailPage();

@@ -113,6 +113,7 @@ import java.util.regex.Pattern;
 public final class RecordingsActivity extends Activity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
+    private static final int REQUEST_COMMUNITY_DETAIL = 31;
     private static final String ROW_STATUS_LABEL_TAG = "recording_row_status_label";
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -202,6 +203,7 @@ public final class RecordingsActivity extends Activity {
     // Currently open swipe-to-delete rows
     protected final List<LinearLayout> openSwipeRows = new ArrayList<>();
     protected boolean communityTab;
+    protected boolean communityRefreshDirty;
     protected boolean loading;
     protected boolean communityLoading;
     protected boolean topLevelUiRendered;
@@ -362,10 +364,17 @@ public final class RecordingsActivity extends Activity {
         if (!businessInitialized) return;
         reconnectAccountSessionsIfNeeded();
         if (!isDetailActivity()) {
-            if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
-                refreshAndDrain();
+            if (communityTab) {
+                if (communityRefreshDirty) {
+                    communityRefreshDirty = false;
+                    refreshDataInBackground();
+                }
             } else {
-                refreshDataSilently();
+                if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
+                    refreshAndDrain();
+                } else {
+                    refreshDataSilently();
+                }
             }
             if (statusSession != null) statusSession.connect();
             if (commandSession != null) {
@@ -857,7 +866,7 @@ public final class RecordingsActivity extends Activity {
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_TITLE, post.title);
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_AUTHOR, post.author);
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_DATE, post.firstSharedAt);
-        startActivity(intent);
+        startActivityForResult(intent, REQUEST_COMMUNITY_DETAIL);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
     protected void showCommunityDetailFromIntent() {
@@ -1229,7 +1238,7 @@ public final class RecordingsActivity extends Activity {
     protected void openCommunityShare(String shareId) {
         Intent intent = new Intent(this, CommunityDetailActivity.class);
         intent.putExtra(EXTRA_SHARE_ID, shareId);
-        startActivity(intent);
+        startActivityForResult(intent, REQUEST_COMMUNITY_DETAIL);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
@@ -1542,7 +1551,8 @@ public final class RecordingsActivity extends Activity {
                 communityTab = position == 1;
                 selectedTag = position >= 2 && position - 2 < homeTags.size() ? homeTags.get(position - 2) : null;
                 updateHomeTabs();
-                if (communityTab && !communityLoadAttempted) {
+                if (communityTab && (communityRefreshDirty || !communityLoadAttempted)) {
+                    communityRefreshDirty = false;
                     communityLoadAttempted = true;
                     communityLoading = posts.isEmpty();
                     refreshHomePages();
@@ -3084,6 +3094,11 @@ public final class RecordingsActivity extends Activity {
     }
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_COMMUNITY_DETAIL && resultCode == RESULT_OK && data != null &&
+                data.getBooleanExtra(CommunityDetailActivity.EXTRA_COMMUNITY_DATA_CHANGED, false)) {
+            communityRefreshDirty = true;
+            return;
+        }
         if (requestCode == 20 && resultCode == RESULT_OK && data != null && recordingStart != null) {
             ArrayList<String> paths = data.getStringArrayListExtra(InsertPhotoActivity.EXTRA_PHOTO_PATHS);
             long[] captureTimes = data.getLongArrayExtra(InsertPhotoActivity.EXTRA_CAPTURE_TIMES);

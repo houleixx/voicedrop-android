@@ -47,19 +47,22 @@ public class CommunityStoreTest {
     @Test
     public void communityDetailReturnRefreshesCommunityAndDropsReportedSnapshot() throws Exception {
         String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String detail = readSource("src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java");
         String store = readSource("src/main/java/com/baixingai/voicedrop/data/CommunityStore.java");
 
-        assertTrue(activity.contains("if (communityTab) {\n"
-                + "            // CommunityDetailActivity is a separate Activity."));
-        assertTrue(activity.contains("if (communityTab) {\n"
-                + "            // The detail page can block or report a post"));
+        assertTrue(activity.contains("communityRefreshDirty"));
+        assertTrue(activity.contains("startActivityForResult(intent, REQUEST_COMMUNITY_DETAIL)"));
+        assertTrue(detail.contains("EXTRA_COMMUNITY_DATA_CHANGED"));
+        assertTrue(detail.contains("communityLikePendingRequests"));
+        assertTrue(detail.contains("finishDetailActivityNow()"));
+        assertTrue(detail.contains("beginCommunityLikeRequest(shareId, liked[0])"));
         assertTrue(store.contains("auth.storeCommunityFeedCache(\"\")"));
     }
 
     @Test
     public void communityMarksTheFirstLoadBeforeRenderingItsLoadingState() throws Exception {
         String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        int entry = activity.indexOf("if (communityTab && !communityLoadAttempted)");
+        int entry = activity.indexOf("if (communityTab && (communityRefreshDirty || !communityLoadAttempted))");
         int attempted = activity.indexOf("communityLoadAttempted = true;", entry);
         int loading = activity.indexOf("communityLoading = posts.isEmpty();", entry);
         int render = activity.indexOf("refreshHomePages();", entry);

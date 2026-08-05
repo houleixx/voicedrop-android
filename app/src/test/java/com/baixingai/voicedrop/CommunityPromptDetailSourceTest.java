@@ -23,7 +23,7 @@ public class CommunityPromptDetailSourceTest {
         assertTrue(prompt.contains("怎么用"));
         assertTrue(prompt.contains("收下这条提示词"));
         assertTrue(prompt.contains("promptStore.importCode(post.promptCode)"));
-        assertTrue(prompt.contains("community.engage(shareId, \"like\", liked[0])"));
+        assertTrue(prompt.contains("beginCommunityLikeRequest(shareId, liked[0])"));
         assertTrue(prompt.contains("showCommunityPostMenu(post, authorName, v)"));
         assertFalse(prompt.contains("renderArticleBody("));
         assertFalse(prompt.contains("renderReplies("));

@@ -91,6 +91,7 @@ import java.util.regex.Pattern;
 public final class CommunityActivity extends Activity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
+    private static final int REQUEST_COMMUNITY_DETAIL = 31;
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
     protected final ExecutorService dictationIo = Executors.newSingleThreadExecutor();
@@ -135,6 +136,7 @@ public final class CommunityActivity extends Activity {
     protected FrameLayout root;
     protected List<Recording> recordings = new ArrayList<>();
     protected List<CommunityStore.Post> posts = new ArrayList<>();
+    protected boolean communityRefreshDirty;
     protected CommunityStore.Feed communityFeed = CommunityStore.Feed.empty();
     protected com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab communityFeedTab =
             com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.RECOMMENDED;
@@ -224,10 +226,9 @@ public final class CommunityActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (!isDetailActivity()) {
-            if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
-                refreshAndDrain();
-            } else {
-                refreshDataSilently();
+            if (communityRefreshDirty) {
+                communityRefreshDirty = false;
+                refreshDataInBackground();
             }
             if (statusSession != null) statusSession.connect();
         }
@@ -614,7 +615,7 @@ public final class CommunityActivity extends Activity {
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_TITLE, post.title);
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_AUTHOR, post.author);
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_DATE, post.firstSharedAt);
-        startActivity(intent);
+        startActivityForResult(intent, REQUEST_COMMUNITY_DETAIL);
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
     protected void showCommunityDetailFromIntent() {
@@ -654,6 +655,10 @@ public final class CommunityActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_COMMUNITY_DETAIL && resultCode == RESULT_OK && data != null &&
+                data.getBooleanExtra(CommunityDetailActivity.EXTRA_COMMUNITY_DATA_CHANGED, false)) {
+            communityRefreshDirty = true;
+        }
     }
     protected void addRecordingPhoto(Uri uri) {
     }

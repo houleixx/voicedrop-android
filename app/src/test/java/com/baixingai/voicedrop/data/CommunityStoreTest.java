@@ -45,6 +45,18 @@ public class CommunityStoreTest {
     }
 
     @Test
+    public void communityDetailReturnRefreshesCommunityAndDropsReportedSnapshot() throws Exception {
+        String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String store = readSource("src/main/java/com/baixingai/voicedrop/data/CommunityStore.java");
+
+        assertTrue(activity.contains("if (communityTab) {\n"
+                + "            // CommunityDetailActivity is a separate Activity."));
+        assertTrue(activity.contains("if (communityTab) {\n"
+                + "            // The detail page can block or report a post"));
+        assertTrue(store.contains("auth.storeCommunityFeedCache(\"\")"));
+    }
+
+    @Test
     public void communityMarksTheFirstLoadBeforeRenderingItsLoadingState() throws Exception {
         String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         int entry = activity.indexOf("if (communityTab && !communityLoadAttempted)");

@@ -200,7 +200,15 @@ public final class CommunityStore {
     }
 
     public boolean report(String shareId) throws Exception {
-        return http.postJson(Api.filesBase() + "/community/report/" + Api.path(shareId), auth.bearer(), new byte[0]).ok();
+        HttpClient.Response response = http.postJson(
+                Api.filesBase() + "/community/report/" + Api.path(shareId),
+                auth.bearer(), new byte[0]);
+        if (response.ok()) {
+            // A reported post is hidden server-side. Do not let a failed return-time
+            // refresh resurrect it from the stale SWR snapshot.
+            auth.storeCommunityFeedCache("");
+        }
+        return response.ok();
     }
 
     public void engage(String shareId, String action) throws Exception {

@@ -1270,6 +1270,13 @@ public final class RecordingsActivity extends Activity {
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
     protected void refreshAndDrain() {
+        if (communityTab) {
+            // CommunityDetailActivity is a separate Activity. When it finishes,
+            // onResume must refresh the community snapshot; refreshing recordings
+            // here leaves the returned community list unchanged.
+            refreshDataInBackground();
+            return;
+        }
         loading = true;
         showHome();
         recordingsLoadAttempted = true;
@@ -1313,6 +1320,12 @@ public final class RecordingsActivity extends Activity {
         });
     }
     protected void refreshDataSilently() {
+        if (communityTab) {
+            // The detail page can block or report a post and then finish. Keep the
+            // returned list authoritative even on the silent resume path.
+            refreshDataInBackground();
+            return;
+        }
         io.execute(() -> {
             uploader.drainPending();
             try {

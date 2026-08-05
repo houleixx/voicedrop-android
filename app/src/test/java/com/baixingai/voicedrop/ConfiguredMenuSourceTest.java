@@ -72,6 +72,17 @@ public class ConfiguredMenuSourceTest {
     }
 
     @Test
+    public void imageMenuUsesTheLongPressPointInsteadOfAnOffscreenImageTop() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+
+        assertTrue(source.contains("articleLongPressTouchY.put(v, Math.round(event.getRawY()))"));
+        assertTrue(source.contains("image.setOnTouchListener((v, event) ->"));
+        assertTrue(source.contains("articleLongPressTouchY.put(frame, Math.round(event.getRawY()))"));
+        assertTrue(source.contains("int anchorY = touchY != null && touchY > 0 ? touchY : anchorLocation[1]"));
+        assertTrue(source.contains("int belowY = anchorY + gap"));
+    }
+
+    @Test
     public void everyConfiguredMenuRowIsSeparatedIncludingImportedPrompts() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
 

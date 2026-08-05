@@ -111,6 +111,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -206,6 +207,7 @@ public final class RecordingDetailActivity extends Activity {
     protected final List<View> articleLocatorViews = new ArrayList<>();
     protected final Set<String> locallyFinishedQuestionIds = new HashSet<>();
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
+    protected final Map<View, Integer> articleLongPressTouchY = new WeakHashMap<>();
     protected final Set<String> generatedPhotoKeys = new HashSet<>();
     protected final Map<Integer, RestylePreviewPiece> restylePreviewPieces = new TreeMap<>();
     protected final AtomicBoolean restyleFinishing = new AtomicBoolean(false);
@@ -2726,6 +2728,12 @@ public final class RecordingDetailActivity extends Activity {
                 }
                 final String relKey = key;
                 if (relKey != null) {
+                    photo.setOnTouchListener((v, event) -> {
+                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                            articleLongPressTouchY.put(v, Math.round(event.getRawY()));
+                        }
+                        return false;
+                    });
                     photo.setOnLongClickListener(v -> {
                         Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
                         showConfiguredImageMenu(v, rec, relKey);
@@ -3190,7 +3198,18 @@ public final class RecordingDetailActivity extends Activity {
         anchor.getLocationOnScreen(anchorLocation);
         int margin = dp(16);
         int popupX = Math.max(margin, Math.min(anchorLocation[0], screenWidth - popupWidth - margin));
-        int popupY = Math.max(margin, Math.min(anchorLocation[1], screenHeight - popupHeight - margin));
+        Integer touchY = articleLongPressTouchY.get(anchor);
+        int anchorY = touchY != null && touchY > 0 ? touchY : anchorLocation[1];
+        int gap = dp(12);
+        int belowY = anchorY + gap;
+        int belowSpace = Math.max(0, screenHeight - belowY - margin);
+        int aboveSpace = Math.max(0, anchorY - gap - margin);
+        boolean placeBelow = popupHeight <= belowSpace || belowSpace >= aboveSpace;
+        int availableSpace = placeBelow ? belowSpace : aboveSpace;
+        int popupY = placeBelow
+                ? belowY
+                : Math.max(margin, anchorY - gap - Math.min(popupHeight, availableSpace));
+        popupY = Math.max(margin, Math.min(popupY, screenHeight - popupHeight - margin));
         popup.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, popupX, popupY);
         return popup;
     }
@@ -3442,6 +3461,15 @@ public final class RecordingDetailActivity extends Activity {
         ImageView image = new RoundedImageView(this);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         image.setImageBitmap(bitmap);
+        // The image child receives the initial touch before its FrameLayout
+        // parent. Keep the long-press point on the popup anchor so a tall image
+        // cannot fall back to its offscreen top edge.
+        image.setOnTouchListener((v, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                articleLongPressTouchY.put(frame, Math.round(event.getRawY()));
+            }
+            return false;
+        });
         frame.addView(image, 0, match());
         frame.post(() -> {
             int width = frame.getWidth();

@@ -22,8 +22,6 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
-import java.util.List;
-
 public final class AboutActivity extends Activity {
     static final int[] ABOUT_ROW_ICON_RES_IDS = {
             R.drawable.ic_about_privacy,
@@ -33,6 +31,7 @@ public final class AboutActivity extends Activity {
     };
 
     private BlockStore blockStore;
+    private TextView blockedCount;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,7 +83,7 @@ public final class AboutActivity extends Activity {
 
         addSettingRow(content, R.drawable.ic_about_privacy, "隐私政策", null, this::openPrivacyPolicy);
         addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
-        addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::showBlockedUsers);
+        addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::openBlockedUsers);
         addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
     }
 
@@ -92,6 +91,14 @@ public final class AboutActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) configureEdgeToEdge();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (blockedCount != null) {
+            blockedCount.setText(blockStore.blockedList().size() + " 人");
+        }
     }
 
     @Override
@@ -117,36 +124,9 @@ public final class AboutActivity extends Activity {
         }
     }
 
-    private void showBlockedUsers() {
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(dp(16), 0, dp(16), 0);
-        List<String> blocked = blockStore.blockedList();
-        if (blocked.isEmpty()) {
-            TextView empty = text("还没有屏蔽任何人", 16, Theme.SECONDARY, Typeface.NORMAL);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, dp(20), 0, dp(20));
-            list.addView(empty);
-        } else {
-            for (String name : blocked) {
-                LinearLayout row = new LinearLayout(this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(16), dp(13), dp(16), dp(13));
-                row.setBackground(round(Theme.CARD, 12));
-                row.addView(text(name, 16, Theme.INK, Typeface.BOLD), new LinearLayout.LayoutParams(0, -2, 1));
-                TextView unblock = text("取消屏蔽", 14, Theme.RED, Typeface.BOLD);
-                row.addView(unblock);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-                lp.setMargins(0, 0, 0, dp(8));
-                list.addView(row, lp);
-                unblock.setOnClickListener(v -> {
-                    blockStore.unblock(name);
-                    showBlockedUsers();
-                });
-            }
-        }
-        IosDialog.show(this, "已屏蔽用户", list, "关闭", () -> {});
+    private void openBlockedUsers() {
+        startActivity(new Intent(this, BlockedUsersActivity.class));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.stay);
     }
 
     private void addSettingRow(LinearLayout content, int iconResId, String title, String subtitle, Runnable action) {
@@ -164,6 +144,7 @@ public final class AboutActivity extends Activity {
             TextView sub = text(subtitle, 12, Theme.SECONDARY, Typeface.NORMAL);
             sub.setPadding(0, dp(4), 0, 0);
             texts.addView(sub);
+            if ("已屏蔽用户".equals(title)) blockedCount = sub;
         }
         row.addView(trailingChevron());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);

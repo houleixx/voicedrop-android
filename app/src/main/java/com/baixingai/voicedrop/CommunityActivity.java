@@ -137,6 +137,7 @@ public final class CommunityActivity extends Activity {
     protected List<Recording> recordings = new ArrayList<>();
     protected List<CommunityStore.Post> posts = new ArrayList<>();
     protected boolean communityRefreshDirty;
+    protected final Set<String> blockedAuthorsSnapshot = new HashSet<>();
     protected CommunityStore.Feed communityFeed = CommunityStore.Feed.empty();
     protected com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab communityFeedTab =
             com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.RECOMMENDED;
@@ -174,6 +175,7 @@ public final class CommunityActivity extends Activity {
         library = new LibraryStore(auth, http);
         community = new CommunityStore(auth, http);
         blockStore = new BlockStore(this);
+        blockedAuthorsSnapshot.addAll(blockStore.blocked());
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
@@ -225,6 +227,11 @@ public final class CommunityActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (!blockedAuthorsSnapshot.equals(blockStore.blocked())) {
+            blockedAuthorsSnapshot.clear();
+            blockedAuthorsSnapshot.addAll(blockStore.blocked());
+            communityRefreshDirty = true;
+        }
         if (!isDetailActivity()) {
             if (communityRefreshDirty) {
                 communityRefreshDirty = false;

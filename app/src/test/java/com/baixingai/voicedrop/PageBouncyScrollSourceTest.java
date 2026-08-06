@@ -13,6 +13,7 @@ public class PageBouncyScrollSourceTest {
     private static final String[] BOUNCY_PAGE_SOURCES = {
             "src/main/java/com/baixingai/voicedrop/AboutActivity.java",
             "src/main/java/com/baixingai/voicedrop/AccountActivity.java",
+            "src/main/java/com/baixingai/voicedrop/BlockedUsersActivity.java",
             "src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java",
             "src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java",
             "src/main/java/com/baixingai/voicedrop/SettingsActivity.java",

@@ -41,6 +41,7 @@ import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.ArticleRenderPolicy;
 import com.baixingai.voicedrop.core.PhotoLoadPolicy;
 import com.baixingai.voicedrop.core.PromptTree;
 import com.baixingai.voicedrop.core.RecordingName;
@@ -68,6 +69,7 @@ import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.DialogWindowDefaults;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
@@ -113,11 +115,14 @@ import java.util.List;
 import java.time.ZonedDateTime;
 
 public final class CommunityDetailActivity extends Activity {
+    /** Engagement requests must outlive the detail Activity that started them. */
+    protected static final ExecutorService COMMUNITY_LIKE_IO = Executors.newSingleThreadExecutor();
     public static final String EXTRA_COMMUNITY_DATA_CHANGED = "communityDataChanged";
     private static final int COMMUNITY_TOOLBAR_ICON_DP = 24;
     private static final int COMMUNITY_TOOLBAR_BARE_SLOT_DP = 36;
     private static final int COMMUNITY_TOOLBAR_MORE_BOX_DP = 34;
     private static final int COMMUNITY_TOOLBAR_MORE_SLOT_DP = 56;
+    private static final int PROCESSING_CARD_COLOR = 0xb8000000;
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
     public static final String EXTRA_POST_TITLE = "postTitle";
@@ -152,8 +157,12 @@ public final class CommunityDetailActivity extends Activity {
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
     protected boolean communityDataChanged;
-    protected int communityLikePendingRequests;
-    protected boolean communityFinishRequested;
+    protected BouncyScrollView communityArticleScroll;
+    protected LinearLayout communityArticleContent;
+    protected LinearLayout communityReplyToSection;
+    protected LinearLayout communityRepliesSection;
+    protected String communityArticleShareId;
+    protected CommunityStore.Post communityArticlePost;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
     protected List<ArticleEditSession.EditRequest> editQueue = new ArrayList<>();
@@ -459,15 +468,10 @@ public final class CommunityDetailActivity extends Activity {
         }
     }
     protected void finishDetailActivity() {
-        if (communityLikePendingRequests > 0) {
-            communityFinishRequested = true;
-            return;
-        }
         finishDetailActivityNow();
     }
 
     private void finishDetailActivityNow() {
-        communityFinishRequested = false;
         if (communityDataChanged) {
             Intent result = new Intent();
             result.putExtra(EXTRA_COMMUNITY_DATA_CHANGED, true);
@@ -479,19 +483,8 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void beginCommunityLikeRequest(String shareId, boolean liked) {
-        communityLikePendingRequests++;
-        io.execute(() -> {
-            try {
-                community.engage(shareId, "like", liked);
-            } finally {
-                main.post(() -> {
-                    communityLikePendingRequests = Math.max(0, communityLikePendingRequests - 1);
-                    if (communityLikePendingRequests == 0 && communityFinishRequested && !isFinishing()) {
-                        finishDetailActivityNow();
-                    }
-                });
-            }
-        });
+        CommunityStore requestStore = community;
+        COMMUNITY_LIKE_IO.execute(() -> requestStore.engage(shareId, "like", liked));
     }
     protected void cleanupDetailResources() {
         main.removeCallbacks(timerTick);
@@ -521,6 +514,12 @@ public final class CommunityDetailActivity extends Activity {
         holdEditFinishing = false;
         setArticleLocatorsVisible(false);
         articleLocatorViews.clear();
+        communityArticleScroll = null;
+        communityArticleContent = null;
+        communityReplyToSection = null;
+        communityRepliesSection = null;
+        communityArticleShareId = null;
+        communityArticlePost = null;
         currentArticleDoc = null;
         currentArticleStem = null;
         deferredArticleRenderRecording = null;
@@ -612,6 +611,15 @@ public final class CommunityDetailActivity extends Activity {
         touch.addView(icon, new FrameLayout.LayoutParams(
                 dp(COMMUNITY_TOOLBAR_ICON_DP), dp(COMMUNITY_TOOLBAR_ICON_DP), Gravity.CENTER));
     }
+
+    /** Applies both heart states inside the same 24dp toolbar icon box. */
+    protected void applyLikeIcon(ImageView icon, boolean liked) {
+        AliIconFont.apply(icon, liked ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
+                liked ? Theme.RED : Theme.INK);
+        icon.setScaleX(liked ? 1.06f : 1f);
+        icon.setScaleY(liked ? 1.06f : 1f);
+    }
+
     protected void renderArticleChips(LinearLayout chipRow, ArticleDoc doc, final Recording rec) {
     }
     protected void renderCurrentArticle(LinearLayout content, Recording rec, ArticleDoc doc) {
@@ -922,6 +930,14 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void showCommunityPost(CommunityStore.Post post, ArticleDoc doc, boolean animateOpen) {
+        if (!post.isPrompt() && post.shareId != null && communityArticleContent != null
+                && post.shareId.equals(communityArticleShareId)) {
+            if (sameCommunityArticleSnapshot(post, doc)) {
+                return;
+            }
+            updateCommunityPostInPlace(post, doc);
+            return;
+        }
         main.post(() -> warmCommunityArticlePhotos(doc));
         // Prompt posts have their own collectible-resource detail layout. Keep the
         // article renderer below unchanged so prompt presentation cannot regress
@@ -1020,8 +1036,7 @@ public final class CommunityDetailActivity extends Activity {
         FrameLayout likeBtn = new FrameLayout(this);
         likeBtn.setClickable(true);
         final ImageView likeIcon = new ImageView(this);
-        AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
-                liked[0] ? Theme.RED : Theme.INK);
+        applyLikeIcon(likeIcon, liked[0]);
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
         addCommunityToolbarIcon(likeBtn, likeIcon);
         LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
@@ -1031,8 +1046,7 @@ public final class CommunityDetailActivity extends Activity {
             liked[0] = !liked[0];
             communityDataChanged = true;
             prefs.setLikedCommunityPost(shareId, liked[0]);
-            AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
-                    liked[0] ? Theme.RED : Theme.INK);
+            applyLikeIcon(likeIcon, liked[0]);
             beginCommunityLikeRequest(shareId, liked[0]);
         });
 
@@ -1049,70 +1063,22 @@ public final class CommunityDetailActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView title = text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
-                26, Theme.INK, Typeface.BOLD);
-        if (post.isPrompt()) {
-            TextView badge = text("社区提示词", 12, 0xff6f5529, Typeface.BOLD);
-            badge.setGravity(Gravity.CENTER);
-            badge.setPadding(dp(9), dp(4), dp(9), dp(4));
-            badge.setBackground(round(0xfff4dfac, dp(12)));
-            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-2, -2);
-            badgeLp.setMargins(0, 0, 0, dp(10));
-            content.addView(badge, badgeLp);
-        }
-        title.setLineSpacing(dp(5), 1.0f);
-        content.addView(title);
-
-        TextView meta = text("", 14, Theme.FAINT, Typeface.NORMAL);
-        meta.setText(communityMetaText(post));
-        meta.setPadding(0, dp(9), 0, dp(14));
-        content.addView(meta);
-
         final LinearLayout replyToSection = new LinearLayout(this);
         replyToSection.setOrientation(LinearLayout.VERTICAL);
-        content.addView(replyToSection);
-
-        if (post.isPrompt()) {
-            LinearLayout collect = new LinearLayout(this);
-            collect.setOrientation(LinearLayout.VERTICAL);
-            collect.setPadding(dp(16), dp(15), dp(16), dp(15));
-            collect.setBackground(round(Theme.CARD, dp(14)));
-            collect.addView(text("分享码 " + post.promptCode, 13, 0xff6f5529, Typeface.BOLD));
-            TextView usage = text("收下后可在提示词设置中编辑，并用于文字或图片处理。", 13, Theme.SECONDARY, Typeface.NORMAL);
-            usage.setPadding(0, dp(8), 0, dp(10));
-            collect.addView(usage);
-            Button collectButton = new Button(this);
-            collectButton.setText("收下这条提示词");
-            collectButton.setOnClickListener(v -> {
-                Intent intent = new Intent(this, PromptImportActivity.class);
-                intent.putExtra("shareCode", post.promptCode);
-                startActivity(intent);
-            });
-            collect.addView(collectButton, new LinearLayout.LayoutParams(-1, -2));
-            LinearLayout.LayoutParams collectLp = new LinearLayout.LayoutParams(-1, -2);
-            collectLp.setMargins(0, 0, 0, dp(16));
-            content.addView(collect, collectLp);
-        }
-
-        if (doc != null && !doc.articles.isEmpty()) {
-            for (MinedArticle article : doc.articles) {
-                if (!article.title.equals(post.title)) {
-                    TextView articleTitle = text(article.title, 20, Theme.INK, Typeface.BOLD);
-                    articleTitle.setPadding(0, dp(10), 0, 0);
-                    content.addView(articleTitle);
-                }
-                renderArticleBody(content, article.body, doc);
-            }
-        } else {
-            TextView body = text("社区正文暂不可读，请稍后刷新或打开分享链接查看。", 16, Theme.INK, Typeface.NORMAL);
-            body.setLineSpacing(dp(4), 1.0f);
-            content.addView(body);
-        }
+        renderCommunityPostContent(content, post, doc, replyToSection);
 
         // Replies section (loaded async)
         final LinearLayout repliesSection = new LinearLayout(this);
         repliesSection.setOrientation(LinearLayout.VERTICAL);
         content.addView(repliesSection);
+
+        communityArticleScroll = scroll;
+        communityArticleContent = content;
+        communityReplyToSection = replyToSection;
+        communityRepliesSection = repliesSection;
+        communityArticleShareId = shareId;
+        communityArticlePost = post;
+        currentArticleDoc = doc;
 
         // Trigger async load of replies and engage
         io.execute(() -> {
@@ -1146,6 +1112,64 @@ public final class CommunityDetailActivity extends Activity {
         // Store references for the recording bar
         final CommunityStore.Post finalPost = post;
         root.setTag(new Object[]{post, recordingBarContainer, scroll, content});
+    }
+
+    protected void renderCommunityPostContent(LinearLayout content, CommunityStore.Post post,
+                                               ArticleDoc doc, LinearLayout replyToSection) {
+        TextView title = text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
+                26, Theme.INK, Typeface.BOLD);
+        title.setLineSpacing(dp(5), 1.0f);
+        content.addView(title);
+
+        TextView meta = text("", 14, Theme.FAINT, Typeface.NORMAL);
+        meta.setText(communityMetaText(post));
+        meta.setPadding(0, dp(9), 0, dp(14));
+        content.addView(meta);
+        content.addView(replyToSection);
+
+        if (doc != null && !doc.articles.isEmpty()) {
+            for (MinedArticle article : doc.articles) {
+                if (!article.title.equals(post.title)) {
+                    TextView articleTitle = text(article.title, 20, Theme.INK, Typeface.BOLD);
+                    articleTitle.setPadding(0, dp(10), 0, 0);
+                    content.addView(articleTitle);
+                }
+                renderArticleBody(content, article.body, doc);
+            }
+        } else {
+            TextView body = text("社区正文暂不可读，请稍后刷新或打开分享链接查看。", 16, Theme.INK, Typeface.NORMAL);
+            body.setLineSpacing(dp(4), 1.0f);
+            content.addView(body);
+        }
+    }
+
+    protected void updateCommunityPostInPlace(CommunityStore.Post post, ArticleDoc doc) {
+        if (communityArticleContent == null || communityArticleScroll == null) {
+            showCommunityPost(post, doc, false);
+            return;
+        }
+        int scrollY = communityArticleScroll.getScrollY();
+        communityArticlePost = post;
+        currentArticleDoc = doc;
+        communityArticleContent.removeAllViews();
+        renderCommunityPostContent(communityArticleContent, post, doc, communityReplyToSection);
+        communityArticleContent.addView(communityRepliesSection);
+        communityArticleScroll.post(() -> communityArticleScroll.scrollTo(0, scrollY));
+        main.post(() -> warmCommunityArticlePhotos(doc));
+    }
+
+    protected boolean sameCommunityArticleSnapshot(CommunityStore.Post post, ArticleDoc doc) {
+        if (communityArticlePost == null
+                || !sameText(communityArticlePost.title, post.title)
+                || !sameText(communityArticlePost.author, post.author)
+                || communityArticlePost.firstSharedAt != post.firstSharedAt) {
+            return false;
+        }
+        return !ArticleRenderPolicy.shouldRebuild(currentArticleDoc, doc);
+    }
+
+    protected boolean sameText(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 
     protected void warmCommunityArticlePhotos(ArticleDoc doc) {
@@ -1250,8 +1274,7 @@ public final class CommunityDetailActivity extends Activity {
         likeBtn.setClickable(true);
         likeBtn.setContentDescription(liked[0] ? "取消赞" : "赞");
         final ImageView likeIcon = new ImageView(this);
-        AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
-                liked[0] ? Theme.RED : Theme.INK);
+        applyLikeIcon(likeIcon, liked[0]);
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
         addCommunityToolbarIcon(likeBtn, likeIcon);
         LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
@@ -1266,8 +1289,7 @@ public final class CommunityDetailActivity extends Activity {
                     if (likeTouched[0]) return;
                     liked[0] = serverLiked;
                     prefs.setLikedCommunityPost(shareId, serverLiked);
-                    AliIconFont.apply(likeIcon, serverLiked ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
-                            serverLiked ? Theme.RED : Theme.INK);
+                    applyLikeIcon(likeIcon, serverLiked);
                     likeBtn.setContentDescription(serverLiked ? "取消赞" : "赞");
                 });
             } catch (Exception ignored) {}
@@ -1277,8 +1299,7 @@ public final class CommunityDetailActivity extends Activity {
             liked[0] = !liked[0];
             communityDataChanged = true;
             prefs.setLikedCommunityPost(shareId, liked[0]);
-            AliIconFont.apply(likeIcon, liked[0] ? AliIconFont.HEART_FILLED : AliIconFont.HEART,
-                    liked[0] ? Theme.RED : Theme.INK);
+            applyLikeIcon(likeIcon, liked[0]);
             likeBtn.setContentDescription(liked[0] ? "取消赞" : "赞");
             beginCommunityLikeRequest(shareId, liked[0]);
         });
@@ -1815,32 +1836,73 @@ public final class CommunityDetailActivity extends Activity {
     }
 
     protected void showReportConfirm(CommunityStore.Post post) {
-        IosDialog.show(this, "举报这篇分享？", "举报后这篇会立即从社区下架，并在 24 小时内由人工审核处理。", "举报并下架", () -> {
+        IosDialog.showConfirmation(this, "举报这篇分享？", "举报后这篇会立即从社区下架，并在 24 小时内由人工审核处理。",
+                "举报并下架", () -> {
+            android.app.Dialog loading = showBlockingLoading("处理中...");
             io.execute(() -> {
                 try {
                     if (!community.report(post.shareId)) throw new IllegalStateException("举报请求失败");
                     main.post(() -> {
+                        loading.dismiss();
                         communityDataChanged = true;
                         toast("已举报，内容已下架待审核");
                         posts.removeIf(p -> p.shareId.equals(post.shareId));
                         leaveDetailPage();
                     });
                 } catch (Exception e) {
-                    main.post(() -> toast("举报失败：" + e.getMessage()));
+                    main.post(() -> {
+                        loading.dismiss();
+                        toast("举报失败：" + e.getMessage());
+                    });
                 }
             });
-        });
+        }, "取消", null);
+    }
+
+    protected android.app.Dialog showBlockingLoading(String message) {
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
+        dialog.setCancelable(false);
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.TRANSPARENT);
+
+        LinearLayout loading = new LinearLayout(this);
+        loading.setOrientation(LinearLayout.VERTICAL);
+        loading.setGravity(Gravity.CENTER);
+        loading.setPadding(dp(20), dp(18), dp(20), dp(18));
+        loading.setBackground(round(PROCESSING_CARD_COLOR, 10));
+
+        ProgressBar spinner = new ProgressBar(this);
+        spinner.setIndeterminate(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        } else {
+            spinner.getIndeterminateDrawable().setColorFilter(Color.WHITE,
+                    android.graphics.PorterDuff.Mode.SRC_IN);
+        }
+        loading.addView(spinner, new LinearLayout.LayoutParams(dp(32), dp(32)));
+
+        TextView label = text(message, 14, Color.WHITE, Typeface.NORMAL);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(0, dp(10), 0, 0);
+        loading.addView(label, new LinearLayout.LayoutParams(-2, -2));
+
+        overlay.addView(loading, new FrameLayout.LayoutParams(dp(112), dp(112), Gravity.CENTER));
+        dialog.setContentView(overlay);
+        dialog.show();
+        DialogWindowDefaults.applyModal(dialog.getWindow(), Color.TRANSPARENT,
+                Color.TRANSPARENT, true);
+        return dialog;
     }
 
     protected void showBlockConfirm(CommunityStore.Post post, String authorName) {
-        IosDialog.show(this, "屏蔽此用户？", "屏蔽后，你将不再看到 " + authorName + " 的任何社区内容。可在「设置」>「关于」>「已屏蔽用户」中取消屏蔽。",
-                "屏蔽", () -> {
+        IosDialog.showConfirmation(this, "屏蔽此用户？", "屏蔽后，你将不再看到 " + authorName + " 的任何社区内容。可在「设置」>「关于」>「已屏蔽用户」中取消屏蔽。",
+                "确定", () -> {
                     blockStore.block(post.author);
                     communityDataChanged = true;
                     posts.removeIf(p -> (p.author == null ? "" : p.author).equals(post.author));
                     toast("已屏蔽，TA 的内容将不再显示");
                     leaveDetailPage();
-                });
+                }, "取消", null);
     }
 
     protected void shareCommunityUrl(CommunityStore.Post post) {
@@ -1939,7 +2001,9 @@ public final class CommunityDetailActivity extends Activity {
     protected View divider() {
         View v = new View(this);
         v.setBackgroundColor(0xffe0d8cc);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(1)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+        lp.setMargins(dp(16), 0, dp(16), 0);
+        v.setLayoutParams(lp);
         return v;
     }
 

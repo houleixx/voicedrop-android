@@ -29,6 +29,7 @@ public class SystemBarInsetsSourceTest {
         String[] pages = {
                 "AccountActivity.java",
                 "AboutActivity.java",
+                "BlockedUsersActivity.java",
                 "CommunityActivity.java",
                 "CommunityDetailActivity.java",
                 "InstructionSettingsActivity.java",

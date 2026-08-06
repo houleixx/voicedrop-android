@@ -152,6 +152,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 
 public final class RecordingDetailActivity extends Activity {
     private static final int BLOCKING_LOADING_SCRIM = 0x33000000;
+    private static final int PROCESSING_CARD_COLOR = 0xb8000000;
     private static final long PHOTO_MAKING_GRACE_MS = 900L;
     private static final long PHOTO_POLL_INTERVAL_MS = 3_000L;
     private static final long PHOTO_POLL_TIMEOUT_MS = 5 * 60_000L;
@@ -225,6 +226,8 @@ public final class RecordingDetailActivity extends Activity {
     protected View articleToolbarBack;
     protected Space articleToolbarSpacer;
     protected LinearLayout articleToolbarActions;
+    protected BouncyScrollView articleScroll;
+    protected LinearLayout articleContent;
     protected LinearLayout articleInlineEditActions;
     protected TextView articleInlineEditDone;
     protected View articleEditPanel;
@@ -558,6 +561,8 @@ public final class RecordingDetailActivity extends Activity {
         setArticleLocatorsVisible(false);
         articleLocatorViews.clear();
         generatedPhotoKeys.clear();
+        articleScroll = null;
+        articleContent = null;
         currentArticleDoc = null;
         currentArticleStem = null;
         deferredArticleRenderRecording = null;
@@ -852,9 +857,13 @@ public final class RecordingDetailActivity extends Activity {
         }
         Recording rec = new Recording(audioName, "", true, false);
         ArticleDoc cached = library.cachedDoc(rec);
+        boolean sameVisibleRecording = articleContent != null && rec.stem().equals(currentArticleStem);
         if (cached != null && cached.articles != null && !cached.articles.isEmpty()) {
-            showArticle(rec, cached, false, false);
-        } else {
+            // A status refresh can arrive while this detail page is already visible.
+            // Keep that page in place and let the network snapshot below update it;
+            // rebuilding the cached page here causes the delayed flash.
+            if (!sameVisibleRecording) showArticle(rec, cached, false, false);
+        } else if (!sameVisibleRecording) {
             showDetailLoading(rec);
         }
         runIoIfActive(() -> {
@@ -863,12 +872,16 @@ public final class RecordingDetailActivity extends Activity {
                 if (!isActivityActive()) return;
                 if (doc != null && doc.articles != null && !doc.articles.isEmpty()) {
                     if (ArticleRenderPolicy.shouldRebuild(currentArticleDoc, doc)) {
-                        showArticle(rec, doc, false);
+                        if (articleContent != null && rec.stem().equals(currentArticleStem)) {
+                            updateArticleInPlace(rec, doc);
+                        } else {
+                            showArticle(rec, doc, false);
+                        }
                     } else {
                         currentArticleDoc = doc;
                         refreshArticleHistoryState(rec);
                     }
-                } else if (cached == null) {
+                } else if (cached == null && !sameVisibleRecording) {
                     showArticle(rec, null, false);
                 }
             });
@@ -957,6 +970,8 @@ public final class RecordingDetailActivity extends Activity {
         content.setClipToPadding(false);
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        articleScroll = scroll;
+        articleContent = content;
 
         renderCurrentArticle(content, rec, doc);
         LinearLayout editPanel = renderArticleEditBar(articleFrame, rec);
@@ -964,6 +979,47 @@ public final class RecordingDetailActivity extends Activity {
                 content, editPanel, dp(22), dp(0), dp(22), dp(28));
 
         attachPage(articleFrame, animateOpen);
+    }
+
+    /** Updates the visible article body without replacing the detail page shell. */
+    protected void updateArticleInPlace(Recording rec, ArticleDoc doc) {
+        if (!isActivityActive() || articleContent == null || articleScroll == null) {
+            showArticle(rec, doc, false);
+            return;
+        }
+        int scrollY = articleScroll.getScrollY();
+        int nextArticleIndex = Math.min(articleIndex, doc.articles.size() - 1);
+        boolean renderedArticleChanged = renderedArticleChanged(currentArticleDoc, doc);
+        currentArticleDoc = doc;
+        articleIndex = nextArticleIndex;
+        if (renderedArticleChanged) {
+            renderCurrentArticle(articleContent, rec, doc);
+        }
+        refreshArticleHistoryState(rec);
+        if (renderedArticleChanged) {
+            articleContent.post(() -> articleScroll.scrollTo(0, scrollY));
+        }
+    }
+
+    /** Returns whether the visible article body, including its photo slots, changed. */
+    protected boolean renderedArticleChanged(ArticleDoc previous, ArticleDoc updated) {
+        if (previous == null || updated == null
+                || !Objects.equals(previous.ownerScope, updated.ownerScope)
+                || !Objects.equals(previous.photos, updated.photos)
+                || previous.articles == null || updated.articles == null
+                || previous.articles.size() != updated.articles.size()) {
+            return true;
+        }
+        for (int i = 0; i < previous.articles.size(); i++) {
+            MinedArticle oldArticle = previous.articles.get(i);
+            MinedArticle newArticle = updated.articles.get(i);
+            if (!Objects.equals(oldArticle.title, newArticle.title)
+                    || !Objects.equals(oldArticle.body, newArticle.body)
+                    || !Objects.equals(oldArticle.style, newArticle.style)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     protected void publishWechat(Recording rec) {
@@ -1025,46 +1081,123 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void doShareCommunity(Recording rec, String replyTo) {
+        // Avoid a round trip and the processing overlay when the local WeChat session
+        // is already absent or expired; the mini program prompts immediately in this case.
+        if (!auth.isWechatAuthenticated()) {
+            promptWechatLogin(rec, replyTo);
+            return;
+        }
+        android.app.Dialog loading = showCommunityProcessingLoading();
         io.execute(() -> {
             try {
                 CommunityStore.ShareResult result = community.shareResult(rec, replyTo);
                 if (result.needsWechatSignin()) {
                     if (result.hasInvalidSession()) auth.signOutWechat();
-                    PendingCommunityShareStore pending = new PendingCommunityShareStore(this);
-                    pending.save(rec.audioName, replyTo);
                     main.post(() -> {
-                        if (!WechatLogin.start(this)) {
-                            pending.clear();
-                            toast("无法打开微信，请确认已安装微信");
-                        }
+                        dismissCommunityProcessingLoading(loading);
+                        promptWechatLogin(rec, replyTo);
                     });
                     return;
                 }
                 if (!result.ok) {
-                    toast(result.failureMessage());
+                    main.post(() -> {
+                        dismissCommunityProcessingLoading(loading);
+                        toast(result.failureMessage());
+                    });
                     return;
                 }
-                communityShareId = result.shareId;
-                sharedToCommunity = true;
-                toast("已在 VD 社区可见");
+                main.post(() -> {
+                    dismissCommunityProcessingLoading(loading);
+                    communityShareId = result.shareId;
+                    sharedToCommunity = true;
+                    toast("已在 VD 社区可见");
+                });
             } catch (Exception e) {
-                toast("社区分享失败：" + e.getMessage());
+                main.post(() -> {
+                    dismissCommunityProcessingLoading(loading);
+                    toast("社区分享失败：" + e.getMessage());
+                });
             }
         });
     }
 
+    /** Matches the mini program: explain why WeChat is needed before opening login. */
+    protected void promptWechatLogin(Recording rec, String replyTo) {
+        IosDialog.showConfirmation(this, "需要微信登录",
+                "发布到 VD 社区需要先用微信登录，登录后才能发布。是否现在登录？",
+                "微信登录", () -> {
+                    PendingCommunityShareStore pending = new PendingCommunityShareStore(this);
+                    pending.save(rec.audioName, replyTo);
+                    if (!WechatLogin.start(this)) {
+                        pending.clear();
+                        toast("无法打开微信，请确认已安装微信");
+                    }
+                }, "取消", () -> new PendingCommunityShareStore(this).clear());
+    }
+
+    /** Matches the mini program's dark, centered blocking progress prompt. */
+    protected android.app.Dialog showCommunityProcessingLoading() {
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
+        dialog.setCancelable(false);
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.TRANSPARENT);
+
+        LinearLayout loading = new LinearLayout(this);
+        loading.setOrientation(LinearLayout.VERTICAL);
+        loading.setGravity(Gravity.CENTER);
+        loading.setPadding(dp(20), dp(18), dp(20), dp(18));
+        loading.setBackground(round(PROCESSING_CARD_COLOR, 10));
+
+        ProgressBar spinner = new ProgressBar(this);
+        spinner.setIndeterminate(true);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+        } else {
+            spinner.getIndeterminateDrawable().setColorFilter(Color.WHITE,
+                    android.graphics.PorterDuff.Mode.SRC_IN);
+        }
+        loading.addView(spinner, new LinearLayout.LayoutParams(dp(32), dp(32)));
+
+        TextView label = text("处理中...", 14, Color.WHITE, Typeface.NORMAL);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(0, dp(10), 0, 0);
+        loading.addView(label, new LinearLayout.LayoutParams(-2, -2));
+
+        overlay.addView(loading, new FrameLayout.LayoutParams(dp(112), dp(112), Gravity.CENTER));
+        dialog.setContentView(overlay);
+        dialog.show();
+        DialogWindowDefaults.applyModal(dialog.getWindow(), Color.TRANSPARENT,
+                Color.TRANSPARENT, true);
+        return dialog;
+    }
+
+    protected void dismissCommunityProcessingLoading(android.app.Dialog dialog) {
+        try {
+            if (dialog != null && dialog.isShowing()) dialog.dismiss();
+        } catch (Exception ignored) {
+        }
+    }
+
     protected void toggleCommunityVisibility(Recording rec) {
         if (Boolean.TRUE.equals(sharedToCommunity) && communityShareId != null && !communityShareId.isEmpty()) {
+            final String shareId = communityShareId;
+            android.app.Dialog loading = showCommunityProcessingLoading();
             io.execute(() -> {
                 try {
-                    boolean ok = community.unshare(communityShareId);
-                    if (ok) {
-                        sharedToCommunity = false;
-                        communityShareId = null;
-                    }
-                    toast(ok ? "已从 VD 社区隐藏" : "操作失败，请稍后再试");
+                    boolean ok = community.unshare(shareId);
+                    main.post(() -> {
+                        dismissCommunityProcessingLoading(loading);
+                        if (ok) {
+                            sharedToCommunity = false;
+                            communityShareId = null;
+                        }
+                        toast(ok ? "已从 VD 社区隐藏" : "操作失败，请稍后再试");
+                    });
                 } catch (Exception e) {
-                    toast("操作失败：" + e.getMessage());
+                    main.post(() -> {
+                        dismissCommunityProcessingLoading(loading);
+                        toast("操作失败：" + e.getMessage());
+                    });
                 }
             });
         } else {
@@ -2063,7 +2196,9 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(shareRow);
         View thickDivider = new View(this);
         thickDivider.setBackgroundColor(0xffe9e5dc);
-        menu.addView(thickDivider, new LinearLayout.LayoutParams(-1, dp(8)));
+        LinearLayout.LayoutParams thickDividerLp = new LinearLayout.LayoutParams(-1, dp(1));
+        thickDividerLp.setMargins(dp(16), 0, dp(16), 0);
+        menu.addView(thickDivider, thickDividerLp);
 
         LinearLayout delRow = menuRow("删除", AliIconFont.TRASH, Theme.RED);
         delRow.setOnClickListener(v -> {
@@ -2141,7 +2276,9 @@ public final class RecordingDetailActivity extends Activity {
     protected View divider() {
         View v = new View(this);
         v.setBackgroundColor(0xffe0d8cc);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(1)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+        lp.setMargins(dp(16), 0, dp(16), 0);
+        v.setLayoutParams(lp);
         return v;
     }
 
@@ -2161,7 +2298,7 @@ public final class RecordingDetailActivity extends Activity {
             chip.setOnClickListener(v -> {
                 if (inlineEditingInput != null) return;
                 articleIndex = idx;
-                showArticle(rec, doc);
+                updateArticleInPlace(rec, doc);
             });
         }
     }
@@ -2307,7 +2444,11 @@ public final class RecordingDetailActivity extends Activity {
             deferredArticleRenderDoc = doc;
             return;
         }
-        showArticle(rec, doc);
+        if (articleContent != null && rec != null && rec.stem().equals(currentArticleStem)) {
+            updateArticleInPlace(rec, doc);
+        } else {
+            showArticle(rec, doc);
+        }
     }
 
     protected boolean isHoldArticleEditActiveFor(Recording rec) {

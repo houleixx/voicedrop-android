@@ -204,6 +204,7 @@ public final class RecordingsActivity extends Activity {
     protected final List<LinearLayout> openSwipeRows = new ArrayList<>();
     protected boolean communityTab;
     protected boolean communityRefreshDirty;
+    protected final Set<String> blockedAuthorsSnapshot = new HashSet<>();
     protected boolean loading;
     protected boolean communityLoading;
     protected boolean topLevelUiRendered;
@@ -267,6 +268,7 @@ public final class RecordingsActivity extends Activity {
         community = new CommunityStore(auth, http);
         pendingReplies = new PendingReplyStore(this);
         blockStore = new BlockStore(this);
+        blockedAuthorsSnapshot.addAll(blockStore.blocked());
         communityTerms = new CommunityTerms(this);
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
@@ -362,6 +364,11 @@ public final class RecordingsActivity extends Activity {
         super.onResume();
         activityResumed = true;
         if (!businessInitialized) return;
+        if (!blockedAuthorsSnapshot.equals(blockStore.blocked())) {
+            blockedAuthorsSnapshot.clear();
+            blockedAuthorsSnapshot.addAll(blockStore.blocked());
+            communityRefreshDirty = true;
+        }
         reconnectAccountSessionsIfNeeded();
         if (!isDetailActivity()) {
             if (communityTab) {

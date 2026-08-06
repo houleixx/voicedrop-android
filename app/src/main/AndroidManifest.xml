@@ -140,13 +140,17 @@
         <activity
             android:name=".wxapi.WXEntryActivity"
             android:exported="true"
-            android:theme="@style/AppTheme" />
+            android:theme="@style/WechatEntryTheme" />
         <activity
             android:name=".AccountActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity
             android:name=".AboutActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".BlockedUsersActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity

@@ -60,6 +60,16 @@ public class CommunityStoreTest {
     }
 
     @Test
+    public void returningFromBlockManagementRefreshesTheCommunityWhenTheLocalListChanges() throws Exception {
+        String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+
+        assertTrue(activity.contains("blockedAuthorsSnapshot.addAll(blockStore.blocked())"));
+        assertTrue(activity.contains("if (!blockedAuthorsSnapshot.equals(blockStore.blocked()))"));
+        assertTrue(activity.contains("blockedAuthorsSnapshot.clear()"));
+        assertTrue(activity.contains("communityRefreshDirty = true"));
+    }
+
+    @Test
     public void communityMarksTheFirstLoadBeforeRenderingItsLoadingState() throws Exception {
         String activity = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         int entry = activity.indexOf("if (communityTab && (communityRefreshDirty || !communityLoadAttempted))");

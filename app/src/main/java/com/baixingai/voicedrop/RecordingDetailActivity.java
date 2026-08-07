@@ -110,7 +110,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -210,12 +209,9 @@ public final class RecordingDetailActivity extends Activity {
     protected final Map<String, Bitmap> articlePhotoCache = new HashMap<>();
     protected final Map<View, Integer> articleLongPressTouchY = new WeakHashMap<>();
     protected final Set<String> generatedPhotoKeys = new HashSet<>();
-    protected final Map<Integer, RestylePreviewPiece> restylePreviewPieces = new TreeMap<>();
     protected final AtomicBoolean restyleFinishing = new AtomicBoolean(false);
-    protected android.app.Dialog restylePreviewDialog;
-    protected TextView restylePreviewText;
-    protected BouncyScrollView restylePreviewScroll;
-    protected String restylePreviewStem;
+    protected android.app.Dialog restyleLoadingDialog;
+    protected String restyleLoadingStem;
     protected FrameLayout articleUndoButton;
     protected FrameLayout articleRedoButton;
     protected ImageView articleUndoIcon;
@@ -1137,6 +1133,10 @@ public final class RecordingDetailActivity extends Activity {
 
     /** Matches the mini program's dark, centered blocking progress prompt. */
     protected android.app.Dialog showCommunityProcessingLoading() {
+        return showProcessingLoading("处理中...");
+    }
+
+    protected android.app.Dialog showProcessingLoading(String message) {
         android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
         dialog.setCancelable(false);
         FrameLayout overlay = new FrameLayout(this);
@@ -1158,7 +1158,7 @@ public final class RecordingDetailActivity extends Activity {
         }
         loading.addView(spinner, new LinearLayout.LayoutParams(dp(32), dp(32)));
 
-        TextView label = text("处理中...", 14, Color.WHITE, Typeface.NORMAL);
+        TextView label = text(message, 14, Color.WHITE, Typeface.NORMAL);
         label.setGravity(Gravity.CENTER);
         label.setPadding(0, dp(10), 0, 0);
         loading.addView(label, new LinearLayout.LayoutParams(-2, -2));
@@ -1553,7 +1553,9 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void requestStyleRewrite(Recording rec, int styleVersion, IosDialog dialog) {
         if (dialog != null) dialog.dismiss();
-        showRestylePreview(rec);
+        restyleFinishing.set(false);
+        restyleLoadingStem = rec.stem();
+        restyleLoadingDialog = showProcessingLoading("处理中...");
         io.execute(() -> {
             try {
                 boolean ok = library.restyle(rec, styleVersion);
@@ -1564,71 +1566,14 @@ public final class RecordingDetailActivity extends Activity {
         });
     }
 
-    /** Shows the new article as it arrives over the editor WebSocket. */
-    protected void showRestylePreview(Recording rec) {
-        restyleFinishing.set(false);
-        restylePreviewStem = rec.stem();
-        restylePreviewPieces.clear();
-        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(BLOCKING_LOADING_SCRIM);
-        BouncyScrollView scroll = new BouncyScrollView(this);
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(20), dp(18), dp(20), dp(18));
-        card.setBackground(round(0xfafffffb, 16));
-        TextView title = text("正在用新风格重写…", 14, Theme.SECONDARY, Typeface.BOLD);
-        title.setPadding(0, 0, 0, dp(12));
-        card.addView(title);
-        TextView body = text("新稿生成后会在这里实时出现", 15, Theme.INK, Typeface.NORMAL);
-        body.setLineSpacing(dp(7), 1f);
-        card.addView(body);
-        scroll.addView(card, new LinearLayout.LayoutParams(-1, -2));
-        root.addView(scroll, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
-        dialog.setContentView(root);
-        dialog.show();
-        DialogWindowDefaults.applyModal(dialog.getWindow(), BLOCKING_LOADING_SCRIM, BLOCKING_LOADING_SCRIM, true);
-        restylePreviewDialog = dialog;
-        restylePreviewText = body;
-        restylePreviewScroll = scroll;
-    }
-
-    protected void appendRestylePreview(List<ArticleEditSession.PreviewDelta> deltas) {
-        if (deltas == null || restylePreviewText == null) return;
-        for (ArticleEditSession.PreviewDelta delta : deltas) {
-            RestylePreviewPiece piece = restylePreviewPieces.get(delta.articleIndex);
-            if (piece == null) {
-                piece = new RestylePreviewPiece();
-                restylePreviewPieces.put(delta.articleIndex, piece);
-            }
-            if ("title".equals(delta.field)) piece.title.append(delta.text);
-            else if ("body".equals(delta.field)) piece.body.append(delta.text);
-        }
-        StringBuilder rendered = new StringBuilder();
-        for (RestylePreviewPiece piece : restylePreviewPieces.values()) {
-            if (rendered.length() > 0) rendered.append("\n\n");
-            if (piece.title.length() > 0) rendered.append(piece.title).append("\n\n");
-            rendered.append(piece.body);
-        }
-        restylePreviewText.setText(rendered.length() == 0 ? "正在整理新稿…" : rendered.toString());
-        if (restylePreviewScroll != null) restylePreviewScroll.post(() -> restylePreviewScroll.fullScroll(View.FOCUS_DOWN));
-    }
-
-    protected void resetRestylePreview() {
-        restylePreviewPieces.clear();
-        if (restylePreviewText != null) restylePreviewText.setText("正在重新整理新稿…");
-    }
-
     protected void finishRestyle(Recording rec, boolean success) {
         if (!restyleFinishing.compareAndSet(false, true)) return;
         main.post(() -> {
-            if (restylePreviewDialog != null) {
-                try { restylePreviewDialog.dismiss(); } catch (Exception ignored) {}
+            if (restyleLoadingDialog != null) {
+                try { restyleLoadingDialog.dismiss(); } catch (Exception ignored) {}
             }
-            restylePreviewDialog = null;
-            restylePreviewText = null;
-            restylePreviewScroll = null;
-            restylePreviewPieces.clear();
+            restyleLoadingDialog = null;
+            restyleLoadingStem = null;
         });
         if (!success) {
             toast("换风格请求失败");
@@ -1650,11 +1595,6 @@ public final class RecordingDetailActivity extends Activity {
                 toast("新风格文章加载失败：" + e.getMessage());
             }
         });
-    }
-
-    protected static final class RestylePreviewPiece {
-        final StringBuilder title = new StringBuilder();
-        final StringBuilder body = new StringBuilder();
     }
 
     protected android.app.Dialog showBlockingLoading(String message) {
@@ -2389,19 +2329,15 @@ public final class RecordingDetailActivity extends Activity {
             }
 
             @Override public void onPreviewDelta(List<ArticleEditSession.PreviewDelta> deltas) {
-                main.post(() -> {
-                    if (rec.stem().equals(restylePreviewStem)) appendRestylePreview(deltas);
-                });
+                // Style rewrites use a blocking loading state instead of streamed draft text.
             }
 
             @Override public void onPreviewReset() {
-                main.post(() -> {
-                    if (rec.stem().equals(restylePreviewStem)) resetRestylePreview();
-                });
+                // A retry remains covered by the same blocking loading state.
             }
 
             @Override public void onPreviewDone(boolean ok) {
-                if (rec.stem().equals(restylePreviewStem)) finishRestyle(rec, ok);
+                if (rec.stem().equals(restyleLoadingStem)) finishRestyle(rec, ok);
             }
 
             @Override public void onResolved() {

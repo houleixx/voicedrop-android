@@ -1641,6 +1641,7 @@ public final class RecordingDetailActivity extends Activity {
                     if (updated != null && !updated.articles.isEmpty() && isActivityActive()) {
                         articleIndex = 0;
                         showArticle(rec, updated, false);
+                        toast("重写成功");
                     } else {
                         toast("新风格文章暂不可读");
                     }

@@ -37,6 +37,7 @@ public class RecordingDetailStyleSourceTest {
         assertTrue(source.contains("library.restyle(rec, styleVersion)"));
         assertTrue(source.contains("showRestylePreview"));
         assertTrue(source.contains("finishRestyle"));
+        assertTrue(source.contains("showArticle(rec, updated, false);\n                        toast(\"重写成功\");"));
         assertTrue(source.contains("appendRestylePreview"));
         assertTrue(source.contains("library.patchHead(rec, head)"));
         assertTrue(source.contains("showArticle(rec, nextDoc, false, false)"));

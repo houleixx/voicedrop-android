@@ -4,9 +4,13 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.text.Layout;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.StaticLayout;
 import android.text.TextPaint;
+import android.text.style.LineHeightSpan;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +26,7 @@ public final class XhsCards {
     private static final int HORIZONTAL_PADDING = 110;
     private static final int BODY_TOP = 150;
     private static final int BODY_HEIGHT = 1120;
+    private static final int PARAGRAPH_SPACING = 36;
     private static final int BG = 0xfff5f1e8;
     private static final int INK = 0xff3a352e;
     private static final int META = 0xff8d8372;
@@ -30,7 +35,7 @@ public final class XhsCards {
     private XhsCards() {}
 
     public static List<Bitmap> render(String title, String body, String date) {
-        List<String> pages = paginate(body == null ? "" : body);
+        List<CharSequence> pages = paginate(body == null ? "" : body);
         int total = pages.size() + 1;
         List<Bitmap> cards = new ArrayList<>();
         cards.add(titleCard(title == null ? "" : title, date == null ? "" : date, 1, total));
@@ -44,20 +49,20 @@ public final class XhsCards {
         Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         fill(canvas);
-        TextPaint meta = textPaint(30, META, Typeface.NORMAL);
-        meta.setLetterSpacing(0.12f);
+        TextPaint meta = textPaint(30, META, systemTypeface(400));
+        meta.setLetterSpacing(0.133f);
         if (!date.trim().isEmpty()) canvas.drawText(date, 112, 230, meta);
         Paint accent = new Paint(Paint.ANTI_ALIAS_FLAG);
         accent.setColor(ACCENT);
         canvas.drawRoundRect(112, 286, 188, 294, 4, 4, accent);
-        TextPaint titlePaint = textPaint(78, INK, Typeface.BOLD);
-        titlePaint.setLetterSpacing(0.02f);
+        TextPaint titlePaint = textPaint(78, INK, systemTypeface(600));
+        titlePaint.setLetterSpacing(0.013f);
         drawLayout(canvas, layout(title, titlePaint, WIDTH - 220, 26), 110, 380);
         footer(canvas, page, total);
         return bitmap;
     }
 
-    private static Bitmap bodyCard(String body, int page, int total) {
+    private static Bitmap bodyCard(CharSequence body, int page, int total) {
         Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         fill(canvas);
@@ -67,13 +72,15 @@ public final class XhsCards {
         return bitmap;
     }
 
-    private static List<String> paginate(String body) {
-        List<String> pages = new ArrayList<>();
+    private static List<CharSequence> paginate(String body) {
+        List<CharSequence> pages = new ArrayList<>();
         if (body.trim().isEmpty()) return pages;
+        CharSequence styledBody = styledBody(body);
         TextPaint bodyPaint = bodyPaint();
         int start = 0;
-        while (start < body.length() && pages.size() < MAX_BODY_PAGES) {
-            String remaining = body.substring(start);
+        while (start < styledBody.length() && Character.isWhitespace(styledBody.charAt(start))) start++;
+        while (start < styledBody.length() && pages.size() < MAX_BODY_PAGES) {
+            CharSequence remaining = styledBody.subSequence(start, styledBody.length());
             StaticLayout candidate = layout(remaining, bodyPaint, WIDTH - 220, 26);
             int line = 0;
             while (line + 1 < candidate.getLineCount()
@@ -82,14 +89,16 @@ public final class XhsCards {
             }
             int end = candidate.getLineEnd(line);
             if (end <= 0) end = Math.min(remaining.length(), 1);
-            pages.add(remaining.substring(0, end).trim());
+            int visibleEnd = start + end;
+            while (visibleEnd > start && Character.isWhitespace(styledBody.charAt(visibleEnd - 1))) visibleEnd--;
+            if (visibleEnd > start) pages.add(styledBody.subSequence(start, visibleEnd));
             start += end;
-            while (start < body.length() && Character.isWhitespace(body.charAt(start))) start++;
+            while (start < styledBody.length() && Character.isWhitespace(styledBody.charAt(start))) start++;
         }
         return pages;
     }
 
-    private static StaticLayout layout(String value, TextPaint paint, int width, float spacing) {
+    private static StaticLayout layout(CharSequence value, TextPaint paint, int width, float spacing) {
         return StaticLayout.Builder.obtain(value, 0, value.length(), paint, width)
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setIncludePad(false)
@@ -98,17 +107,40 @@ public final class XhsCards {
     }
 
     private static TextPaint bodyPaint() {
-        TextPaint paint = textPaint(42, INK, Typeface.NORMAL);
-        paint.setLetterSpacing(0.01f);
+        TextPaint paint = textPaint(42, INK, systemTypeface(400));
+        paint.setLetterSpacing(0.012f);
         return paint;
     }
 
-    private static TextPaint textPaint(float size, int color, int typefaceStyle) {
+    private static TextPaint textPaint(float size, int color, Typeface typeface) {
         TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
         paint.setColor(color);
         paint.setTextSize(size);
-        paint.setTypeface(Typeface.create(Typeface.DEFAULT, typefaceStyle));
+        paint.setTypeface(typeface);
         return paint;
+    }
+
+    private static Typeface systemTypeface(int weight) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Typeface.create(Typeface.DEFAULT, weight, false);
+        }
+        if (weight >= 500) return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+        return Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
+    }
+
+    private static CharSequence styledBody(String value) {
+        SpannableString styled = new SpannableString(value);
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) == '\n') {
+                styled.setSpan(
+                        new ParagraphSpacingSpan(PARAGRAPH_SPACING),
+                        i,
+                        i + 1,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+        }
+        return styled;
     }
 
     private static void fill(Canvas canvas) {
@@ -124,9 +156,30 @@ public final class XhsCards {
 
     private static void footer(Canvas canvas, int page, int total) {
         String value = page + " / " + total;
-        TextPaint paint = textPaint(26, META, Typeface.NORMAL);
-        paint.setLetterSpacing(0.12f);
+        TextPaint paint = textPaint(26, META, systemTypeface(500));
+        paint.setLetterSpacing(0.115f);
         float width = paint.measureText(value);
         canvas.drawText(value, (WIDTH - width) / 2f, HEIGHT - 58, paint);
+    }
+
+    private static final class ParagraphSpacingSpan implements LineHeightSpan {
+        private final int spacing;
+
+        private ParagraphSpacingSpan(int spacing) {
+            this.spacing = spacing;
+        }
+
+        @Override
+        public void chooseHeight(
+                CharSequence text,
+                int start,
+                int end,
+                int spanstartv,
+                int v,
+                Paint.FontMetricsInt fm
+        ) {
+            fm.descent += spacing;
+            fm.bottom += spacing;
+        }
     }
 }

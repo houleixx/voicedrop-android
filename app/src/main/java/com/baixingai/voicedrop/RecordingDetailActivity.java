@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -16,8 +17,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.text.SpannableString;
@@ -53,6 +56,7 @@ import com.baixingai.voicedrop.core.ArticleBody;
 import com.baixingai.voicedrop.core.ArticleSharePayload;
 import com.baixingai.voicedrop.core.PhotoLoadPolicy;
 import com.baixingai.voicedrop.core.RecordingName;
+import com.baixingai.voicedrop.core.XhsExportPolicy;
 import com.baixingai.voicedrop.data.ArticleDoc;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BlockStore;
@@ -92,6 +96,7 @@ import com.baixingai.voicedrop.ui.RoundedImageView;
 import com.baixingai.voicedrop.ui.SoftRoundedShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
+import com.baixingai.voicedrop.ui.XhsCards;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.dialogs.MessageDialog;
 import org.json.JSONArray;
@@ -100,6 +105,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -110,6 +116,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Date;
+import java.util.Locale;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -155,6 +163,7 @@ public final class RecordingDetailActivity extends Activity {
     private static final long PHOTO_MAKING_GRACE_MS = 900L;
     private static final long PHOTO_POLL_INTERVAL_MS = 3_000L;
     private static final long PHOTO_POLL_TIMEOUT_MS = 5 * 60_000L;
+    private static final int REQ_XHS_GALLERY_WRITE = 31;
 
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
@@ -188,6 +197,9 @@ public final class RecordingDetailActivity extends Activity {
     protected PlaybackProgressButton playbackButton;
     protected final Runnable playbackProgressTick = this::updatePlaybackProgress;
     protected ArticleDoc currentArticleDoc;
+    /** Retained only while Android 9 and below asks for legacy gallery-write permission. */
+    private Recording pendingXhsRecording;
+    private final AtomicBoolean xhsExportInProgress = new AtomicBoolean(false);
     protected String currentArticleStem;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
@@ -2079,6 +2091,18 @@ public final class RecordingDetailActivity extends Activity {
     }
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_XHS_GALLERY_WRITE) {
+            Recording rec = pendingXhsRecording;
+            pendingXhsRecording = null;
+            if (rec != null) {
+                boolean granted = grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+                exportToXhs(rec, granted);
+            } else {
+                xhsExportInProgress.set(false);
+            }
+            return;
+        }
         if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
             toast("权限被拒绝");
             return;
@@ -2152,33 +2176,160 @@ public final class RecordingDetailActivity extends Activity {
     }
 
 
+    /**
+     * Makes a Xiaohongshu-ready local payload: copy, original photos and, where needed,
+     * locally rendered 3:4 text cards. Xiaohongshu does not reliably accept this app's image
+     * ShareSheet payload, so the user selects these saved images in its composer and pastes copy.
+     */
     protected void shareToXhs(Recording rec) {
+        if (rec == null) return;
+        if (!xhsExportInProgress.compareAndSet(false, true)) {
+            toast("正在准备小红书素材…");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingXhsRecording = rec;
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_XHS_GALLERY_WRITE);
+            return;
+        }
+        exportToXhs(rec, true);
+    }
+
+    private void exportToXhs(Recording rec, boolean canWriteGallery) {
         toast("正在生成小红书文案…");
+        ArticleDoc doc = currentArticleDoc;
         io.execute(() -> {
+            List<Bitmap> generatedCards = new ArrayList<>();
             try {
                 LibraryStore.XhsPack pack = library.xhsPack(rec);
                 if (pack == null) {
-                    toast("小红书文案生成失败，稍后再试");
+                    main.post(() -> toast("小红书文案生成失败，稍后再试"));
                     return;
                 }
-                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 小红书文案", pack.clipboardText()));
-                runOnUiThread(() -> {
-                    toast("文案已复制");
-                    Intent launch = getPackageManager().getLaunchIntentForPackage("com.xingin.xhs");
-                    if (launch != null) {
-                        startActivity(launch);
-                    } else {
-                        Intent send = new Intent(Intent.ACTION_SEND);
-                        send.setType("text/plain");
-                        send.putExtra(Intent.EXTRA_TEXT, pack.clipboardText());
-                        startActivity(Intent.createChooser(send, "分享到小红书"));
+
+                int saved = 0;
+                if (canWriteGallery) {
+                    List<Bitmap> images = loadXhsImages(pack, doc);
+                    int cardSlots = XhsExportPolicy.generatedCardSlots(images.size());
+                    if (cardSlots > 0) {
+                        List<Bitmap> cards = XhsCards.render(pack.title, pack.body, xhsCardDate(rec));
+                        for (int i = 0; i < cards.size() && i < cardSlots; i++) {
+                            Bitmap card = cards.get(i);
+                            images.add(card);
+                            generatedCards.add(card);
+                        }
+                        for (int i = cardSlots; i < cards.size(); i++) cards.get(i).recycle();
                     }
-                });
+                    saved = saveXhsImagesToGallery(images);
+                }
+
+                int savedCount = saved;
+                main.post(() -> finishXhsExport(pack.clipboardText(), savedCount, canWriteGallery));
             } catch (Exception e) {
-                toast("小红书文案生成失败：" + e.getMessage());
+                main.post(() -> toast("小红书文案生成失败：" + e.getMessage()));
+            } finally {
+                // Original photos belong to PhotoService's cache. Only recycle cards created here.
+                for (Bitmap card : generatedCards) if (!card.isRecycled()) card.recycle();
+                xhsExportInProgress.set(false);
             }
         });
+    }
+
+    private List<Bitmap> loadXhsImages(LibraryStore.XhsPack pack, ArticleDoc doc) {
+        List<Bitmap> images = new ArrayList<>();
+        for (String photoKey : pack.photoKeys) {
+            if (images.size() >= XhsExportPolicy.MAX_IMAGES) break;
+            String fullKey = xhsFullPhotoKey(photoKey, doc);
+            if (fullKey == null) continue;
+            try {
+                Bitmap image = PhotoService.detailImage(fullKey, false);
+                if (image != null) images.add(image);
+            } catch (Exception ignored) {
+                // A missing image should not prevent the user from receiving copy and text cards.
+            }
+        }
+        return images;
+    }
+
+    private String xhsFullPhotoKey(String key, ArticleDoc doc) {
+        if (key == null || key.trim().isEmpty()) return null;
+        String clean = key.trim();
+        if (clean.startsWith("users/") || clean.startsWith("anonymous/")) return clean;
+        String scope = doc == null ? null : doc.ownerScope;
+        if (scope == null || scope.trim().isEmpty()) scope = library.ownerScope();
+        return scope == null || scope.trim().isEmpty() ? null : scope + clean;
+    }
+
+    private String xhsCardDate(Recording rec) {
+        try {
+            RecordingName.Parsed parsed = RecordingName.parse(rec.stem());
+            return parsed == null || parsed.sessionTs == null ? "" : parsed.sessionTs.substring(0, 10);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private int saveXhsImagesToGallery(List<Bitmap> images) {
+        int saved = 0;
+        long now = System.currentTimeMillis();
+        String batch = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date(now));
+        for (int i = 0; i < images.size(); i++) {
+            if (saveXhsImage(images.get(i), batch, i, now - i)) saved++;
+        }
+        return saved;
+    }
+
+    private boolean saveXhsImage(Bitmap image, String batch, int position, long takenAt) {
+        if (image == null || image.isRecycled()) return false;
+        Uri uri = null;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME,
+                    String.format(Locale.US, "VoiceDrop-小红书-%s-%02d.jpg", batch, position + 1));
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            values.put(MediaStore.Images.Media.DATE_TAKEN, takenAt);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/VoiceDrop");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+            }
+            uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) return false;
+            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                if (out == null || !image.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
+                    throw new IllegalStateException("无法写入图片");
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(uri, done, null, null);
+            }
+            return true;
+        } catch (Exception ignored) {
+            if (uri != null) getContentResolver().delete(uri, null, null);
+            return false;
+        }
+    }
+
+    private void finishXhsExport(String clipboardText, int saved, boolean galleryAllowed) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 小红书文案", clipboardText));
+        }
+        if (!galleryAllowed) toast("文案已复制；未获相册权限，图片未保存");
+        else if (saved > 0) toast("文案已复制，" + saved + " 张图片已存入相册");
+        else toast("文案已复制，图片保存失败");
+        Intent launch = getPackageManager().getLaunchIntentForPackage("com.xingin.xhs");
+        if (launch != null) {
+            startActivity(launch);
+        } else {
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_TEXT, clipboardText);
+            startActivity(Intent.createChooser(send, "分享到小红书"));
+        }
     }
 
     protected LinearLayout menuRow(String label, int iconResId, int iconColor) {

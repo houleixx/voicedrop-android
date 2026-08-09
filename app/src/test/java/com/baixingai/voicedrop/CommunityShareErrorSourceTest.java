@@ -15,15 +15,18 @@ public class CommunityShareErrorSourceTest {
     public void detailPageStartsWechatLoginForSigninRequiredShareAndDoesNotMentionApple() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
         String doShareCommunity = methodBody(source, "protected void doShareCommunity");
+        String promptWechatLogin = methodBody(source, "protected void promptWechatLogin");
 
         assertTrue(source.contains("import com.baixingai.voicedrop.data.PendingCommunityShareStore;"));
         assertTrue(source.contains("import com.baixingai.voicedrop.data.WechatLogin;"));
+        assertTrue(doShareCommunity.contains("if (!auth.isWechatAuthenticated()) {"));
+        assertTrue(doShareCommunity.contains("promptWechatLogin(rec, replyTo);"));
         assertTrue(doShareCommunity.contains("if (result.hasInvalidSession()) auth.signOutWechat();"));
-        assertTrue(doShareCommunity.contains("PendingCommunityShareStore pending = new PendingCommunityShareStore(this);"));
-        assertTrue(doShareCommunity.contains("pending.save(rec.audioName, replyTo);"));
-        assertTrue(doShareCommunity.contains("if (!WechatLogin.start(this)) {"));
-        assertTrue(doShareCommunity.contains("pending.clear();"));
-        assertTrue(doShareCommunity.contains("toast(\"无法打开微信，请确认已安装微信\");"));
+        assertTrue(promptWechatLogin.contains("PendingCommunityShareStore pending = new PendingCommunityShareStore(this);"));
+        assertTrue(promptWechatLogin.contains("pending.save(rec.audioName, replyTo);"));
+        assertTrue(promptWechatLogin.contains("if (!WechatLogin.start(this)) {"));
+        assertTrue(promptWechatLogin.contains("pending.clear();"));
+        assertTrue(promptWechatLogin.contains("toast(\"无法打开微信，请确认已安装微信\");"));
         assertFalse(source.contains("社区分享失败，可能需要 Apple 会话"));
     }
 

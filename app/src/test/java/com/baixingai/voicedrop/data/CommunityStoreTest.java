@@ -53,9 +53,10 @@ public class CommunityStoreTest {
         assertTrue(activity.contains("communityRefreshDirty"));
         assertTrue(activity.contains("startActivityForResult(intent, REQUEST_COMMUNITY_DETAIL)"));
         assertTrue(detail.contains("EXTRA_COMMUNITY_DATA_CHANGED"));
-        assertTrue(detail.contains("communityLikePendingRequests"));
+        assertTrue(detail.contains("protected static final ExecutorService COMMUNITY_LIKE_IO"));
         assertTrue(detail.contains("finishDetailActivityNow()"));
         assertTrue(detail.contains("beginCommunityLikeRequest(shareId, liked[0])"));
+        assertTrue(detail.contains("COMMUNITY_LIKE_IO.execute(() -> requestStore.engage(shareId, \"like\", liked))"));
         assertTrue(store.contains("auth.storeCommunityFeedCache(\"\")"));
     }
 

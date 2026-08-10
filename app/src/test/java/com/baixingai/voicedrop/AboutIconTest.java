@@ -13,4 +13,10 @@ public class AboutIconTest {
             assertTrue("About rows should declare a drawable icon", resId != 0);
         }
     }
+
+    @Test
+    public void bookWritingUsesItsOwnBooksIcon() {
+        assertEquals(R.drawable.ic_about_books_vertical, AboutActivity.BOOK_WRITING_ICON_RES_ID);
+        assertTrue(AboutActivity.BOOK_WRITING_ICON_RES_ID != R.drawable.ic_settings_info);
+    }
 }

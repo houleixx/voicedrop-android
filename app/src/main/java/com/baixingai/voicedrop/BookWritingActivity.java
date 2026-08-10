@@ -34,6 +34,7 @@ import java.util.concurrent.Executors;
 public final class BookWritingActivity extends Activity {
     static final String API = "https://lab.jianshuo.dev/api/book";
     static final String SHELF = "https://voicedrop.cn/books/";
+    static final int SHELF_ICON_RES_ID = R.drawable.ic_about_books_vertical;
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout content;
@@ -132,7 +133,7 @@ public final class BookWritingActivity extends Activity {
         card.setOnClickListener(view -> openShelf());
 
         ImageView icon = new ImageView(this);
-        icon.setImageResource(android.R.drawable.ic_menu_agenda);
+        icon.setImageResource(SHELF_ICON_RES_ID);
         icon.setColorFilter(Theme.SECONDARY);
         icon.setScaleType(ImageView.ScaleType.CENTER);
         icon.setPadding(dp(11), dp(11), dp(11), dp(11));

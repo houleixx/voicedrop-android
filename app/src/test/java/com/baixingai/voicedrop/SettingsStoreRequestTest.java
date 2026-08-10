@@ -26,6 +26,14 @@ public class SettingsStoreRequestTest {
         assertEquals("王小明", body.getString("name"));
     }
 
+    @Test public void feedbackBodyTrimsAndCapsUserText() throws Exception {
+        JSONObject body = SettingsStore.feedbackBody("  建议增加搜索  ", " 小王 ", " 1.0 ");
+        assertEquals("建议增加搜索", body.getString("text"));
+        assertEquals("小王", body.getString("name"));
+        assertEquals("1.0", body.getString("version"));
+        assertEquals(2000, SettingsStore.feedbackBody("长".repeat(2100), "", "").getString("text").length());
+    }
+
     @Test
     public void validatesWechatCredentialFormatsBeforeRemoteCheck() {
         assertNull(SettingsStore.wechatCredentialFormatError(

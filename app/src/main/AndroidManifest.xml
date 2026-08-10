@@ -150,6 +150,18 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity
+            android:name=".HelpManualActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".FeedbackActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".BookWritingActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
             android:name=".BlockedUsersActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />

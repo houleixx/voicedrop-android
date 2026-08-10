@@ -39,6 +39,24 @@ public final class SettingsStore {
         return new JSONObject().put("name", name == null ? "" : name.trim());
     }
 
+    public boolean sendFeedback(String text, String name, String version) throws Exception {
+        JSONObject body = feedbackBody(text, name, version);
+        if (body.getString("text").isEmpty()) return false;
+        HttpClient.Response response = http.postJson(
+                Api.agentBase() + "/feedback", auth.bearer(),
+                body.toString().getBytes(StandardCharsets.UTF_8));
+        return response.ok();
+    }
+
+    public static JSONObject feedbackBody(String text, String name, String version) throws Exception {
+        String clean = text == null ? "" : text.trim();
+        if (clean.length() > 2000) clean = clean.substring(0, 2000);
+        return new JSONObject()
+                .put("text", clean)
+                .put("name", name == null ? "" : name.trim())
+                .put("version", version == null ? "" : version.trim());
+    }
+
     public JSONObject loadStyleHistory() throws Exception {
         HttpClient.Response response = http.get(Api.filesBase() + "/style/history", auth.bearer());
         return response.ok() ? new JSONObject(response.text()) : new JSONObject();

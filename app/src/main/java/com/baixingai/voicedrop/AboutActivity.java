@@ -23,6 +23,7 @@ import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
 public final class AboutActivity extends Activity {
+    private static final int REQUEST_FEEDBACK = 1001;
     static final int[] ABOUT_ROW_ICON_RES_IDS = {
             R.drawable.ic_about_privacy,
             R.drawable.ic_about_terms,
@@ -81,10 +82,17 @@ public final class AboutActivity extends Activity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
+        addSettingRow(content, R.drawable.ic_settings_info, "使用手册", "怎么录、怎么改、怎么发", () -> open(HelpManualActivity.class));
+        addSettingRow(content, R.drawable.ic_about_support, "意见反馈", "提改进意见，直达开发者", this::openFeedback);
         addSettingRow(content, R.drawable.ic_about_privacy, "隐私政策", null, this::openPrivacyPolicy);
         addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
         addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::openBlockedUsers);
         addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
+
+        TextView experimental = text("实验功能", 13, Theme.SECONDARY, Typeface.BOLD);
+        experimental.setPadding(dp(4), dp(12), 0, dp(8));
+        content.addView(experimental);
+        addSettingRow(content, R.drawable.ic_settings_info, "写书", "一颗种子长成一本书，发到公开书架", () -> open(BookWritingActivity.class));
     }
 
     @Override
@@ -98,6 +106,14 @@ public final class AboutActivity extends Activity {
         super.onResume();
         if (blockedCount != null) {
             blockedCount.setText(blockStore.blockedList().size() + " 人");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_FEEDBACK && resultCode == RESULT_OK) {
+            SimpleToast.show(this, "提交成功");
         }
     }
 
@@ -126,6 +142,16 @@ public final class AboutActivity extends Activity {
 
     private void openBlockedUsers() {
         startActivity(new Intent(this, BlockedUsersActivity.class));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.stay);
+    }
+
+    private void openFeedback() {
+        startActivityForResult(new Intent(this, FeedbackActivity.class), REQUEST_FEEDBACK);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.stay);
+    }
+
+    private void open(Class<? extends Activity> activityClass) {
+        startActivity(new Intent(this, activityClass));
         overridePendingTransition(R.anim.slide_in_right, R.anim.stay);
     }
 
@@ -166,7 +192,11 @@ public final class AboutActivity extends Activity {
         icon.setImageResource(iconResId);
         icon.setColorFilter(Theme.ACCENT);
         icon.setScaleType(ImageView.ScaleType.CENTER);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        icon.setBackground(round(Theme.ACCENT_SOFT, SettingsActivity.SETTINGS_TILE_CORNER_DP));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(SettingsActivity.SETTINGS_TILE_SIZE_DP),
+                dp(SettingsActivity.SETTINGS_TILE_SIZE_DP));
         lp.setMargins(0, 0, dp(12), 0);
         icon.setLayoutParams(lp);
         return icon;

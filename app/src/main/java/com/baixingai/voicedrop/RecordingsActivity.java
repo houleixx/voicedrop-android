@@ -198,7 +198,7 @@ public final class RecordingsActivity extends Activity {
     protected CommunityStore.Feed communityFeed = CommunityStore.Feed.empty();
     protected CommunityFeedView communityFeedView;
     protected com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab communityFeedTab =
-            com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.RECOMMENDED;
+            com.baixingai.voicedrop.ui.CommunityFeedPresentation.Tab.LATEST;
     protected final List<CapturedPhoto> capturedPhotos = new ArrayList<>();
     // Currently open swipe-to-delete rows
     protected final List<LinearLayout> openSwipeRows = new ArrayList<>();

@@ -4,6 +4,7 @@ import com.baixingai.voicedrop.data.CommunityStore;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /** Pure presentation rules shared by the Android community feed UI and JVM tests. */
 public final class CommunityFeedPresentation {
@@ -22,6 +23,24 @@ public final class CommunityFeedPresentation {
             return replies;
         }
         return new ArrayList<>(feed.recommended);
+    }
+
+    /** Local search over the already-loaded feed, matching title/author/preview. */
+    public static List<CommunityStore.Post> search(List<CommunityStore.Post> posts, String query) {
+        List<CommunityStore.Post> source = posts == null ? new ArrayList<>() : posts;
+        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) return new ArrayList<>(source);
+        List<CommunityStore.Post> result = new ArrayList<>();
+        for (CommunityStore.Post post : source) {
+            if (contains(post.title, needle) || contains(post.author, needle) || contains(post.preview, needle)) {
+                result.add(post);
+            }
+        }
+        return result;
+    }
+
+    private static boolean contains(String value, String needle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
     }
 
     public static int paletteIndex(String shareId) {

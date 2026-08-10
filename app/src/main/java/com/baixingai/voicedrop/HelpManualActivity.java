@@ -1,60 +1,47 @@
 package com.baixingai.voicedrop;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
-import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
+import android.text.Html;
+import android.text.method.LinkMovementMethod;
 import android.view.Gravity;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 
+import com.baixingai.voicedrop.core.ManualMarkdown;
+import com.baixingai.voicedrop.core.ManualSectionSelection;
+import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
-import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
 public final class HelpManualActivity extends Activity {
-    static final String HELP_MANUAL_URL = "https://voicedrop.cn/help/manual/";
-    static final String[] SECTION_IDS = {"ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"};
-    static final String[] SECTION_LABELS = {"1 上手", "2 录音", "3 改稿", "4 发布", "5 社区", "6 文风", "7 账号", "8 FAQ"};
+    static final String MANUAL_ASSET = "help_manual.md";
+    static final String[] SECTION_LABELS = {
+            "1 上手", "2 录音", "3 改稿", "4 发布", "5 社区", "6 文风", "7 账号", "8 FAQ"
+    };
 
-    private static final String MANUAL_UI_SCRIPT =
-            "(function(){"
-                    + "var old=document.getElementById('vd-native-manual');"
-                    + "if(!old){var style=document.createElement('style');style.id='vd-native-manual';"
-                    + "style.textContent='header.site,.hero,nav.toc,footer.site{display:none!important}'"
-                    + "+'.layout{display:block!important;max-width:780px!important;margin:0 auto!important;padding:5px 20px 72px!important}'"
-                    + "+'.chapter{scroll-margin-top:12px!important}'"
-                    + "+'.chapter:first-child{padding-top:0!important}'"
-                    + "+'.chapter:first-child h2{margin-top:4px!important}'"
-                    + "+'body{background:#faf6ef!important}';document.head.appendChild(style);}"
-                    + "var sections=['ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8'].map(function(id){return document.getElementById(id);});"
-                    + "window.__vdManualReport=function(){var active=0;for(var i=0;i<sections.length;i++){"
-                    + "if(sections[i]&&sections[i].getBoundingClientRect().top<=96){active=i;}}"
-                    + "if(window.__vdManualActive!==active){window.__vdManualActive=active;VoiceDropManual.onSectionChanged(active);}};"
-                    + "if(!window.__vdManualListening){window.__vdManualListening=true;window.addEventListener('scroll',function(){"
-                    + "if(!window.__vdManualTick){window.__vdManualTick=true;requestAnimationFrame(function(){window.__vdManualTick=false;window.__vdManualReport();});}});}"
-                    + "window.__vdManualReport();"
-                    + "})()";
-
-    private WebView webView;
+    private final ManualSectionSelection sectionSelection = new ManualSectionSelection();
+    private final List<View> chapterAnchors = new ArrayList<>();
+    private final Runnable releaseSectionTarget = () -> sectionSelection.releaseTappedSection();
+    private BouncyScrollView manualScroll;
     private HorizontalScrollView sectionScroll;
     private TextView[] sectionButtons;
-    private boolean pageReady;
-    private int pendingSection = -1;
 
-    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         configureEdgeToEdge();
@@ -71,43 +58,17 @@ public final class HelpManualActivity extends Activity {
                 new LinearLayout.LayoutParams(-1, -2));
         page.addView(buildSectionBar(), new LinearLayout.LayoutParams(-1, dp(52)));
 
-        FrameLayout webFrame = new FrameLayout(this);
-        SystemBarDefaults.applyBottomInsets(webFrame, 0, 0, 0, 0);
-        page.addView(webFrame, new LinearLayout.LayoutParams(-1, 0, 1));
+        manualScroll = new BouncyScrollView(this);
+        manualScroll.setFillViewport(true);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        SystemBarDefaults.applyBottomInsets(content, dp(20), dp(6), dp(20), dp(50));
+        manualScroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        page.addView(manualScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Theme.BG);
-        webFrame.addView(webView, new FrameLayout.LayoutParams(-1, -1));
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(false);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-        webView.addJavascriptInterface(new ManualJavascriptBridge(), "VoiceDropManual");
-        webView.setWebViewClient(new WebViewClient() {
-            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
-                pageReady = false;
-            }
-
-            @Override public void onPageFinished(WebView view, String url) {
-                if (!isManualUrl(Uri.parse(url))) return;
-                pageReady = true;
-                view.evaluateJavascript(MANUAL_UI_SCRIPT, null);
-                int section = pendingSection;
-                pendingSection = -1;
-                if (section >= 0) scrollToSection(section);
-            }
-
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return routeLink(request.getUrl());
-            }
-
-            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return routeLink(Uri.parse(url));
-            }
-        });
+        renderManual(content, ManualMarkdown.parse(readBundledManual()));
+        manualScroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> reportVisibleChapter(y));
         setContentView(root);
-        webView.loadUrl(HELP_MANUAL_URL);
     }
 
     private HorizontalScrollView buildSectionBar() {
@@ -125,10 +86,7 @@ public final class HelpManualActivity extends Activity {
         sectionButtons = new TextView[SECTION_LABELS.length];
         for (int i = 0; i < SECTION_LABELS.length; i++) {
             final int index = i;
-            TextView button = new TextView(this);
-            button.setText(SECTION_LABELS[i]);
-            button.setTextSize(13);
-            button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            TextView button = text(SECTION_LABELS[i], 13, Theme.SECONDARY, Typeface.BOLD);
             button.setGravity(Gravity.CENTER);
             button.setMinWidth(dp(64));
             button.setPadding(dp(12), 0, dp(12), 0);
@@ -145,16 +103,153 @@ public final class HelpManualActivity extends Activity {
         return sectionScroll;
     }
 
-    private void scrollToSection(int index) {
-        if (index < 0 || index >= SECTION_IDS.length) return;
-        selectSection(index);
-        if (!pageReady) {
-            pendingSection = index;
-            return;
+    private void renderManual(LinearLayout content, List<ManualMarkdown.Block> blocks) {
+        for (ManualMarkdown.Block block : blocks) {
+            switch (block.kind) {
+                case TITLE:
+                    content.addView(blockText(block.text, 24, Typeface.BOLD, Theme.INK, 4, 4));
+                    break;
+                case CHAPTER:
+                    View chapter = blockText(block.text, 20, Typeface.BOLD, Theme.INK, 22, 4);
+                    chapterAnchors.add(chapter);
+                    content.addView(chapter);
+                    break;
+                case SECTION:
+                    content.addView(blockText(block.text, 17, Typeface.BOLD, Theme.INK, 12, 2));
+                    break;
+                case PARAGRAPH:
+                    content.addView(inlineText(block.text, 16, Typeface.NORMAL, Theme.INK, 4, 4));
+                    break;
+                case BULLETS:
+                    content.addView(listBlock(block.items, false));
+                    break;
+                case NUMBERED:
+                    content.addView(listBlock(block.items, true));
+                    break;
+                case TABLE:
+                    content.addView(tableBlock(block.items, block.rows));
+                    break;
+                case CODE:
+                    content.addView(codeBlock(block.text));
+                    break;
+            }
         }
-        String script = "document.getElementById('" + SECTION_IDS[index]
-                + "').scrollIntoView({behavior:'smooth',block:'start'})";
-        webView.evaluateJavascript(script, null);
+    }
+
+    private View blockText(String value, int size, int style, int color, int top, int bottom) {
+        TextView view = text(value, size, color, style);
+        view.setLineSpacing(dp(4), 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(top), 0, dp(bottom));
+        view.setLayoutParams(params);
+        return view;
+    }
+
+    private TextView inlineText(String markdown, int size, int style, int color, int top, int bottom) {
+        TextView view = text("", size, color, style);
+        view.setText(Html.fromHtml(ManualMarkdown.inlineHtml(markdown), Html.FROM_HTML_MODE_LEGACY));
+        view.setMovementMethod(LinkMovementMethod.getInstance());
+        view.setLineSpacing(dp(4), 1f);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(top), 0, dp(bottom));
+        view.setLayoutParams(params);
+        return view;
+    }
+
+    private View listBlock(List<String> items, boolean numbered) {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < items.size(); i++) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.TOP);
+            TextView marker = text(numbered ? (i + 1) + "." : "·", 14, Theme.FAINT, Typeface.BOLD);
+            row.addView(marker, new LinearLayout.LayoutParams(dp(28), -2));
+            TextView body = inlineText(items.get(i), 16, Typeface.NORMAL, Theme.INK, 0, 0);
+            row.addView(body, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.setMargins(0, dp(3), 0, dp(3));
+            list.addView(row, rowParams);
+        }
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(4), 0, dp(4));
+        list.setLayoutParams(params);
+        return list;
+    }
+
+    private View tableBlock(List<String> header, List<List<String>> rows) {
+        TableLayout table = new TableLayout(this);
+        table.setStretchAllColumns(true);
+        table.setBackground(round(Theme.CARD, 12, Theme.BORDER_CHROME));
+        table.addView(tableRow(header, true));
+        for (List<String> row : rows) table.addView(tableRow(row, false));
+
+        HorizontalScrollView horizontal = new HorizontalScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
+        horizontal.setFillViewport(true);
+        horizontal.addView(table, new HorizontalScrollView.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(8), 0, dp(8));
+        horizontal.setLayoutParams(params);
+        return horizontal;
+    }
+
+    private TableRow tableRow(List<String> cells, boolean header) {
+        TableRow row = new TableRow(this);
+        for (int i = 0; i < cells.size(); i++) {
+            TextView cell = inlineText(cells.get(i), 14, header ? Typeface.BOLD : Typeface.NORMAL,
+                    Theme.INK, 0, 0);
+            cell.setPadding(dp(12), dp(9), dp(12), dp(9));
+            row.addView(cell, new TableRow.LayoutParams(i == 0 && cells.size() > 1 ? dp(92) : dp(220), -2));
+        }
+        return row;
+    }
+
+    private View codeBlock(String value) {
+        TextView code = text(value, 13, Theme.INK, Typeface.NORMAL);
+        code.setTypeface(Typeface.MONOSPACE);
+        code.setPadding(dp(12), dp(12), dp(12), dp(12));
+        code.setBackground(round(0xfff3ede4, 10, Theme.BORDER_CHROME));
+        HorizontalScrollView horizontal = new HorizontalScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
+        horizontal.addView(code, new HorizontalScrollView.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(8), 0, dp(8));
+        horizontal.setLayoutParams(params);
+        return horizontal;
+    }
+
+    private String readBundledManual() {
+        try (InputStream input = getAssets().open(MANUAL_ASSET);
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+            return output.toString(StandardCharsets.UTF_8.name());
+        } catch (Exception ignored) {
+            return "# 使用手册\n\n手册内容暂时无法读取。";
+        }
+    }
+
+    private void scrollToSection(int index) {
+        if (index < 0 || index >= chapterAnchors.size()) return;
+        selectSection(sectionSelection.onSectionTapped(index));
+        View target = chapterAnchors.get(index);
+        manualScroll.removeCallbacks(releaseSectionTarget);
+        manualScroll.post(() -> {
+            manualScroll.smoothScrollTo(0, Math.max(0, target.getTop() - dp(6)));
+            manualScroll.postDelayed(releaseSectionTarget, 700);
+        });
+    }
+
+    private void reportVisibleChapter(int scrollY) {
+        int active = 0;
+        int threshold = scrollY + dp(12);
+        for (int i = 0; i < chapterAnchors.size(); i++) {
+            if (chapterAnchors.get(i).getTop() <= threshold) active = i;
+            else break;
+        }
+        selectSection(sectionSelection.onSectionReported(active));
     }
 
     private void selectSection(int index) {
@@ -167,36 +262,12 @@ public final class HelpManualActivity extends Activity {
             button.setSelected(selected);
         }
         TextView selected = sectionButtons[index];
-        sectionScroll.post(() -> sectionScroll.smoothScrollTo(
-                Math.max(0, selected.getLeft() - dp(16)), 0));
+        sectionScroll.post(() -> sectionScroll.smoothScrollTo(Math.max(0, selected.getLeft() - dp(16)), 0));
     }
 
     private GradientDrawable chipBackground(boolean selected) {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(selected ? Theme.ACCENT_SOFT : Theme.CARD);
-        background.setCornerRadius(dp(10));
-        background.setStroke(dp(1), selected ? 0xffedc7b8 : Theme.BORDER_CHROME);
-        return background;
-    }
-
-    private boolean routeLink(Uri uri) {
-        if (isManualUrl(uri)) return false;
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, uri));
-        } catch (ActivityNotFoundException error) {
-            SimpleToast.show(this, "无法打开这个链接");
-        }
-        return true;
-    }
-
-    private boolean isManualUrl(Uri uri) {
-        if (uri == null || uri.getHost() == null) return false;
-        String host = uri.getHost().toLowerCase(java.util.Locale.ROOT);
-        String path = uri.getPath() == null ? "" : uri.getPath();
-        return ((host.equals("voicedrop.cn") || host.equals("www.voicedrop.cn"))
-                && path.equals("/help/manual/"))
-                || ((host.equals("jianshuo.dev") || host.equals("www.jianshuo.dev"))
-                && path.equals("/voicedrop/help/manual/"));
+        return round(selected ? Theme.ACCENT_SOFT : Theme.CARD, 10,
+                selected ? 0xffedc7b8 : Theme.BORDER_CHROME);
     }
 
     @Override public void onWindowFocusChanged(boolean hasFocus) {
@@ -205,17 +276,11 @@ public final class HelpManualActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else finishWithPageTransition();
+        finishWithPageTransition();
     }
 
     @Override protected void onDestroy() {
-        if (webView != null) {
-            webView.removeJavascriptInterface("VoiceDropManual");
-            webView.setWebViewClient(null);
-            webView.destroy();
-            webView = null;
-        }
+        if (manualScroll != null) manualScroll.removeCallbacks(releaseSectionTarget);
         super.onDestroy();
     }
 
@@ -228,13 +293,24 @@ public final class HelpManualActivity extends Activity {
         overridePendingTransition(R.anim.stay, R.anim.slide_out_right);
     }
 
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+    private TextView text(String value, int size, int color, int style) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.DEFAULT, style);
+        return view;
     }
 
-    private final class ManualJavascriptBridge {
-        @JavascriptInterface public void onSectionChanged(int index) {
-            runOnUiThread(() -> selectSection(index));
-        }
+    private GradientDrawable round(int color, int radius, int stroke) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radius));
+        drawable.setStroke(dp(1), stroke);
+        return drawable;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }

@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import static org.junit.Assert.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class LibraryStoreRequestTest {
     @Test
@@ -26,6 +28,16 @@ public class LibraryStoreRequestTest {
         JSONObject body = LibraryStore.restyleRequestBody("VoiceDrop-2026-07-01-120000-0m1s", 8);
 
         assertEquals(8, body.getInt("styleV"));
+    }
+
+    @Test public void bothRestylePathsAllowFiveMinutesForLongRecordings() throws Exception {
+        String source = new String(Files.readAllBytes(Paths.get(
+                "src/main/java/com/baixingai/voicedrop/data/LibraryStore.java")), "UTF-8");
+        int restyle = source.indexOf("public boolean restyle");
+        int remine = source.indexOf("public boolean remine");
+        assertTrue(source.substring(restyle, remine).contains("readTimeoutMs(300_000)"));
+        assertTrue(source.substring(remine, source.indexOf("public static JSONObject restyleRequestBody"))
+                .contains("readTimeoutMs(300_000)"));
     }
 
     @Test

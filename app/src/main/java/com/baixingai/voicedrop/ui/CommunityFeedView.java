@@ -6,9 +6,13 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -49,7 +53,9 @@ public final class CommunityFeedView extends LinearLayout {
     private final FeedAdapter adapter;
     private final RecyclerView grid;
     private final List<TextView> tabViews = new ArrayList<>();
-    private CommunityFeedPresentation.Tab selected = CommunityFeedPresentation.Tab.RECOMMENDED;
+    private CommunityFeedPresentation.Tab selected = CommunityFeedPresentation.Tab.LATEST;
+    private LinearLayout tabRow;
+    private String query = "";
 
     public CommunityFeedView(Context context, CommunityStore.Feed feed, Listener listener,
                              CommunityFeedPresentation.Tab initialTab) {
@@ -59,7 +65,8 @@ public final class CommunityFeedView extends LinearLayout {
         setOrientation(VERTICAL);
         setBackgroundColor(0xfff3efe7);
 
-        addView(buildTabs(), new LayoutParams(-1, dp(38)));
+        tabRow = buildTabs();
+        addView(tabRow, new LayoutParams(-1, dp(44)));
         grid = new RecyclerView(context);
         StaggeredGridLayoutManager layout = new StaggeredGridLayoutManager(2,
                 StaggeredGridLayoutManager.VERTICAL);
@@ -71,7 +78,7 @@ public final class CommunityFeedView extends LinearLayout {
         adapter = new FeedAdapter();
         grid.setAdapter(adapter);
         addView(grid, new LayoutParams(-1, 0, 1));
-        select(initialTab == null ? CommunityFeedPresentation.Tab.RECOMMENDED : initialTab);
+        select(initialTab == null ? CommunityFeedPresentation.Tab.LATEST : initialTab);
     }
 
     /** The masonry list moves during pull-to-refresh; the filter tabs above it stay fixed. */
@@ -81,16 +88,16 @@ public final class CommunityFeedView extends LinearLayout {
 
     /** Places the refresh spinner immediately below the fixed filter tabs. */
     public int refreshSpinnerOffset() {
-        return dp(38);
+        return dp(44);
     }
 
     /** Updates the existing masonry list without recreating the pager or losing scroll state. */
     public void updateFeed(CommunityStore.Feed next) {
         feed = next == null ? CommunityStore.Feed.empty() : next;
-        adapter.setPosts(CommunityFeedPresentation.posts(feed, selected));
+        showPosts();
     }
 
-    private View buildTabs() {
+    private LinearLayout buildTabs() {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -98,7 +105,62 @@ public final class CommunityFeedView extends LinearLayout {
         row.addView(tab("推荐", CommunityFeedPresentation.Tab.RECOMMENDED));
         row.addView(tab("最新", CommunityFeedPresentation.Tab.LATEST));
         row.addView(tab("回应", CommunityFeedPresentation.Tab.REPLIES));
+        View spacer = new View(getContext());
+        row.addView(spacer, new LayoutParams(0, 1, 1));
+        TextView search = text("⌕", 24, Theme.SECONDARY, Typeface.NORMAL);
+        search.setGravity(Gravity.CENTER);
+        search.setContentDescription("搜索社区");
+        search.setOnClickListener(v -> showSearch());
+        row.addView(search, new LayoutParams(dp(40), dp(40)));
         return row;
+    }
+
+    private void showSearch() {
+        tabRow.removeAllViews();
+        tabViews.clear();
+        EditText input = new EditText(getContext());
+        input.setSingleLine(true);
+        input.setTextSize(14);
+        input.setTextColor(Theme.INK);
+        input.setHintTextColor(Theme.SECONDARY);
+        input.setHint("搜索标题、作者或内容");
+        input.setPadding(dp(12), 0, dp(12), 0);
+        GradientDrawable inputBackground = new GradientDrawable();
+        inputBackground.setColor(Theme.CARD);
+        inputBackground.setCornerRadius(dp(20));
+        inputBackground.setStroke(dp(1), 0xffded5c8);
+        input.setBackground(inputBackground);
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                query = s == null ? "" : s.toString();
+                showPosts();
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+        tabRow.addView(input, new LayoutParams(0, dp(36), 1));
+        TextView cancel = text("取消", 14, Theme.INK, Typeface.NORMAL);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setOnClickListener(v -> hideSearch());
+        tabRow.addView(cancel, new LayoutParams(dp(52), dp(40)));
+        input.requestFocus();
+        input.post(() -> {
+            InputMethodManager keyboard = (InputMethodManager) getContext()
+                    .getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    private void hideSearch() {
+        query = "";
+        LinearLayout fresh = buildTabs();
+        tabRow.removeAllViews();
+        while (fresh.getChildCount() > 0) {
+            View child = fresh.getChildAt(0);
+            fresh.removeViewAt(0);
+            tabRow.addView(child);
+        }
+        select(selected);
     }
 
     private TextView tab(String label, CommunityFeedPresentation.Tab tab) {
@@ -118,8 +180,13 @@ public final class CommunityFeedView extends LinearLayout {
             view.setTextColor(active ? Theme.INK : Theme.SECONDARY);
             view.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
         }
-        adapter.setPosts(CommunityFeedPresentation.posts(feed, selected));
+        showPosts();
         listener.onTabChanged(selected);
+    }
+
+    private void showPosts() {
+        adapter.setPosts(CommunityFeedPresentation.search(
+                CommunityFeedPresentation.posts(feed, selected), query));
     }
 
     private final class FeedAdapter extends RecyclerView.Adapter<CardHolder> {

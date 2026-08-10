@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
@@ -36,6 +37,20 @@ public class CommunityFeedPresentationTest {
     public void paletteIsStableForTheSameShareId() {
         assertEquals(CommunityFeedPresentation.paletteIndex("share-42"),
                 CommunityFeedPresentation.paletteIndex("share-42"));
+    }
+
+    @Test public void searchMatchesTitleAuthorAndPreviewCaseInsensitivelyAndKeepsOrder() throws Exception {
+        CommunityStore.Post title = CommunityStore.Post.from(new JSONObject()
+                .put("shareId", "1").put("title", "VoiceDrop 手册"));
+        CommunityStore.Post author = CommunityStore.Post.from(new JSONObject()
+                .put("shareId", "2").put("author", "Alice"));
+        CommunityStore.Post preview = CommunityStore.Post.from(new JSONObject()
+                .put("shareId", "3").put("preview", "今天去了西湖"));
+        List<CommunityStore.Post> posts = Arrays.asList(title, author, preview);
+        assertEquals(Arrays.asList("1"), CommunityFeedPresentation.ids(CommunityFeedPresentation.search(posts, " 手册 ")));
+        assertEquals(Arrays.asList("2"), CommunityFeedPresentation.ids(CommunityFeedPresentation.search(posts, "alice")));
+        assertEquals(Arrays.asList("3"), CommunityFeedPresentation.ids(CommunityFeedPresentation.search(posts, "西湖")));
+        assertEquals(Arrays.asList("1", "2", "3"), CommunityFeedPresentation.ids(CommunityFeedPresentation.search(posts, " ")));
     }
 
     private CommunityStore.Post post(String id, String replyTo, double time) throws Exception {

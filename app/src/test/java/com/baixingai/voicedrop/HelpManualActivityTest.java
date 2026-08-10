@@ -7,15 +7,15 @@ import org.junit.Test;
 
 public final class HelpManualActivityTest {
     @Test
-    public void opensTheFullManualInsteadOfTheHelpCenterIndex() {
-        assertEquals("https://voicedrop.cn/help/manual/", HelpManualActivity.HELP_MANUAL_URL);
+    public void readsTheBundledMarkdownManualOffline() {
+        assertEquals("help_manual.md", HelpManualActivity.MANUAL_ASSET);
     }
 
     @Test
     public void exposesAllEightManualChaptersInTheNativeAnchorBar() {
-        assertArrayEquals(
-                new String[]{"ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"},
-                HelpManualActivity.SECTION_IDS);
-        assertEquals(8, HelpManualActivity.SECTION_LABELS.length);
+        assertArrayEquals(new String[]{
+                        "1 上手", "2 录音", "3 改稿", "4 发布",
+                        "5 社区", "6 文风", "7 账号", "8 FAQ"
+                }, HelpManualActivity.SECTION_LABELS);
     }
 }

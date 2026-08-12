@@ -7,17 +7,16 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 public final class BookWritingSettingsEntryTest {
     @Test
-    public void bookWritingLivesInSettingsExperimentalSection() throws Exception {
+    public void bookWritingDoesNotDuplicateTheHomeShelfInSettings() throws Exception {
         String settings = read("SettingsActivity.java");
         String about = read("AboutActivity.java");
-        assertTrue(settings.contains("addSection(content, \"实验功能\")"));
-        assertTrue(settings.contains("\"写书\", \"书架 · 每本 320 算力"));
-        assertTrue(settings.contains("this::openBookWriting"));
-        assertTrue(settings.contains("BooksShelfActivity.class"));
+        assertFalse(settings.contains("addSection(content, \"实验功能\")"));
+        assertFalse(settings.contains("\"写书\""));
+        assertFalse(settings.contains("openBookWriting"));
+        assertFalse(settings.contains("BooksShelfActivity.class"));
         assertFalse(about.contains("\"写书\""));
     }
 

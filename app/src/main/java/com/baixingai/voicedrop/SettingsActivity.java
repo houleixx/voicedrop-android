@@ -56,6 +56,7 @@ public class SettingsActivity extends Activity {
     static final int SETTINGS_TILE_CORNER_DP = 8;
     static final int SETTINGS_TILE_NEUTRAL_BG = 0xfff1ece3;
     static final int SETTINGS_TILE_COMMUNITY_BG = 0xffeaf1ec;
+    static final int BOOK_WRITING_ICON_RES_ID = R.drawable.ic_about_books_vertical;
     static final int[] SETTING_ROW_ICON_RES_IDS = {
             R.drawable.ic_settings_account,
             R.drawable.ic_settings_pen,
@@ -180,6 +181,11 @@ public class SettingsActivity extends Activity {
             addCardDivider(card);
             addCardSwitchRow(card, R.drawable.ic_settings_community);
         });
+
+        // 实验功能
+        addSection(content, "实验功能");
+        addCard(content, card -> addCardRow(card, BOOK_WRITING_ICON_RES_ID,
+                "写书", "每本 320 算力 · 一颗种子长成一本书", this::openBookWriting));
 
         // 其他
         addSection(content, "其他");
@@ -449,6 +455,11 @@ public class SettingsActivity extends Activity {
 
     private void openAbout() {
         startActivity(new Intent(this, AboutActivity.class));
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
+    private void openBookWriting() {
+        startActivity(new Intent(this, BookWritingActivity.class));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 

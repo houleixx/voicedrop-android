@@ -24,7 +24,6 @@ import com.baixingai.voicedrop.ui.Theme;
 
 public final class AboutActivity extends Activity {
     private static final int REQUEST_FEEDBACK = 1001;
-    static final int BOOK_WRITING_ICON_RES_ID = R.drawable.ic_about_books_vertical;
     static final int[] ABOUT_ROW_ICON_RES_IDS = {
             R.drawable.ic_about_privacy,
             R.drawable.ic_about_terms,
@@ -90,10 +89,6 @@ public final class AboutActivity extends Activity {
         addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::openBlockedUsers);
         addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
 
-        TextView experimental = text("实验功能", 13, Theme.SECONDARY, Typeface.BOLD);
-        experimental.setPadding(dp(4), dp(12), 0, dp(8));
-        content.addView(experimental);
-        addSettingRow(content, BOOK_WRITING_ICON_RES_ID, "写书", "一颗种子长成一本书，发到公开书架", () -> open(BookWritingActivity.class));
     }
 
     @Override

@@ -19,6 +19,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.core.BookWritingResult;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.PageTitleBar;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
@@ -88,7 +89,7 @@ public final class BookWritingActivity extends Activity {
         content.addView(intro, matchWrap());
 
         TextView timing = text(
-                "点「开写」提交后就可以关掉 App——书在服务器上继续写，通常 10–30 分钟后出现在公开书架。",
+                "每本书消耗 320 算力。点「开写」提交后就可以关掉 App——书在服务器上继续写，通常 10–30 分钟后出现在公开书架。",
                 13, Theme.FAINT, Typeface.NORMAL);
         timing.setLineSpacing(dp(2), 1f);
         content.addView(timing, topMargin(dp(10)));
@@ -168,36 +169,27 @@ public final class BookWritingActivity extends Activity {
         hideKeyboard();
 
         io.execute(() -> {
-            int code = 0;
+            BookWritingResult result = BookWritingResult.from(0, "");
             try {
                 byte[] body = new JSONObject().put("seed", value).toString()
                         .getBytes(StandardCharsets.UTF_8);
-                code = new HttpClient().postJson(
-                        API,
-                        new AuthStore(this).bearer(),
-                        body,
-                        new HttpClient.RequestOptions().readTimeoutMs(30_000)).code;
+                HttpClient.Response response = new HttpClient().postJson(API,
+                        new AuthStore(this).bearer(), body,
+                        new HttpClient.RequestOptions().readTimeoutMs(30_000));
+                result = BookWritingResult.from(response.code, response.text());
             } catch (Exception ignored) {}
-            int result = code;
-            runOnUiThread(() -> showResult(result));
+            BookWritingResult finalResult = result;
+            runOnUiThread(() -> showResult(finalResult));
         });
     }
 
-    private void showResult(int code) {
+    private void showResult(BookWritingResult result) {
         sending = false;
-        if (code == 202) {
+        if (result.accepted) {
             submitted = true;
             renderSubmitted();
-        } else if (code == 409) {
-            showStatus("服务器正在写另一本书，等它写完再来（通常 10–30 分钟）。");
-        } else if (code == 401) {
-            showStatus("还不能写书：先用 VoiceDrop 录几段话、成几篇文章，再来把它们长成书。");
-        } else if (code == 429) {
-            showStatus("今天的写书额度用完了，明天再来。");
         } else {
-            showStatus(code == 0
-                    ? "没连上服务器，请检查网络后重试。"
-                    : "服务器返回 " + code + "，请稍后重试。");
+            showStatus(result.message);
         }
         updateSubmitState();
     }

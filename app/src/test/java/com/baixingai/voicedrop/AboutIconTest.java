@@ -14,9 +14,4 @@ public class AboutIconTest {
         }
     }
 
-    @Test
-    public void bookWritingUsesItsOwnBooksIcon() {
-        assertEquals(R.drawable.ic_about_books_vertical, AboutActivity.BOOK_WRITING_ICON_RES_ID);
-        assertTrue(AboutActivity.BOOK_WRITING_ICON_RES_ID != R.drawable.ic_settings_info);
-    }
 }

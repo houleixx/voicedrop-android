@@ -17,7 +17,9 @@ public class HomeHeaderSpacingSourceTest {
 
         String compactTopBar = "SystemBarDefaults.applyTopInsets(topBar, dp(18), dp(8), dp(12), 0)";
         assertEquals(2, occurrences(source, compactTopBar));
-        assertTrue(source.contains("recordingsTabTitle.setPadding(0, dp(6), dp(14), dp(6))"));
+        assertTrue(source.contains("recordingsTabTitle.setPadding(0, dp(6), dp(10), dp(6))"));
+        assertTrue(source.contains("communityTabTitle.setPadding(dp(10), dp(6), dp(10), dp(6))"));
+        assertTrue(source.contains("booksTabTitle.setPadding(dp(10), dp(6), dp(10), dp(6))"));
     }
 
     private static int occurrences(String source, String needle) {

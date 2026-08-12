@@ -77,6 +77,7 @@ import com.baixingai.voicedrop.net.ClientReliability;
 import com.baixingai.voicedrop.net.LibraryCommandSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.BooksShelfPanel;
 import com.baixingai.voicedrop.ui.CommunityFeedView;
 import com.baixingai.voicedrop.ui.CommandGestureGate;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
@@ -203,6 +204,7 @@ public final class RecordingsActivity extends Activity {
     // Currently open swipe-to-delete rows
     protected final List<LinearLayout> openSwipeRows = new ArrayList<>();
     protected boolean communityTab;
+    protected boolean booksTab;
     protected boolean communityRefreshDirty;
     protected final Set<String> blockedAuthorsSnapshot = new HashSet<>();
     protected boolean loading;
@@ -214,6 +216,7 @@ public final class RecordingsActivity extends Activity {
     protected HomePagerAdapter homePagerAdapter;
     protected TextView recordingsTabTitle;
     protected TextView communityTabTitle;
+    protected TextView booksTabTitle;
     protected View homeTabUnderline;
     protected final List<String> homeTags = new ArrayList<>();
     protected String selectedTag;
@@ -370,7 +373,7 @@ public final class RecordingsActivity extends Activity {
             communityRefreshDirty = true;
         }
         reconnectAccountSessionsIfNeeded();
-        if (!isDetailActivity()) {
+        if (!isDetailActivity() && !booksTab) {
             if (communityTab) {
                 if (communityRefreshDirty) {
                     communityRefreshDirty = false;
@@ -1074,9 +1077,8 @@ public final class RecordingsActivity extends Activity {
     protected int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
-    /** Position underline under the active tab (mainTitle or communityTabView) */
-    protected void updateUnderline(View underline, TextView mainTitle, TextView communityTabView, boolean isCommunityActive) {
-        TextView activeTab = isCommunityActive ? communityTabView : mainTitle;
+    /** Position underline under a fixed home tab using its rendered glyph width. */
+    protected void updateUnderline(View underline, TextView activeTab) {
         android.text.Layout textLayout = activeTab.getLayout();
         if (textLayout == null || textLayout.getLineCount() == 0) return;
         String label = activeTab.getText().toString();
@@ -1088,6 +1090,10 @@ public final class RecordingsActivity extends Activity {
         underline.setLayoutParams(new LinearLayout.LayoutParams(lineW, dp(3)));
         underline.setTranslationX(visualLeft);
         underline.setVisibility(View.VISIBLE);
+    }
+    /** Position underline under the active tab (mainTitle or communityTabView). */
+    protected void updateUnderline(View underline, TextView mainTitle, TextView communityTabView, boolean isCommunityActive) {
+        updateUnderline(underline, isCommunityActive ? communityTabView : mainTitle);
     }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
@@ -1158,16 +1164,30 @@ public final class RecordingsActivity extends Activity {
         AppRouter.DeepLink link = AppRouter.parse(intent.getData());
         if (link.kind == AppRouter.Kind.RECORDINGS) {
             communityTab = false;
+            booksTab = false;
+            selectedTag = null;
             showHome();
+            if (homePager != null) homePager.setCurrentItem(0, false);
             refreshAndDrain();
             if (statusSession != null) statusSession.connect();
             return true;
         }
         if (link.kind == AppRouter.Kind.COMMUNITY) {
             communityTab = true;
+            booksTab = false;
+            selectedTag = null;
             showHome();
+            if (homePager != null) homePager.setCurrentItem(1, false);
             refreshDataInBackground();
             if (statusSession != null) statusSession.connect();
+            return true;
+        }
+        if (link.kind == AppRouter.Kind.BOOKS) {
+            communityTab = false;
+            booksTab = true;
+            selectedTag = null;
+            showHome();
+            if (homePager != null) homePager.setCurrentItem(2, false);
             return true;
         }
         if (link.kind == AppRouter.Kind.SETTINGS) {
@@ -1176,6 +1196,7 @@ public final class RecordingsActivity extends Activity {
         }
         if (link.kind == AppRouter.Kind.RECORD) {
             communityTab = false;
+            booksTab = false;
             selectedTag = null;
             defaultRecordTag = link.tag;
             showHome();
@@ -1197,6 +1218,8 @@ public final class RecordingsActivity extends Activity {
             // 已装用户点邀请链接：记归因（新账号才会真入账，服务端判定）+ 干净落首页
             new ReferralManager(this).noteShareToken(link.id);
             communityTab = false;
+            booksTab = false;
+            selectedTag = null;
             showHome();
             refreshAndDrain();
             if (statusSession != null) statusSession.connect();
@@ -1512,26 +1535,32 @@ public final class RecordingsActivity extends Activity {
         titleRow.setPadding(dp(18), 0, dp(18), 0);
         tabScroll.addView(titleRow, new HorizontalScrollView.LayoutParams(-2, -2));
 
-        recordingsTabTitle = text("我的录音", 20, !communityTab && selectedTag == null ? Theme.INK : Theme.FAINT, Typeface.BOLD);
+        recordingsTabTitle = text("我的录音", 20, !communityTab && !booksTab && selectedTag == null ? Theme.INK : Theme.FAINT, Typeface.BOLD);
         recordingsTabTitle.setGravity(Gravity.CENTER);
-        recordingsTabTitle.setPadding(0, dp(6), dp(14), dp(6));
+        recordingsTabTitle.setPadding(0, dp(6), dp(10), dp(6));
         titleRow.addView(recordingsTabTitle, new LinearLayout.LayoutParams(-2, -2));
 
         communityTabTitle = text("VD社区", 20, communityTab ? Theme.INK : Theme.FAINT, Typeface.BOLD);
         communityTabTitle.setGravity(Gravity.CENTER);
-        communityTabTitle.setPadding(dp(14), dp(6), dp(14), dp(6));
+        communityTabTitle.setPadding(dp(10), dp(6), dp(10), dp(6));
         titleRow.addView(communityTabTitle, new LinearLayout.LayoutParams(-2, -2));
+
+        booksTabTitle = text("写书", 20, booksTab ? Theme.INK : Theme.FAINT, Typeface.BOLD);
+        booksTabTitle.setGravity(Gravity.CENTER);
+        booksTabTitle.setPadding(dp(10), dp(6), dp(10), dp(6));
+        titleRow.addView(booksTabTitle, new LinearLayout.LayoutParams(-2, -2));
 
         for (String tag : homeTags) {
             TextView tagTitle = text(tag, 20, tag.equals(selectedTag) ? Theme.INK : Theme.FAINT, Typeface.BOLD);
             tagTitle.setGravity(Gravity.CENTER);
             tagTitle.setSingleLine(true);
             tagTitle.setEllipsize(TextUtils.TruncateAt.END);
-            tagTitle.setPadding(dp(14), dp(6), dp(14), dp(6));
+            tagTitle.setPadding(dp(10), dp(6), dp(10), dp(6));
             tagTitle.setOnClickListener(v -> {
                 communityTab = false;
+                booksTab = false;
                 selectedTag = tag;
-                if (homePager != null) homePager.setCurrentItem(homeTags.indexOf(tag) + 2, true);
+                if (homePager != null) homePager.setCurrentItem(homeTags.indexOf(tag) + 3, true);
                 updateHomeTabs();
             });
             titleRow.addView(tagTitle, new LinearLayout.LayoutParams(-2, -2));
@@ -1548,7 +1577,7 @@ public final class RecordingsActivity extends Activity {
 
         homePager = new LockedViewPager(this);
         homePager.setId(View.generateViewId());
-        homePager.setOffscreenPageLimit(Math.max(2, homeTags.size() + 2));
+        homePager.setOffscreenPageLimit(Math.max(3, homeTags.size() + 3));
         homePagerAdapter = new HomePagerAdapter();
         homePager.setAdapter(homePagerAdapter);
         page.addView(homePager, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -1556,7 +1585,8 @@ public final class RecordingsActivity extends Activity {
         homePager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override public void onPageSelected(int position) {
                 communityTab = position == 1;
-                selectedTag = position >= 2 && position - 2 < homeTags.size() ? homeTags.get(position - 2) : null;
+                booksTab = position == 2;
+                selectedTag = position >= 3 && position - 3 < homeTags.size() ? homeTags.get(position - 3) : null;
                 updateHomeTabs();
                 if (communityTab && (communityRefreshDirty || !communityLoadAttempted)) {
                     communityRefreshDirty = false;
@@ -1564,23 +1594,33 @@ public final class RecordingsActivity extends Activity {
                     communityLoading = posts.isEmpty();
                     refreshHomePages();
                     refreshDataInBackground();
-                } else if (!communityTab && !recordingsLoadAttempted) {
+                } else if (!communityTab && !booksTab && !recordingsLoadAttempted) {
                     loading = recordings.isEmpty();
                     refreshDataInBackground();
                 }
             }
         });
         recordingsTabTitle.setOnClickListener(v -> {
+            communityTab = false;
+            booksTab = false;
             selectedTag = null;
             homePager.setCurrentItem(0, true);
         });
         communityTabTitle.setOnClickListener(v -> {
+            communityTab = true;
+            booksTab = false;
             selectedTag = null;
             if (!communityLoadAttempted && posts.isEmpty()) {
                 communityLoading = true;
                 refreshHomePages();
             }
             homePager.setCurrentItem(1, true);
+        });
+        booksTabTitle.setOnClickListener(v -> {
+            communityTab = false;
+            booksTab = true;
+            selectedTag = null;
+            homePager.setCurrentItem(2, true);
         });
     }
 
@@ -1606,12 +1646,13 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void updateHomeTabs() {
-        if (recordingsTabTitle == null || communityTabTitle == null || homeTabUnderline == null) return;
-        recordingsTabTitle.setTextColor(!communityTab && selectedTag == null ? Theme.INK : Theme.FAINT);
+        if (recordingsTabTitle == null || communityTabTitle == null || booksTabTitle == null || homeTabUnderline == null) return;
+        recordingsTabTitle.setTextColor(!communityTab && !booksTab && selectedTag == null ? Theme.INK : Theme.FAINT);
         communityTabTitle.setTextColor(communityTab ? Theme.INK : Theme.FAINT);
+        booksTabTitle.setTextColor(booksTab ? Theme.INK : Theme.FAINT);
         if (selectedTag == null) {
             homeTabUnderline.setVisibility(View.VISIBLE);
-            updateUnderline(homeTabUnderline, recordingsTabTitle, communityTabTitle, communityTab);
+            updateUnderline(homeTabUnderline, booksTab ? booksTabTitle : communityTab ? communityTabTitle : recordingsTabTitle);
         } else {
             homeTabUnderline.setVisibility(View.INVISIBLE);
         }
@@ -1619,9 +1660,10 @@ public final class RecordingsActivity extends Activity {
 
     protected int currentHomePageIndex() {
         if (communityTab) return 1;
+        if (booksTab) return 2;
         if (selectedTag != null) {
             int index = homeTags.indexOf(selectedTag);
-            if (index >= 0) return index + 2;
+            if (index >= 0) return index + 3;
         }
         return 0;
     }
@@ -1632,6 +1674,10 @@ public final class RecordingsActivity extends Activity {
 
     protected View buildTagTabPage(String tag) {
         return buildRecordingsListPage(recordingsPageKey(tag), recordingsForTag(tag), "「" + tag + "」标签下还没有文章");
+    }
+
+    protected View buildBooksTabPage() {
+        return new BooksShelfPanel(this);
     }
 
     protected String recordingsPageKey(String tag) {
@@ -2181,7 +2227,7 @@ public final class RecordingsActivity extends Activity {
 
     protected final class HomePagerAdapter extends PagerAdapter {
         @Override public int getCount() {
-            return 2 + homeTags.size();
+            return 3 + homeTags.size();
         }
 
         @Override public boolean isViewFromObject(View view, Object object) {
@@ -2194,8 +2240,10 @@ public final class RecordingsActivity extends Activity {
                 page = buildRecordingsTabPage();
             } else if (position == 1) {
                 page = buildCommunityTabPage();
+            } else if (position == 2) {
+                page = buildBooksTabPage();
             } else {
-                String tag = position - 2 < homeTags.size() ? homeTags.get(position - 2) : "";
+                String tag = position - 3 < homeTags.size() ? homeTags.get(position - 3) : "";
                 page = buildTagTabPage(tag);
             }
             container.addView(page, new ViewGroup.LayoutParams(-1, -1));
@@ -2879,6 +2927,7 @@ public final class RecordingsActivity extends Activity {
         homePagerAdapter = null;
         recordingsTabTitle = null;
         communityTabTitle = null;
+        booksTabTitle = null;
         homeTabUnderline = null;
         communityFeedView = null;
         recordingsListsByPage.clear();

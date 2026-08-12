@@ -85,6 +85,7 @@ public final class AppRouter {
         }
         if (segs.isEmpty()) return new DeepLink(Kind.RECORDINGS, "", "", "", rawUrl);
         String first = segs.get(0);
+        if (segs.size() == 1 && "books".equals(first)) return new DeepLink(Kind.BOOKS, "", "", "", rawUrl);
         if (segs.size() == 1 && PROMPT_CODE.matcher(first).matches()) {
             return new DeepLink(Kind.PROMPT_IMPORT, "", "", "", rawUrl, first);
         }
@@ -109,6 +110,7 @@ public final class AppRouter {
         if (!"voicedrop".equals(scheme)) return DeepLink.none();
         if ("recordings".equals(route) || route.isEmpty()) return new DeepLink(Kind.RECORDINGS, "", "");
         if ("community".equals(route)) return new DeepLink(Kind.COMMUNITY, "", "");
+        if ("books".equals(route) || "library".equals(route)) return new DeepLink(Kind.BOOKS, "", "");
         if ("settings".equals(route)) return new DeepLink(Kind.SETTINGS, "", "");
         if ("record".equals(route)) return new DeepLink(Kind.RECORD, "", tag == null ? "" : tag.trim());
         if ("article".equals(route) && firstSegment != null && !firstSegment.isEmpty()) {
@@ -132,6 +134,7 @@ public final class AppRouter {
         NONE,
         RECORDINGS,
         COMMUNITY,
+        BOOKS,
         SETTINGS,
         RECORD,
         ARTICLE,

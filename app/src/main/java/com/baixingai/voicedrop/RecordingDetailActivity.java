@@ -53,6 +53,7 @@ import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleRenderPolicy;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.MarkdownBlock;
 import com.baixingai.voicedrop.core.ArticleSharePayload;
 import com.baixingai.voicedrop.core.PhotoLoadPolicy;
 import com.baixingai.voicedrop.core.RecordingName;
@@ -90,6 +91,7 @@ import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
+import com.baixingai.voicedrop.ui.MarkdownRowRenderer;
 import com.baixingai.voicedrop.ui.PlaybackProgressButton;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
@@ -3009,9 +3011,7 @@ public final class RecordingDetailActivity extends Activity {
                     FrameLayout.LayoutParams locatorLp = new FrameLayout.LayoutParams(dp(20), -2, Gravity.LEFT | Gravity.TOP);
                     locatorLp.setMargins(-dp(24), dp(4), 0, 0);
                     row.addView(locator, locatorLp);
-                    TextView body = text(paragraph, 16, 0xff5d574f, Typeface.NORMAL);
-                    body.setLineSpacing(dp(6), 1.0f);
-                    row.addView(body, new FrameLayout.LayoutParams(-1, -2));
+                    TextView body = MarkdownRowRenderer.add(this, row, MarkdownBlock.classify(paragraph));
                     row.setOnLongClickListener(v -> {
                         Recording rec = content.getTag() instanceof Recording ? (Recording) content.getTag() : null;
                         showConfiguredTextMenu(v, rec, paragraphLine, paragraphText, bodyText, row, body);

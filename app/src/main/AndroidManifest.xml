@@ -160,7 +160,10 @@
         <activity
             android:name=".BookWritingActivity"
             android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/AppTheme" />
+        <activity android:name=".BooksShelfActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <activity android:name=".BookReaderActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity
             android:name=".BlockedUsersActivity"
             android:exported="false"

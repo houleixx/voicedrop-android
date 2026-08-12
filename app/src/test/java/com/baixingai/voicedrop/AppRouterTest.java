@@ -9,6 +9,8 @@ public class AppRouterTest {
     public void parsesVoicedropRoutes() {
         assertEquals(AppRouter.Kind.RECORDINGS, AppRouter.parse("voicedrop://recordings").kind);
         assertEquals(AppRouter.Kind.COMMUNITY, AppRouter.parse("voicedrop://community").kind);
+        assertEquals(AppRouter.Kind.BOOKS, AppRouter.parse("voicedrop://books").kind);
+        assertEquals(AppRouter.Kind.BOOKS, AppRouter.parse("voicedrop://library").kind);
         assertEquals(AppRouter.Kind.SETTINGS, AppRouter.parse("voicedrop://settings").kind);
         assertEquals(AppRouter.Kind.RECORD, AppRouter.parse("voicedrop://record").kind);
 
@@ -61,6 +63,7 @@ public class AppRouterTest {
     @Test
     public void parsesUniversalRootAndWebFallbacks() {
         assertEquals(AppRouter.Kind.RECORDINGS, AppRouter.parse("https://voicedrop.cn/").kind);
+        assertEquals(AppRouter.Kind.BOOKS, AppRouter.parse("https://voicedrop.cn/books").kind);
 
         AppRouter.DeepLink help = AppRouter.parse("https://voicedrop.cn/help");
         assertEquals(AppRouter.Kind.WEB, help.kind);

@@ -11,17 +11,23 @@ public final class BookWritingResult {
     public final int code;
     public final boolean accepted;
     public final String message;
+    public final Double balance;
 
     private BookWritingResult(int code, boolean accepted, String message) {
+        this(code, accepted, message, null);
+    }
+
+    private BookWritingResult(int code, boolean accepted, String message, Double balance) {
         this.code = code;
         this.accepted = accepted;
         this.message = message;
+        this.balance = balance;
     }
 
     public static BookWritingResult from(int code, String responseBody) {
         if (code == 202) {
             return new BookWritingResult(code, true,
-                    "开始写了！现在可以关闭 App，稍后去公开书架查看。");
+                    "开始写了！现在可以关闭 App，稍后下拉刷新「写书」书架查看。");
         }
         if (code == 402) {
             double need = DEFAULT_COST_SUANLI;
@@ -33,7 +39,7 @@ public final class BookWritingResult {
             } catch (Exception ignored) {}
             return new BookWritingResult(code, false,
                     "算力不足：写一本书要 " + formatSuanli(need) + " 算力，你现在有 "
-                            + formatSuanli(have) + "。去「设置 → 算力」看看怎么攒。");
+                            + formatSuanli(have) + "。", have);
         }
         if (code == 401) {
             return new BookWritingResult(code, false, "身份校验没过，请稍后重试。");

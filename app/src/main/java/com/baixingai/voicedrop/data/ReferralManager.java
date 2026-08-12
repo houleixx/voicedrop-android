@@ -79,7 +79,8 @@ public final class ReferralManager {
         String url = json.optString("url", "").trim();
         if (url.isEmpty()) throw new IllegalStateException("邀请链接暂不可用");
         return new InviteLink(url, json.optString("name", "").trim(),
-                json.optInt("suanliInviter", 0), json.optInt("suanliFriend", 0));
+                json.optInt("suanliInviter", 0), json.optInt("suanliFriend", 0),
+                json.optInt("suanliFeedAuthor", 0));
     }
 
     public static final class InviteLink {
@@ -87,12 +88,14 @@ public final class ReferralManager {
         public final String name;
         public final int suanliInviter;
         public final int suanliFriend;
+        public final int suanliFeedAuthor;
 
-        InviteLink(String url, String name, int suanliInviter, int suanliFriend) {
+        InviteLink(String url, String name, int suanliInviter, int suanliFriend, int suanliFeedAuthor) {
             this.url = url;
             this.name = name;
             this.suanliInviter = suanliInviter;
             this.suanliFriend = suanliFriend;
+            this.suanliFeedAuthor = suanliFeedAuthor;
         }
     }
 

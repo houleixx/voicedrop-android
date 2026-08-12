@@ -15,8 +15,9 @@ public final class BookWritingSettingsEntryTest {
         String settings = read("SettingsActivity.java");
         String about = read("AboutActivity.java");
         assertTrue(settings.contains("addSection(content, \"实验功能\")"));
-        assertTrue(settings.contains("\"写书\", \"每本 320 算力"));
+        assertTrue(settings.contains("\"写书\", \"书架 · 每本 320 算力"));
         assertTrue(settings.contains("this::openBookWriting"));
+        assertTrue(settings.contains("BooksShelfActivity.class"));
         assertFalse(about.contains("\"写书\""));
     }
 

@@ -18,7 +18,7 @@ public final class BookWritingResultTest {
                 "{\"error\":\"no-credit\",\"need_suanli\":320,\"suanli\":12.5}");
         assertTrue(result.message.contains("要 320 算力"));
         assertTrue(result.message.contains("现在有 12.5"));
-        assertTrue(result.message.contains("设置 → 算力"));
+        assertTrue(result.balance != null && result.balance == 12.5);
     }
 
     @Test

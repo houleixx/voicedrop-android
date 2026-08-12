@@ -185,7 +185,7 @@ public class SettingsActivity extends Activity {
         // 实验功能
         addSection(content, "实验功能");
         addCard(content, card -> addCardRow(card, BOOK_WRITING_ICON_RES_ID,
-                "写书", "每本 320 算力 · 一颗种子长成一本书", this::openBookWriting));
+                "写书", "书架 · 每本 320 算力", this::openBookWriting));
 
         // 其他
         addSection(content, "其他");
@@ -459,7 +459,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void openBookWriting() {
-        startActivity(new Intent(this, BookWritingActivity.class));
+        startActivity(new Intent(this, BooksShelfActivity.class));
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 

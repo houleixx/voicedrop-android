@@ -29,6 +29,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.core.WechatAuthorizationHandoff;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.SimpleToast;
@@ -36,6 +37,7 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -54,6 +56,7 @@ public final class WechatAuthorizationActivity extends Activity {
     private WebView webView;
     private TextView title;
     private TextView hint;
+    private WechatShareLoadingDialog authorizationLoading;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -68,7 +71,7 @@ public final class WechatAuthorizationActivity extends Activity {
         page.addView(top, new LinearLayout.LayoutParams(-1, -2));
         FrameLayout backTouch = standardBackButton();
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
-        title = text("正在检查授权状态…", 22, Theme.INK, Typeface.BOLD);
+        title = text("授权公众号", 22, Theme.INK, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         top.addView(title, new FrameLayout.LayoutParams(-1, dp(48), Gravity.CENTER));
         TextView capture = text("截图二维码", 14, 0xffffffff, Typeface.BOLD);
@@ -94,6 +97,7 @@ public final class WechatAuthorizationActivity extends Activity {
         bottom.addView(hint, new LinearLayout.LayoutParams(-1, -2));
         page.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
 
+        authorizationLoading = WechatShareLoadingDialog.show(this, "二维码加载中...");
         refreshAuthorizationStatus();
     }
 
@@ -122,9 +126,19 @@ public final class WechatAuthorizationActivity extends Activity {
                         "{}".getBytes(StandardCharsets.UTF_8));
                 String scanUrl = response.ok() ? new JSONObject(response.text()).optString("scan_url", "") : "";
                 if (scanUrl.isEmpty()) throw new IllegalStateException("missing scan_url");
-                runOnUiThread(() -> webView.loadUrl(scanUrl));
+                HttpClient.Response scanResponse = new HttpClient().get(scanUrl, null);
+                if (!scanResponse.ok()) throw new IllegalStateException("scan page unavailable");
+                String handoffHtml = WechatAuthorizationHandoff.handoffHtml(scanUrl, scanResponse.text());
+                runOnUiThread(() -> {
+                    if (webView != null) {
+                        webView.loadDataWithBaseURL(scanUrl, handoffHtml, "text/html", "UTF-8", null);
+                    }
+                });
             } catch (Exception ignored) {
-                runOnUiThread(() -> toast("无法打开公众号授权页，请稍后重试"));
+                runOnUiThread(() -> {
+                    hideAuthorizationLoading();
+                    toast("无法打开公众号授权页，请稍后重试");
+                });
             }
         });
     }
@@ -141,7 +155,10 @@ public final class WechatAuthorizationActivity extends Activity {
                 centerQrWhenReady(v, 0);
             }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
-                if (r.isForMainFrame()) toast("授权页加载失败，请检查网络后重试");
+                if (r.isForMainFrame()) {
+                    hideAuthorizationLoading();
+                    toast("授权页加载失败，请检查网络后重试");
+                }
             }
         });
     }
@@ -159,8 +176,20 @@ public final class WechatAuthorizationActivity extends Activity {
                         + "root.scrollLeft=x;root.scrollTop=y;document.body.scrollLeft=x;document.body.scrollTop=y;"
                         + "document.documentElement.scrollLeft=x;document.documentElement.scrollTop=y;window.scrollTo(x,y);return true;})()",
                 result -> {
-                    if (!"true".equals(result) && attempt < 6) centerQrWhenReady(view, attempt + 1);
+                    if ("true".equals(result)) {
+                        hideAuthorizationLoading();
+                    } else if (attempt < 6) {
+                        centerQrWhenReady(view, attempt + 1);
+                    } else {
+                        hideAuthorizationLoading();
+                    }
                 }), 500L + attempt * 350L);
+    }
+
+    private void hideAuthorizationLoading() {
+        if (authorizationLoading == null) return;
+        if (authorizationLoading.isShowing()) authorizationLoading.dismiss();
+        authorizationLoading = null;
     }
 
     /** Keep the authorization handoff in its expected hosts; all other links stay outside the app. */
@@ -262,5 +291,5 @@ public final class WechatAuthorizationActivity extends Activity {
     private void toast(String message) { SimpleToast.show(this, message); }
     @Override public void onBackPressed() { finishWithPageTransition(); }
     private void finishWithPageTransition() { finish(); overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right); }
-    @Override protected void onDestroy() { if (webView != null) { webView.stopLoading(); webView.destroy(); webView = null; } io.shutdownNow(); super.onDestroy(); }
+    @Override protected void onDestroy() { hideAuthorizationLoading(); if (webView != null) { webView.stopLoading(); webView.destroy(); webView = null; } io.shutdownNow(); super.onDestroy(); }
 }

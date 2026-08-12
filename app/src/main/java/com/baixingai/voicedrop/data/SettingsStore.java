@@ -73,6 +73,17 @@ public final class SettingsStore {
         return response.ok() ? new JSONObject(response.text()) : new JSONObject();
     }
 
+    public boolean isWechatConnected() throws Exception {
+        HttpClient.Response response = http.get(Api.filesBase() + "/wechat/bind-status", auth.bearer());
+        return wechatConnected(response.code, response.text());
+    }
+
+    public static boolean wechatConnected(int statusCode, String responseBody) {
+        if (statusCode < 200 || statusCode >= 300) return false;
+        try { return new JSONObject(responseBody == null ? "" : responseBody).optBoolean("connected", false); }
+        catch (Exception ignored) { return false; }
+    }
+
     public void saveWechat(String appid, String secret, boolean enabled) throws Exception {
         JSONObject body = new JSONObject()
                 .put("appid", appid)

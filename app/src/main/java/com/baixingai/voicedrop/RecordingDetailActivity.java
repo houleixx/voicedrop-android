@@ -200,6 +200,8 @@ public final class RecordingDetailActivity extends Activity {
     /** Retained only while Android 9 and below asks for legacy gallery-write permission. */
     private Recording pendingXhsRecording;
     private final AtomicBoolean xhsExportInProgress = new AtomicBoolean(false);
+    private final AtomicBoolean wechatPublishInProgress = new AtomicBoolean(false);
+    private WechatShareLoadingDialog wechatPublishLoading;
     protected String currentArticleStem;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
@@ -358,6 +360,7 @@ public final class RecordingDetailActivity extends Activity {
     @Override
     protected void onDestroy() {
         activityDestroyed = true;
+        finishWechatPublishing();
         super.onDestroy();
         main.removeCallbacks(timerTick);
         main.removeCallbacks(communityTimerTick);
@@ -1031,23 +1034,29 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void publishWechat(Recording rec) {
-        toast("正在发布到公众号…");
+        if (!wechatPublishInProgress.compareAndSet(false, true)) return;
+        wechatPublishLoading = WechatShareLoadingDialog.show(this, "正在发布...");
         io.execute(() -> {
             try {
-                JSONObject cfg = settingsStore.loadWechat();
-                if (cfg.optString("appid", "").trim().isEmpty()
-                        || cfg.optString("secret", "").trim().isEmpty()) {
-                    main.post(() -> openWechatSettings("请先配置公众号"));
+                if (!settingsStore.isWechatConnected()) {
+                    main.post(() -> {
+                        finishWechatPublishing();
+                        openWechatSettings("请先配置公众号");
+                    });
                     return;
                 }
                 LibraryStore.PublishResult result = library.publishWechat(rec);
                 if (result.notConfigured) {
-                    main.post(() -> openWechatSettings("请先配置公众号"));
+                    main.post(() -> {
+                        finishWechatPublishing();
+                        openWechatSettings("请先配置公众号");
+                    });
                     return;
                 }
                 if (result.ok) {
                     ArticleDoc updated = library.fetchDoc(rec);
                     main.post(() -> {
+                        finishWechatPublishing();
                         if (updated != null && !updated.articles.isEmpty()) {
                             showArticle(rec, updated, false);
                         }
@@ -1056,14 +1065,30 @@ public final class RecordingDetailActivity extends Activity {
                     return;
                 }
                 if (result.isConfigError()) {
-                    main.post(() -> openWechatSettings(result.message == null ? "公众号配置有误" : result.message));
+                    main.post(() -> {
+                        finishWechatPublishing();
+                        openWechatSettings(result.message == null ? "公众号配置有误" : result.message);
+                    });
                 } else {
-                    toast(result.message == null ? "推送失败，请稍后再试" : result.message);
+                    main.post(() -> {
+                        finishWechatPublishing();
+                        toast(result.message == null ? "推送失败，请稍后再试" : result.message);
+                    });
                 }
             } catch (Exception e) {
-                toast("公众号发布失败：" + e.getMessage());
+                main.post(() -> {
+                    finishWechatPublishing();
+                    toast("公众号发布失败：" + e.getMessage());
+                });
             }
         });
+    }
+
+    private void finishWechatPublishing() {
+        wechatPublishInProgress.set(false);
+        if (wechatPublishLoading == null) return;
+        if (wechatPublishLoading.isShowing()) wechatPublishLoading.dismiss();
+        wechatPublishLoading = null;
     }
 
     private void openWechatSettings(String message) {

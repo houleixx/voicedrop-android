@@ -16,15 +16,19 @@ import android.widget.TextView;
 
 /** Compact WeChat-style loading overlay for the handoff to WeChat. */
 public final class WechatShareLoadingDialog extends Dialog {
-    private WechatShareLoadingDialog(Context context) {
+    private WechatShareLoadingDialog(Context context, String message) {
         super(context, android.R.style.Theme_Translucent_NoTitleBar);
         setCancelable(false);
         setCanceledOnTouchOutside(false);
-        setContentView(content(context));
+        setContentView(content(context, message));
     }
 
     public static WechatShareLoadingDialog show(Context context) {
-        WechatShareLoadingDialog dialog = new WechatShareLoadingDialog(context);
+        return show(context, "加载中...");
+    }
+
+    public static WechatShareLoadingDialog show(Context context, String message) {
+        WechatShareLoadingDialog dialog = new WechatShareLoadingDialog(context, message);
         dialog.show();
         Window window = dialog.getWindow();
         if (window != null) {
@@ -38,7 +42,7 @@ public final class WechatShareLoadingDialog extends Dialog {
         return dialog;
     }
 
-    private static LinearLayout content(Context context) {
+    private static LinearLayout content(Context context, String message) {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
@@ -54,15 +58,16 @@ public final class WechatShareLoadingDialog extends Dialog {
         spinner.setIndeterminateTintList(ColorStateList.valueOf(Color.WHITE));
         card.addView(spinner, new LinearLayout.LayoutParams(dp(context, 32), dp(context, 32)));
 
-        TextView message = new TextView(context);
-        message.setText("加载中...");
-        message.setTextColor(Color.WHITE);
-        message.setTextSize(14);
-        message.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        message.setIncludeFontPadding(false);
+        TextView messageView = new TextView(context);
+        messageView.setText(message);
+        messageView.setTextColor(Color.WHITE);
+        messageView.setTextSize(14);
+        messageView.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        messageView.setIncludeFontPadding(false);
+        messageView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(-2, -2);
         textParams.topMargin = dp(context, 8);
-        card.addView(message, textParams);
+        card.addView(messageView, textParams);
         return card;
     }
 

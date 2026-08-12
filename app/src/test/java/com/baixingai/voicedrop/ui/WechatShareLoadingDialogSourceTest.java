@@ -21,6 +21,9 @@ public class WechatShareLoadingDialogSourceTest {
         assertTrue(source.contains("card.setMinimumHeight(dp(context, 120))"));
         assertTrue(source.contains("textParams.topMargin = dp(context, 8)"));
         assertTrue(source.contains("加载中..."));
+        assertTrue(source.contains("show(Context context, String message)"));
+        assertTrue(source.contains("messageView.setText(message)"));
+        assertTrue(source.contains("messageView.setGravity(Gravity.CENTER)"));
         assertTrue(source.contains("window.setGravity(Gravity.CENTER)"));
     }
 

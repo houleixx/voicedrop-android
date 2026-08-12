@@ -18,6 +18,10 @@ public class WechatAuthorizationActivitySourceTest {
         assertTrue(source.contains("Api.filesBase() + \"/wechat/authorization\""));
         assertTrue(source.contains("scan_url"));
         assertTrue(source.contains("Api.filesBase() + \"/wechat/bind-status\""));
+        assertTrue(source.contains("new HttpClient().get(scanUrl, null)"));
+        assertTrue(source.contains("WechatAuthorizationHandoff.handoffHtml(scanUrl"));
+        assertTrue(source.contains("webView.loadDataWithBaseURL(scanUrl"));
+        assertFalse(source.contains("webView.loadUrl(scanUrl)"));
         assertFalse(source.contains("wechat.voicedrop.cn"));
         assertFalse(source.contains("bind_status?user"));
         assertTrue(source.contains("重新授权公众号"));
@@ -32,6 +36,18 @@ public class WechatAuthorizationActivitySourceTest {
         assertTrue(source.contains("IosDialog.showConfirmation"));
         assertTrue(source.contains("点击页面上的「相册」"));
         assertFalse(source.contains("右上角「相册」"));
+    }
+
+    @Test
+    public void authorizationPageShowsLoadingUntilQrCodeIsReady() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/WechatAuthorizationActivity.java");
+
+        assertTrue(source.contains("WechatShareLoadingDialog.show(this, \"二维码加载中...\")"));
+        assertTrue(source.contains("if (\"true\".equals(result))"));
+        assertTrue(source.contains("hideAuthorizationLoading();"));
+        assertTrue(source.contains("if (r.isForMainFrame())"));
+        assertTrue(source.contains("title = text(\"授权公众号\""));
+        assertFalse(source.contains("title = text(\"正在检查授权状态…\""));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

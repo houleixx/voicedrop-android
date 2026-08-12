@@ -249,6 +249,7 @@ public final class BooksShelfPanel extends LinearLayout {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(6));
         params.leftMargin = -dp(6);
         params.rightMargin = -dp(6);
+        params.topMargin = dp(6);
         params.bottomMargin = dp(22);
         return params;
     }

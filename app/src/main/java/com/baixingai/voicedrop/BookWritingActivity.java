@@ -28,6 +28,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.PageTitleBar;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
+import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
@@ -52,6 +53,7 @@ public final class BookWritingActivity extends Activity {
     private EditText seed;
     private TextView submit;
     private TextView status;
+    private WechatShareLoadingDialog submitLoading;
     private boolean sending;
     private boolean submitted;
     private Double balance;
@@ -341,6 +343,7 @@ public final class BookWritingActivity extends Activity {
         showStatus(null);
         updateSubmitState();
         hideKeyboard();
+        showSubmitLoading();
         io.execute(() -> {
             BookWritingResult result = BookWritingResult.from(0, "");
             try {
@@ -355,6 +358,7 @@ public final class BookWritingActivity extends Activity {
     }
 
     private void showResult(BookWritingResult result) {
+        hideSubmitLoading();
         sending = false;
         if (result.accepted) {
             submitted = true;
@@ -389,7 +393,7 @@ public final class BookWritingActivity extends Activity {
         content.addView(message, centeredTopMargin(dp(10)));
         TextView done = text("好", 16, 0xffffffff, Typeface.BOLD);
         done.setGravity(Gravity.CENTER);
-        done.setBackground(round(Theme.ACCENT, 24));
+        done.setBackground(round(Theme.ACCENT, 8));
         done.setOnClickListener(v -> finishWithPageTransition());
         LinearLayout.LayoutParams doneParams = new LinearLayout.LayoutParams(dp(96), dp(48));
         doneParams.topMargin = dp(14);
@@ -414,6 +418,17 @@ public final class BookWritingActivity extends Activity {
         status.setVisibility(message == null || message.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
+    private void showSubmitLoading() {
+        hideSubmitLoading();
+        submitLoading = WechatShareLoadingDialog.show(this, "提交中...");
+    }
+
+    private void hideSubmitLoading() {
+        if (submitLoading == null) return;
+        if (submitLoading.isShowing()) submitLoading.dismiss();
+        submitLoading = null;
+    }
+
     private void hideKeyboard() {
         View focused = getCurrentFocus();
         if (focused == null) return;
@@ -427,7 +442,7 @@ public final class BookWritingActivity extends Activity {
         finish();
         overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
     }
-    @Override protected void onDestroy() { io.shutdownNow(); super.onDestroy(); }
+    @Override protected void onDestroy() { hideSubmitLoading(); io.shutdownNow(); super.onDestroy(); }
 
     private String format(double value) {
         double rounded = Math.round(value * 10) / 10.0;

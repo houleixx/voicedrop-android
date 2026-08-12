@@ -29,6 +29,9 @@ public final class BookWritingVisualContractTest {
         assertTrue(page.contains("icon.setPadding(dp(10), dp(10), dp(10), dp(10))"));
         assertTrue(page.contains("new LinearLayout.LayoutParams(dp(42), dp(42))"));
         assertTrue(page.contains("SystemBarDefaults.applyBottomInsets(bottom"));
+        assertTrue(page.contains("done.setBackground(round(Theme.ACCENT, 8))"));
+        assertTrue(page.contains("WechatShareLoadingDialog.show(this, \"提交中...\")"));
+        assertTrue(page.indexOf("hideSubmitLoading();\n        sending = false") > 0);
         assertTrue(page.contains("if (loadedBalance != null && loadedBalance < PRICE)"));
         assertTrue(page.contains("format(gap) + \" 算力，两条来路：\""));
         assertTrue(page.indexOf(".balance().suanli") < page.indexOf("new ReferralManager(this).inviteLink()"));

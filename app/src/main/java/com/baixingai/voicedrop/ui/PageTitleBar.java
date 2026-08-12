@@ -3,6 +3,7 @@ package com.baixingai.voicedrop.ui;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -42,7 +43,12 @@ public final class PageTitleBar extends FrameLayout {
         heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         heading.setGravity(Gravity.CENTER);
         heading.setSingleLine(true);
-        addView(heading, new FrameLayout.LayoutParams(-2, dp(48), Gravity.CENTER));
+        heading.setEllipsize(TextUtils.TruncateAt.END);
+        FrameLayout.LayoutParams headingParams = new FrameLayout.LayoutParams(
+                -1, dp(48), Gravity.CENTER);
+        headingParams.leftMargin = dp(64);
+        headingParams.rightMargin = dp(64);
+        addView(heading, headingParams);
     }
 
     /** Adds a trailing text action while retaining the shared title and back affordance. */

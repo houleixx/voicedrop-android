@@ -11,7 +11,9 @@ import android.text.SpannableString;
 import android.text.TextWatcher;
 import android.text.style.AbsoluteSizeSpan;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -19,6 +21,10 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.baixingai.voicedrop.core.BookWritingResult;
 import com.baixingai.voicedrop.data.AuthStore;
@@ -74,12 +80,14 @@ public final class BookWritingActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(Theme.BG);
+        applyImeAvoidance(page);
         root.addView(page, new FrameLayout.LayoutParams(-1, -1));
 
         page.addView(buildHeader(), new LinearLayout.LayoutParams(-1, -2));
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
+        dismissKeyboardWhenDragging(scroll);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(20), dp(4), dp(20), dp(30));
@@ -435,6 +443,35 @@ public final class BookWritingActivity extends Activity {
         InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (keyboard != null) keyboard.hideSoftInputFromWindow(focused.getWindowToken(), 0);
         focused.clearFocus();
+    }
+
+    /** Edge-to-edge windows do not honor adjustResize, so consume the IME inset explicitly. */
+    private void applyImeAvoidance(LinearLayout page) {
+        ViewCompat.setOnApplyWindowInsetsListener(page, (target, windowInsets) -> {
+            Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+            target.setPadding(0, 0, 0, ime.bottom);
+            return windowInsets;
+        });
+        page.post(() -> ViewCompat.requestApplyInsets(page));
+    }
+
+    /** A real scroll gesture dismisses the IME without consuming the ScrollView's touch stream. */
+    private void dismissKeyboardWhenDragging(ScrollView scroll) {
+        int touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+        float[] downY = new float[1];
+        boolean[] dismissed = new boolean[1];
+        scroll.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                downY[0] = event.getY();
+                dismissed[0] = false;
+            } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE
+                    && !dismissed[0]
+                    && Math.abs(event.getY() - downY[0]) > touchSlop) {
+                dismissed[0] = true;
+                hideKeyboard();
+            }
+            return false;
+        });
     }
 
     @Override public void onBackPressed() { finishWithPageTransition(); }

@@ -62,6 +62,11 @@ public final class RecordingName {
         return "photos/" + sessionTs + "/" + Math.max(0, offset) + "-" + randomTag(3) + ".jpg";
     }
 
+    /** Shared cross-platform key for an article's dedicated, write-once cover. */
+    public static String coverKey(String sessionTs) {
+        return "photos/" + sessionTs + "/cover.jpg";
+    }
+
     public static String randomTag(int count) {
         StringBuilder builder = new StringBuilder(count);
         for (int i = 0; i < count; i++) {

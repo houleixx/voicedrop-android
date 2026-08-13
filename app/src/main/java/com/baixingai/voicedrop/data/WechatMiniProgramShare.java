@@ -11,6 +11,7 @@ import com.baixingai.voicedrop.BuildConfig;
 import com.tencent.mm.opensdk.modelmsg.SendMessageToWX;
 import com.tencent.mm.opensdk.modelmsg.WXMediaMessage;
 import com.tencent.mm.opensdk.modelmsg.WXMiniProgramObject;
+import com.tencent.mm.opensdk.modelmsg.WXWebpageObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
@@ -23,6 +24,8 @@ public final class WechatMiniProgramShare {
 
     public enum Result {
         SENT("已打开微信，请选择好友发送小程序卡片"),
+        FRIEND_SENT("已打开微信，请选择好友"),
+        TIMELINE_SENT("已打开微信，请分享到朋友圈"),
         CONFIGURATION_REQUIRED("未配置小程序原始 ID，无法分享卡片"),
         WECHAT_NOT_INSTALLED("未安装微信"),
         SEND_FAILED("微信未能发起分享");
@@ -48,6 +51,12 @@ public final class WechatMiniProgramShare {
     /** Uses the first article image when one is available; otherwise uses the app icon. */
     public static Result send(Context context, String title, String webpageUrl, String miniProgramPath,
                               Bitmap articleImage) {
+        return send(context, title, webpageUrl, miniProgramPath, articleImage,
+                "打开 VoiceDrop 小程序阅读全文");
+    }
+
+    public static Result send(Context context, String title, String webpageUrl, String miniProgramPath,
+                              Bitmap articleImage, String description) {
         if (!isOriginalId(BuildConfig.VOICEDROP_MINI_PROGRAM_ORIGINAL_ID)) {
             return Result.CONFIGURATION_REQUIRED;
         }
@@ -61,7 +70,8 @@ public final class WechatMiniProgramShare {
 
         WXMediaMessage message = new WXMediaMessage(miniProgram);
         message.title = trim(title, WXMediaMessage.TITLE_LENGTH_LIMIT, "VoiceDrop 文章");
-        message.description = "打开 VoiceDrop 小程序阅读全文";
+        message.description = trim(description, WXMediaMessage.DESCRIPTION_LENGTH_LIMIT,
+                "打开 VoiceDrop 小程序阅读全文");
         message.thumbData = thumbnail(context, articleImage);
 
         SendMessageToWX.Req request = new SendMessageToWX.Req();
@@ -82,6 +92,36 @@ public final class WechatMiniProgramShare {
         } catch (UnsupportedEncodingException impossible) {
             throw new AssertionError(impossible);
         }
+    }
+
+    public static Result sendFriend(Context context, String title, String webpageUrl,
+                                    Bitmap thumbnailImage) {
+        return sendWebpage(context, title, webpageUrl, thumbnailImage,
+                SendMessageToWX.Req.WXSceneSession, Result.FRIEND_SENT);
+    }
+
+    public static Result sendTimeline(Context context, String title, String webpageUrl,
+                                      Bitmap thumbnailImage) {
+        return sendWebpage(context, title, webpageUrl, thumbnailImage,
+                SendMessageToWX.Req.WXSceneTimeline, Result.TIMELINE_SENT);
+    }
+
+    private static Result sendWebpage(Context context, String title, String webpageUrl,
+                                      Bitmap thumbnailImage, int scene, Result sentResult) {
+        if (!WechatLogin.api(context).isWXAppInstalled()) return Result.WECHAT_NOT_INSTALLED;
+
+        WXWebpageObject webpage = new WXWebpageObject();
+        webpage.webpageUrl = webpageUrl;
+        WXMediaMessage message = new WXMediaMessage(webpage);
+        message.title = trim(title, WXMediaMessage.TITLE_LENGTH_LIMIT, "VoiceDrop 书籍");
+        message.description = "打开 VoiceDrop 阅读这本书";
+        message.thumbData = thumbnail(context, thumbnailImage);
+
+        SendMessageToWX.Req request = new SendMessageToWX.Req();
+        request.transaction = "voicedrop-book-webpage-" + System.currentTimeMillis();
+        request.message = message;
+        request.scene = scene;
+        return WechatLogin.api(context).sendReq(request) ? sentResult : Result.SEND_FAILED;
     }
 
     private static String trim(String value, int maxLength, String fallback) {

@@ -24,6 +24,7 @@ public final class AliIconFont {
     public static final int REDO = R.drawable.ic_redo;
     public static final int SETTINGS = R.drawable.ic_settings;
     public static final int SHARE_UP = R.drawable.ic_share_up;
+    public static final int SHARE_FORWARD = R.drawable.ic_share_forward;
     public static final int STYLE_AD = R.drawable.ic_style_ad;
     public static final int STYLE_CARTOON = R.drawable.ic_style_cartoon;
     public static final int STYLE_FILM = R.drawable.ic_style_film;

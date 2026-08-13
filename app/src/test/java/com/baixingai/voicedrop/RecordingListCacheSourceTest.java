@@ -49,7 +49,8 @@ public class RecordingListCacheSourceTest {
         assertTrue(library.contains("root.optJSONObject(\"covers\")"));
         assertTrue(library.contains(".put(\"covers\", covers)"));
         assertTrue(library.contains("r.coverPhotoKey = coverCache.get"));
-        assertTrue(activity.contains("String cachedKey = rec.coverPhotoKey"));
+        assertTrue(activity.contains("String cachedFallbackKey = rec.coverPhotoKey"));
+        assertTrue(activity.contains("String dedicatedKey = rec.coverJpgKey()"));
         assertTrue(activity.contains("coverIo.execute"));
     }
 

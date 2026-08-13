@@ -70,6 +70,33 @@ public final class PageTitleBar extends FrameLayout {
         return view;
     }
 
+    /** Adds a trailing card-style icon action matching the article detail toolbar. */
+    public FrameLayout addIconAction(int iconResId, int iconColor, String description,
+                                     Runnable action) {
+        FrameLayout touch = new FrameLayout(getContext());
+        touch.setClickable(true);
+        touch.setFocusable(true);
+        touch.setContentDescription(description);
+
+        FrameLayout button = new FrameLayout(getContext());
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Theme.CARD);
+        background.setCornerRadius(dp(11));
+        background.setStroke(dp(1), Theme.BORDER_CHROME);
+        button.setBackground(background);
+        button.setElevation(dp(2));
+
+        ImageView icon = new ImageView(getContext());
+        AliIconFont.apply(icon, iconResId, iconColor);
+        icon.setScaleType(ImageView.ScaleType.CENTER);
+        button.addView(icon, new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER));
+        touch.addView(button, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER));
+        touch.setOnClickListener(ignored -> action.run());
+        addView(touch, new FrameLayout.LayoutParams(
+                dp(48), dp(48), Gravity.RIGHT | Gravity.CENTER_VERTICAL));
+        return touch;
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }

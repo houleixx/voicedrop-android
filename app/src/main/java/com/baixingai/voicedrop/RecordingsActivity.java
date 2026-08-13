@@ -101,6 +101,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -116,6 +117,8 @@ public final class RecordingsActivity extends Activity {
     public static final String EXTRA_SHARE_ID = "shareId";
     private static final int REQUEST_COMMUNITY_DETAIL = 31;
     private static final String ROW_STATUS_LABEL_TAG = "recording_row_status_label";
+    private static final Set<String> MISSING_DEDICATED_COVERS =
+            Collections.synchronizedSet(new HashSet<>());
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
     protected final ExecutorService communityIo = Executors.newSingleThreadExecutor();
@@ -2508,34 +2511,59 @@ public final class RecordingsActivity extends Activity {
 
     protected void maybeLoadRowCover(Recording rec, FrameLayout iconWrap, View fallbackIcon) {
         if (rec == null || !rec.hasArticles || iconWrap == null || fallbackIcon == null) return;
-        String cachedKey = rec.coverPhotoKey;
+        String dedicatedKey = rec.coverJpgKey();
+        String cachedFallbackKey = rec.coverPhotoKey;
         coverIo.execute(() -> {
-            try {
-                String key = cachedKey;
-                if (key == null || key.trim().isEmpty()) {
-                    ArticleDoc doc = library.fetchDoc(rec);
-                    if (doc == null || doc.articles.isEmpty()) return;
-                    for (MinedArticle article : doc.articles) {
-                        key = ArticleBody.firstPhotoKey(article.body, doc.photos);
-                        if (key != null && !key.trim().isEmpty()) break;
-                    }
+            String scope;
+            try { scope = library.ownerScope(); }
+            catch (Exception ignored) { return; }
+            if (scope == null) return;
+
+            Bitmap bitmap = null;
+            boolean dedicated = false;
+            String dedicatedFullKey = dedicatedKey == null ? null : scope + dedicatedKey;
+            if (dedicatedFullKey != null && !MISSING_DEDICATED_COVERS.contains(dedicatedFullKey)) {
+                try {
+                    bitmap = PhotoService.thumbnail(dedicatedFullKey);
+                    dedicated = bitmap != null;
+                    if (!dedicated) MISSING_DEDICATED_COVERS.add(dedicatedFullKey);
+                } catch (Exception ignored) {
+                    MISSING_DEDICATED_COVERS.add(dedicatedFullKey);
                 }
-                if (key == null || key.trim().isEmpty()) return;
-                String scope = library.ownerScope();
-                if (scope == null) return;
-                Bitmap bitmap = PhotoService.thumbnail(scope + key);
-                if (bitmap == null) return;
-                main.post(() -> {
-                    int index = iconWrap.indexOfChild(fallbackIcon);
-                    if (index < 0) return;
-                    iconWrap.removeView(fallbackIcon);
-                    RoundedImageView cover = new RoundedImageView(this);
-                    cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    cover.setImageBitmap(bitmap);
-                    iconWrap.addView(cover, index, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
-                });
-            } catch (Exception ignored) {
             }
+            if (bitmap == null) {
+                String key = cachedFallbackKey;
+                try {
+                    if (key == null || key.trim().isEmpty()) {
+                        ArticleDoc doc = library.fetchDoc(rec);
+                        if (doc == null || doc.articles.isEmpty()) return;
+                        for (MinedArticle article : doc.articles) {
+                            key = ArticleBody.firstPhotoKey(article.body, doc.photos);
+                            if (key != null && !key.trim().isEmpty()) break;
+                        }
+                    }
+                    if (key == null || key.trim().isEmpty()) return;
+                    bitmap = PhotoService.thumbnail(scope + key);
+                } catch (Exception ignored) { return; }
+            }
+            if (bitmap == null) return;
+            Bitmap loaded = bitmap;
+            boolean isDedicated = dedicated;
+            main.post(() -> {
+                int index = iconWrap.indexOfChild(fallbackIcon);
+                if (index < 0) return;
+                iconWrap.removeView(fallbackIcon);
+                RoundedImageView cover = new RoundedImageView(this);
+                cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                cover.setImageBitmap(loaded);
+                int width = isDedicated ? dp(40) : dp(44);
+                int height = isDedicated ? dp(60) : dp(44);
+                iconWrap.addView(cover, index, new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
+                if (isDedicated && iconWrap.getLayoutParams() != null) {
+                    iconWrap.getLayoutParams().height = dp(60);
+                    iconWrap.requestLayout();
+                }
+            });
         });
     }
     protected void showRecording(boolean first) {

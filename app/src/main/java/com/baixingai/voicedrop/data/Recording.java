@@ -33,6 +33,10 @@ public final class Recording {
     }
 
     public String articleKey() { return articleKey(stem()); }
+    public String coverJpgKey() {
+        RecordingName.Parsed parsed = RecordingName.parse(stem());
+        return parsed == null ? null : RecordingName.coverKey(parsed.sessionTs);
+    }
     public String emptyKey() { return emptyKey(stem()); }
     public String srtKey() { return srtKey(stem()); }
     public String blockedKey() { return blockedKey(stem()); }

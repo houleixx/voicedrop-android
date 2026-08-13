@@ -165,7 +165,7 @@ public final class BooksShelfPanel extends LinearLayout {
         LinearLayout cell = cellContainer();
         cell.setOnClickListener(v -> {
             if (getContext() instanceof Activity) {
-                BookReaderActivity.open((Activity) getContext(), book.slug, book.main);
+                BookReaderActivity.open((Activity) getContext(), book);
             }
         });
 

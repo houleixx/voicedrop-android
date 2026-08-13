@@ -29,8 +29,8 @@ android {
         applicationId "com.baixingai.voicedrop"
         minSdk 23
         targetSdk 36
-        versionCode 19
-        versionName "0.18.0"
+        versionCode 20
+        versionName "0.19.0"
         buildConfigField "String", "UMENG_APP_KEY", "\"${umengAppKey}\""
         buildConfigField "String", "UMENG_CHANNEL", "\"${umengChannel}\""
         buildConfigField "String", "VOICEDROP_MINI_PROGRAM_ORIGINAL_ID", "\"${miniProgramOriginalId}\""

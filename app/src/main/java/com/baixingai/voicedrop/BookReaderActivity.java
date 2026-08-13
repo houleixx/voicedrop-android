@@ -60,7 +60,7 @@ public final class BookReaderActivity extends Activity {
                 this::finishWithPageTransition);
         final FrameLayout[] shareAnchor = {null};
         shareAnchor[0] = titleBar.addIconAction(
-                AliIconFont.SHARE_FORWARD, Theme.SECONDARY, "分享到微信",
+                AliIconFont.SHARE_FORWARD, Theme.SECONDARY, "分享",
                 () -> showWechatShareMenu(shareAnchor[0]));
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 
@@ -136,6 +136,14 @@ public final class BookReaderActivity extends Activity {
             shareBookToWechat(true);
         });
         menu.addView(timeline);
+        menu.addView(shareMenuDivider());
+
+        LinearLayout system = shareMenuRow("分享", AliIconFont.SHARE_UP);
+        system.setOnClickListener(v -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            shareBookWithSystem();
+        });
+        menu.addView(system);
 
         int popupWidth = dp(260);
         PopupWindow popup = new PopupWindow(menu, popupWidth, -2, true);
@@ -205,6 +213,23 @@ public final class BookReaderActivity extends Activity {
                                                         String url, Bitmap cover) {
         if (timeline) return WechatMiniProgramShare.sendTimeline(this, title, url, cover);
         return WechatMiniProgramShare.sendFriend(this, title, url, cover);
+    }
+
+    private void shareBookWithSystem() {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
+        String title = getIntent().getStringExtra("title");
+        String author = getIntent().getStringExtra("author");
+        String safeTitle = title == null || title.trim().isEmpty() ? "未命名" : title.trim();
+        String safeAuthor = author == null ? "" : author.trim();
+        String url = "https://voicedrop.cn/books/" + slug + "/";
+        String text = "《" + safeTitle + "》"
+                + (safeAuthor.isEmpty() ? "" : " — " + safeAuthor) + "\n" + url;
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, safeTitle);
+        send.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(Intent.createChooser(send, "分享这本书"));
     }
 
     private Bitmap loadBookCover(String coverUrl) {

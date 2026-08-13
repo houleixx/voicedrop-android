@@ -17,10 +17,14 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)"));
         assertTrue(reader.contains("this::finishWithPageTransition"));
         assertTrue(shelf.contains("BookReaderActivity.open((Activity) getContext(), book)"));
-        assertTrue(reader.contains("AliIconFont.SHARE_FORWARD, Theme.SECONDARY, \"分享到微信\""));
+        assertTrue(reader.contains("AliIconFont.SHARE_FORWARD, Theme.SECONDARY, \"分享\""));
         assertTrue(reader.contains("showWechatShareMenu(shareAnchor[0])"));
         assertTrue(reader.contains("shareMenuRow(\"微信好友\", AliIconFont.PEOPLE)"));
         assertTrue(reader.contains("shareMenuRow(\"朋友圈\", AliIconFont.SHARE_FORWARD)"));
+        assertTrue(reader.contains("shareMenuRow(\"分享\", AliIconFont.SHARE_UP)"));
+        assertTrue(reader.contains("shareBookWithSystem()"));
+        assertTrue(reader.contains("new Intent(Intent.ACTION_SEND)"));
+        assertTrue(reader.contains("Intent.createChooser(send, \"分享这本书\")"));
         assertTrue(reader.contains("PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth)"));
         assertTrue(reader.contains("new PopupWindow(menu, popupWidth, -2, true)"));
         assertTrue(!reader.contains("IosDialog"));

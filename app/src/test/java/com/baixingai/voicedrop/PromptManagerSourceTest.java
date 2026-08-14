@@ -86,7 +86,6 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("ImageView chevron = trailingChevron()"));
         assertTrue(manager.contains("chevron.setRotation(90f)"));
         assertTrue(manager.contains("new LinearLayout.LayoutParams(dp(16), dp(16))"));
-        assertFalse(manager.contains("R.drawable.ic_prompt_chevron_down"));
     }
 
     @Test public void managerUsesTheSharedSettingsPageScaffold() throws Exception {

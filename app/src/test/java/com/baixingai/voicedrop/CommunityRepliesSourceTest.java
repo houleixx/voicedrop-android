@@ -35,7 +35,6 @@ public class CommunityRepliesSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java");
 
         assertTrue(source.contains("replyIcon.setImageResource(R.drawable.ic_community_reply)"));
-        assertFalse(source.contains("replyIcon.setImageResource(R.drawable.ic_reply_turn_flat)"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

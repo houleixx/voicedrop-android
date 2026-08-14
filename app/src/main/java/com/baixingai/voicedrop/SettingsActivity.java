@@ -207,15 +207,17 @@ public class SettingsActivity extends Activity {
         accountTexts.setGravity(Gravity.CENTER_VERTICAL);
         accountRow.addView(accountTexts, new LinearLayout.LayoutParams(0, -2, 1));
         accountTexts.addView(text("账户", 16, Theme.INK, Typeface.BOLD));
-        accountTexts.addView(text("无需登录 · ID 已随 iCloud 钥匙串备份", 12, Theme.SECONDARY, Typeface.NORMAL));
-        String anonId = auth.anonId();
-        String shortId = anonId != null && anonId.length() >= 6 ? anonId.substring(anonId.length() - 6).toUpperCase() : "";
-        TextView idText = text(shortId, 13, Theme.FAINT, Typeface.NORMAL);
-        idText.setTypeface(Typeface.MONOSPACE);
-        LinearLayout.LayoutParams idLp = new LinearLayout.LayoutParams(-2, -2);
-        idLp.gravity = Gravity.CENTER_VERTICAL;
-        idLp.setMargins(0, 0, dp(8), 0);
-        accountRow.addView(idText, idLp);
+        boolean wechatAuthenticated = auth.isWechatAuthenticated();
+        accountTexts.addView(text(accountSubtitle(wechatAuthenticated), 12, Theme.SECONDARY, Typeface.NORMAL));
+        String shortId = anonymousShortCode(auth.anonId(), wechatAuthenticated);
+        if (!shortId.isEmpty()) {
+            TextView idText = text(shortId, 13, Theme.FAINT, Typeface.NORMAL);
+            idText.setTypeface(Typeface.MONOSPACE);
+            LinearLayout.LayoutParams idLp = new LinearLayout.LayoutParams(-2, -2);
+            idLp.gravity = Gravity.CENTER_VERTICAL;
+            idLp.setMargins(0, 0, dp(8), 0);
+            accountRow.addView(idText, idLp);
+        }
         accountRow.addView(settingsChevron());
         accountRow.setOnClickListener(v -> openAccount());
         card.addView(accountRow);
@@ -249,6 +251,16 @@ public class SettingsActivity extends Activity {
         lp.setMargins(0, 0, 0, 0);
         content.addView(card, lp);
         loadPrimaryUsageBalance();
+    }
+
+    static String accountSubtitle(boolean wechatAuthenticated) {
+        return wechatAuthenticated ? "已登录微信账号" : "匿名 ID 保存在本机";
+    }
+
+    static String anonymousShortCode(String anonId, boolean wechatAuthenticated) {
+        if (wechatAuthenticated || anonId == null) return "";
+        String hex = anonId.startsWith("anon-") ? anonId.substring(5) : anonId;
+        return hex.matches("[0-9a-fA-F]{6,}") ? hex.substring(0, 6).toUpperCase() : "";
     }
 
     private void addInviteCard(LinearLayout content) {

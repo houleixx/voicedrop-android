@@ -43,7 +43,8 @@ public final class BookReaderActivity extends Activity {
     public static void open(Activity source, BookShelfIndex.Book book) {
         Intent intent = new Intent(source, BookReaderActivity.class);
         intent.putExtra("slug", book.slug);
-        intent.putExtra("title", book.main);
+        intent.putExtra("displayTitle", book.main);
+        intent.putExtra("shareTitle", book.title);
         intent.putExtra("author", book.author);
         intent.putExtra("cover", book.cover);
         source.startActivity(intent);
@@ -56,7 +57,7 @@ public final class BookReaderActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(0xfffffaf0);
-        PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("title"),
+        PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
         final FrameLayout[] shareAnchor = {null};
         shareAnchor[0] = titleBar.addIconAction(
@@ -187,7 +188,9 @@ public final class BookReaderActivity extends Activity {
     private void shareBookToWechat(boolean timeline) {
         String slug = getIntent().getStringExtra("slug");
         if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
-        String title = getIntent().getStringExtra("title");
+        String shareTitle = getIntent().getStringExtra("shareTitle");
+        final String title = shareTitle == null || shareTitle.trim().isEmpty()
+                ? getIntent().getStringExtra("displayTitle") : shareTitle;
         String url = "https://voicedrop.cn/books/" + slug + "/";
         if (!getIntent().getBooleanExtra("cover", false)) {
             showWechatShareResult(sendToWechat(timeline, title, url, null));
@@ -218,7 +221,10 @@ public final class BookReaderActivity extends Activity {
     private void shareBookWithSystem() {
         String slug = getIntent().getStringExtra("slug");
         if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
-        String title = getIntent().getStringExtra("title");
+        String title = getIntent().getStringExtra("shareTitle");
+        if (title == null || title.trim().isEmpty()) {
+            title = getIntent().getStringExtra("displayTitle");
+        }
         String author = getIntent().getStringExtra("author");
         String safeTitle = title == null || title.trim().isEmpty() ? "未命名" : title.trim();
         String safeAuthor = author == null ? "" : author.trim();

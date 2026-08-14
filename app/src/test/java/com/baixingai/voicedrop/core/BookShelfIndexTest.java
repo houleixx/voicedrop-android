@@ -14,4 +14,23 @@ public final class BookShelfIndexTest {
         assertEquals(123L, books.get(0).createdAt);
         assertEquals("https://voicedrop.cn/books/a-book/", books.get(0).readerUrl());
     }
+
+    @Test public void preservesServerOrderInsteadOfSortingByCreatedAt() {
+        java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
+                "{\"slug\":\"server-first\",\"title\":\"服务端第一本\",\"createdAt\":100}," +
+                "{\"slug\":\"server-second\",\"title\":\"服务端第二本\",\"createdAt\":200}]}");
+
+        assertEquals(2, books.size());
+        assertEquals("server-first", books.get(0).slug);
+        assertEquals("server-second", books.get(1).slug);
+    }
+
+    @Test public void parsesLegacyCacheWithoutCreatedAt() {
+        java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
+                "{\"slug\":\"legacy\",\"title\":\"主标题：副标题\"}]}");
+
+        assertEquals(1, books.size());
+        assertEquals("主标题：副标题", books.get(0).title);
+        assertEquals(0L, books.get(0).createdAt);
+    }
 }

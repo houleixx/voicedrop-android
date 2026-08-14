@@ -25,6 +25,12 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("shareBookWithSystem()"));
         assertTrue(reader.contains("new Intent(Intent.ACTION_SEND)"));
         assertTrue(reader.contains("Intent.createChooser(send, \"分享这本书\")"));
+        assertTrue(reader.contains("intent.putExtra(\"displayTitle\", book.main)"));
+        assertTrue(reader.contains("intent.putExtra(\"shareTitle\", book.title)"));
+        assertTrue(reader.contains("new PageTitleBar(this, getIntent().getStringExtra(\"displayTitle\")"));
+        assertTrue(reader.contains("String shareTitle = getIntent().getStringExtra(\"shareTitle\")"));
+        assertTrue(reader.contains("? getIntent().getStringExtra(\"displayTitle\") : shareTitle"));
+        assertTrue(!reader.contains("intent.putExtra(\"title\", book.main)"));
         assertTrue(reader.contains("PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth)"));
         assertTrue(reader.contains("new PopupWindow(menu, popupWidth, -2, true)"));
         assertTrue(!reader.contains("IosDialog"));

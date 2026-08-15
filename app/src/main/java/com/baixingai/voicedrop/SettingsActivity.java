@@ -31,14 +31,12 @@ import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.IosDialog;
-import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.RemixIconGlyph;
 import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.update.AppUpdateManager;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -195,7 +193,7 @@ public class SettingsActivity extends Activity {
                     "署名和挖文章时对你的称呼", "", this::showNameEditor);
             loadNameRowValue();
             addCardDivider(card);
-            addCardRow(card, R.drawable.ic_settings_pen, "写作风格", "成文时模仿这套语气", this::showWritingStyle);
+            addCardRow(card, R.drawable.ic_settings_pen, "写作风格", "选择默认风格与管理历史版本", this::openWritingStyle);
             addCardDivider(card);
             addCardRow(card, R.drawable.ic_settings_ai_instruction, "提示词", "自定义长按菜单里的每个动作", this::openInstructionSettings);
         });
@@ -655,6 +653,13 @@ public class SettingsActivity extends Activity {
         startActivity(intent, options.toBundle());
     }
 
+    private void openWritingStyle() {
+        Intent intent = new Intent(this, WritingStyleActivity.class);
+        ActivityOptions options = ActivityOptions.makeCustomAnimation(
+                this, R.anim.slide_in_right, R.anim.slide_out_left);
+        startActivity(intent, options.toBundle());
+    }
+
     @Override
     public void onBackPressed() {
         finishWithPageTransition();
@@ -866,86 +871,6 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    private void showWritingStyle() {
-        LinearLayout form = new LinearLayout(this);
-        form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(18), dp(10), dp(18), dp(10));
-        form.setClipToPadding(false);
-        form.setClipChildren(false);
-
-        LinearLayout styleBarPanel = new LinearLayout(this);
-        styleBarPanel.setOrientation(LinearLayout.VERTICAL);
-        form.addView(styleBarPanel, new LinearLayout.LayoutParams(-1, -2));
-
-        FrameLayout editorFrame = new FrameLayout(this);
-        editorFrame.setClipToPadding(false);
-        editorFrame.setClipChildren(false);
-        LinearLayout.LayoutParams frameLp = new LinearLayout.LayoutParams(-1, 0, 1);
-        frameLp.setMargins(0, dp(12), 0, 0);
-        form.addView(editorFrame, frameLp);
-
-        final android.widget.EditText input = new android.widget.EditText(this);
-        input.setMinLines(12);
-        input.setGravity(Gravity.TOP);
-        input.setTextSize(16);
-        input.setTextColor(Theme.INK);
-        input.setHintTextColor(Theme.FAINT);
-        input.setBackground(round(0xfff7f2ec, 14));
-        input.setPadding(dp(14), dp(12), dp(14), dp(12));
-        input.setHint("例如：温柔克制，段落短一点，多保留现场细节，结尾自然收束。");
-        editorFrame.addView(input, new FrameLayout.LayoutParams(-1, -1));
-
-        LinearLayout styleOverlay = new LinearLayout(this);
-        styleOverlay.setOrientation(LinearLayout.VERTICAL);
-        styleOverlay.setClipToPadding(false);
-        styleOverlay.setClipChildren(false);
-        editorFrame.addView(styleOverlay, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
-
-        final JSONArray[] versionsRef = {new JSONArray()};
-        final boolean[] listOpen = {true};
-        final boolean[] styleLoading = {true};
-        final int[] selectedHead = {-1};
-        final String[] selectedHeadStyle = {""};
-        buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-        io.execute(() -> {
-            try {
-                SettingsStore.Style style = settingsStore.loadStyle();
-                JSONObject history = settingsStore.loadStyleHistory();
-                runOnUiThread(() -> {
-                    styleLoading[0] = false;
-                    input.setText(style.style);
-                    JSONArray versions = history.optJSONArray("versions");
-                    versionsRef[0] = versions == null ? new JSONArray() : versions;
-                    selectedHead[0] = history.optInt("head", newestStyleVersion(versionsRef[0]));
-                    JSONObject current = findStyleVersion(versionsRef[0], selectedHead[0]);
-                    selectedHeadStyle[0] = current == null ? style.style : current.optString("style", style.style);
-                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    styleLoading[0] = false;
-                    buildStyleVersionPanel(styleBarPanel, styleOverlay, versionsRef[0], listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-                    toast("写作风格加载失败：" + e.getMessage());
-                });
-            }
-        });
-        IosDialog.showBottomSheet(this, "写作风格", form, 560,
-                "保存", () -> io.execute(() -> {
-                    try {
-                        String next = input.getText().toString().trim();
-                        if (selectedHead[0] >= 0 && next.equals(selectedHeadStyle[0].trim())) {
-                            settingsStore.saveStyleHead(selectedHead[0]);
-                            toast("写作风格版本已切换");
-                        } else {
-                            settingsStore.saveStyle(next);
-                            toast("写作风格已保存");
-                        }
-                    } catch (Exception e) {
-                        toast("写作风格保存失败：" + e.getMessage());
-                    }
-                }), null, null, true, false);
-    }
-
     private void showNameEditor() {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
@@ -1005,175 +930,6 @@ public class SettingsActivity extends Activity {
                     (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
             if (keyboard != null) keyboard.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
         });
-    }
-
-    private void buildStyleVersionPanel(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions,
-                                        boolean[] listOpen, boolean[] styleLoading, int[] selectedHead, String[] selectedHeadStyle,
-                                        android.widget.EditText input) {
-        barBox.removeAllViews();
-        View modeBar = styleModeBar(versions, listOpen[0], selectedHead[0]);
-        modeBar.setOnClickListener(v -> {
-            listOpen[0] = !listOpen[0];
-            buildStyleVersionPanel(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-        });
-        barBox.addView(modeBar, new LinearLayout.LayoutParams(-1, dp(52)));
-
-        overlayBox.removeAllViews();
-        overlayBox.setVisibility(listOpen[0] ? View.VISIBLE : View.GONE);
-        if (listOpen[0]) {
-            overlayBox.addView(styleVersionCard(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input), new LinearLayout.LayoutParams(-1, -2));
-        }
-    }
-
-    private View styleModeBar(JSONArray versions, boolean listOpen, int selectedHead) {
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(12), 0, dp(12), 0);
-        GradientDrawable bg = round(Theme.CARD, 8);
-        bg.setStroke(dp(1), 0xffb9b0a6);
-        bar.setBackground(bg);
-
-        bar.addView(styleModePill(listOpen, selectedHead), new LinearLayout.LayoutParams(dp(88), dp(36)));
-
-        String title = styleVersionName(findStyleVersion(versions, selectedHead));
-        TextView label = text(title == null || title.isEmpty() ? "当前风格" : title, 15, Theme.INK, Typeface.BOLD);
-        label.setSingleLine(true);
-        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(0, -2, 1);
-        labelLp.setMargins(dp(12), 0, dp(8), 0);
-        bar.addView(label, labelLp);
-
-        TextView count = text("共 " + Math.max(0, versions == null ? 0 : versions.length()) + " 版",
-                15, Theme.FAINT, Typeface.BOLD);
-        bar.addView(count);
-        return bar;
-    }
-
-    private View styleVersionCard(LinearLayout barBox, LinearLayout overlayBox, JSONArray versions, boolean[] listOpen,
-                                  boolean[] styleLoading,
-                                  int[] selectedHead, String[] selectedHeadStyle, android.widget.EditText input) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(round(Theme.CARD, 10));
-        card.setElevation(dp(8));
-        card.setTranslationZ(dp(8));
-
-        if (styleLoading[0]) {
-            LoadingStateView loading = new LoadingStateView(this, "正在加载写作风格...");
-            loading.setPadding(0, dp(18), 0, dp(18));
-            card.addView(loading, new LinearLayout.LayoutParams(-1, dp(120)));
-            return card;
-        }
-
-        if (versions == null || versions.length() == 0) {
-            TextView empty = text("暂无可选风格版本。先保存一份写作风格。", 12, Theme.FAINT, Typeface.NORMAL);
-            empty.setPadding(dp(12), dp(10), dp(12), 0);
-            card.addView(empty);
-            return card;
-        }
-
-        int validRows = 0;
-        for (int i = 0; i < versions.length(); i++) {
-            if (versions.optJSONObject(i) != null) validRows++;
-        }
-        int rowIndex = 0;
-        for (int i = versions.length() - 1; i >= 0; i--) {
-            JSONObject item = versions.optJSONObject(i);
-            if (item == null) continue;
-            int version = item.optInt("v", i);
-            boolean selected = version == selectedHead[0];
-            LinearLayout row = styleVersionRow(item, version, selected);
-            row.setOnClickListener(v -> {
-                selectedHead[0] = version;
-                selectedHeadStyle[0] = item.optString("style", "");
-                input.setText(selectedHeadStyle[0]);
-                input.setSelection(input.getText().length());
-                listOpen[0] = false;
-                buildStyleVersionPanel(barBox, overlayBox, versions, listOpen, styleLoading, selectedHead, selectedHeadStyle, input);
-            });
-            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, dp(56));
-            rowLp.setMargins(dp(8), rowIndex == 0 ? dp(8) : dp(2),
-                    dp(8), rowIndex == validRows - 1 ? dp(8) : dp(2));
-            card.addView(row, rowLp);
-            rowIndex++;
-        }
-
-        return card;
-    }
-
-    private View styleModePill(boolean listOpen, int selectedHead) {
-        LinearLayout pill = new LinearLayout(this);
-        pill.setGravity(Gravity.CENTER);
-        pill.setPadding(dp(10), 0, dp(8), 0);
-        pill.setBackground(round(Theme.ACCENT, 7));
-
-        TextView label = text("v" + Math.max(0, selectedHead), 14, 0xffffffff, Typeface.BOLD);
-        pill.addView(label);
-
-        ImageView arrow = new ImageView(this);
-        arrow.setImageResource(listOpen ? R.drawable.ic_chevron_up_flat : R.drawable.ic_chevron_down_flat);
-        LinearLayout.LayoutParams arrowLp = new LinearLayout.LayoutParams(dp(18), dp(18));
-        arrowLp.setMargins(dp(6), 0, 0, 0);
-        pill.addView(arrow, arrowLp);
-        return pill;
-    }
-
-    private LinearLayout styleVersionRow(JSONObject item, int version, boolean selected) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(14), dp(10), dp(12), dp(10));
-        row.setBackground(round(selected ? Theme.ACCENT_SOFT : Theme.CARD, 8));
-
-        TextView versionLabel = text("v" + version, 14, selected ? Theme.RED : Theme.INK, Typeface.BOLD);
-        LinearLayout.LayoutParams versionLp = new LinearLayout.LayoutParams(dp(42), -2);
-        row.addView(versionLabel, versionLp);
-
-        String style = item.optString("style", item.optString("source", ""));
-        String name = styleDisplayName(style);
-        int count = style == null ? 0 : style.length();
-
-        TextView title = text(name, 14, selected ? Theme.RED : Theme.INK, selected ? Typeface.BOLD : Typeface.NORMAL);
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-
-        TextView meta = text(count > 0 ? count + " 字" : "", 13, Theme.FAINT, Typeface.BOLD);
-        LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(-2, -2);
-        metaLp.setMargins(dp(8), 0, dp(8), 0);
-        row.addView(meta, metaLp);
-
-        ImageView state = new ImageView(this);
-        state.setImageResource(R.drawable.ic_check_flat);
-        state.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
-        row.addView(state, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        return row;
-    }
-
-    private int newestStyleVersion(JSONArray versions) {
-        JSONObject latest = versions == null || versions.length() == 0 ? null : versions.optJSONObject(versions.length() - 1);
-        return latest == null ? 0 : latest.optInt("v", versions.length() - 1);
-    }
-
-    private JSONObject findStyleVersion(JSONArray versions, int version) {
-        if (versions == null) return null;
-        for (int i = 0; i < versions.length(); i++) {
-            JSONObject item = versions.optJSONObject(i);
-            if (item != null && item.optInt("v", i) == version) return item;
-        }
-        return null;
-    }
-
-    private String styleVersionName(JSONObject item) {
-        if (item == null) return "";
-        return styleDisplayName(item.optString("style", item.optString("source", "")));
-    }
-
-    private String styleDisplayName(String style) {
-        if (style == null) return "";
-        String[] lines = style.split("\\n");
-        String first = lines.length == 0 ? "" : lines[0].trim();
-        if (first.length() > 12) return first.substring(0, 12) + "…";
-        return first;
     }
 
     private void exportAllData() {

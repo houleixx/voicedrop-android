@@ -26,36 +26,21 @@ public class SettingsActivitySourceTest {
     }
 
     @Test
-    public void writingStyleSheetUsesSingleStyleSelection() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+    public void writingStyleOpensDedicatedVersionScreen() throws Exception {
+        String settings = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
+        String screen = readSource("src/main/java/com/baixingai/voicedrop/WritingStyleActivity.java");
 
-        assertTrue(source.contains("settingsStore.loadStyleHistory()"));
-        assertFalse(source.contains("多风格对比"));
-        assertFalse(source.contains("saveStyleSelection"));
-        assertFalse(source.contains("selectedStyles"));
-        assertFalse(source.contains("最多选择 3 个风格版本"));
-        assertTrue(source.contains("IosDialog.showBottomSheet(this, \"写作风格\", form, 560"));
-        assertTrue(source.contains("FrameLayout editorFrame = new FrameLayout(this)"));
-        assertTrue(source.contains("frameLp.setMargins(0, dp(12), 0, 0)"));
-        assertTrue(source.contains("final boolean[] listOpen = {true}"));
-        assertTrue(source.contains("final boolean[] styleLoading = {true}"));
-        assertTrue(source.contains("new LoadingStateView(this, \"正在加载写作风格...\""));
-        assertTrue(source.contains("toast(\"写作风格加载失败：\" + e.getMessage())"));
-        assertTrue(source.contains("listOpen[0] = !listOpen[0]"));
-        assertTrue(source.contains("pill.setBackground(round(Theme.ACCENT, 7))"));
-        assertTrue(source.contains("bg.setStroke(dp(1), 0xffb9b0a6)"));
-        assertTrue(source.contains("card.setElevation(dp(8))"));
-        assertTrue(source.contains("new LinearLayout.LayoutParams(-1, dp(56))"));
-        assertTrue(source.contains("rowIndex == 0 ? dp(8) : dp(2)"));
-        assertTrue(source.contains("rowIndex == validRows - 1 ? dp(8) : dp(2)"));
-        assertFalse(source.contains("if (selected) rowLp.setMargins"));
-        assertTrue(source.contains("R.drawable.ic_chevron_up_flat"));
-        assertTrue(source.contains("R.drawable.ic_chevron_down_flat"));
-        assertFalse(source.contains("R.drawable.ic_checkbox_checked_flat"));
-        assertFalse(source.contains("R.drawable.ic_checkbox_unchecked_flat"));
-        assertTrue(source.contains("R.drawable.ic_check_flat"));
-        assertFalse(source.contains("☑"));
-        assertFalse(source.contains("☐"));
+        assertTrue(settings.contains("this::openWritingStyle"));
+        assertTrue(settings.contains("new Intent(this, WritingStyleActivity.class)"));
+        assertFalse(settings.contains("private void showWritingStyle()"));
+        assertTrue(screen.contains("new PageTitleBar(this, \"写作风格\""));
+        assertTrue(screen.contains("BouncyScrollView scroll = new BouncyScrollView(this)"));
+        assertTrue(screen.contains("store.loadStyleHistory()"));
+        assertTrue(screen.contains("version == head"));
+        assertTrue(screen.contains("IosDialog.showBottomSheet"));
+        assertTrue(screen.contains("store.saveStyleHead(version)"));
+        assertTrue(screen.contains("store.saveStyleAndReturnHead(edited)"));
+        assertTrue(screen.contains("WritingStylePresentation.actionLabel"));
     }
 
     @Test

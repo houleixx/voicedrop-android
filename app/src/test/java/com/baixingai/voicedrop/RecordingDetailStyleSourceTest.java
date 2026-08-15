@@ -19,10 +19,15 @@ public class RecordingDetailStyleSourceTest {
         assertTrue(source.contains("styleSwitch.setOnClickListener(v -> showStyleVersions(rec, article.style))"));
         assertTrue(source.contains("IosDialog.showBottomSheet(this, \"换个风格重写\", form, 520"));
         assertTrue(source.contains("final int[] selectedStyleVersion"));
+        assertTrue(source.contains("new WritingStyleHistoryCache("));
+        assertTrue(source.contains("JSONObject cachedStyleHistory = styleCache.read()"));
+        assertTrue(source.contains("styleCache.write(fresh)"));
         assertTrue(source.contains("settingsStore.loadStyleHistory()"));
         assertTrue(source.contains("library.versionHistory(rec)"));
         assertTrue(source.contains("generatedStyleVersions(articleHistory)"));
-        assertTrue(source.contains("renderStyleRewriteChoices(form, rec, styleHistory, generatedStyleVersions(articleHistory)"));
+        assertTrue(source.contains("renderStyleRewriteChoices(form, rec, cachedStyleHistory, new HashMap<>()"));
+        assertTrue(source.contains("visibleArticleError == null"));
+        assertTrue(source.contains("正在检查文章版本…"));
         assertTrue(source.contains("selectedStyleVersion[0] = version"));
         assertTrue(source.contains("requestStyleRewriteOrSwitch(rec, selectedStyleVersion[0], generatedVersions, dialog)"));
         assertTrue(source.contains("styleRewriteButtonText"));

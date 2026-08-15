@@ -24,9 +24,14 @@ public final class SettingsStore {
     }
 
     public void saveStyle(String style) throws Exception {
+        saveStyleAndReturnHead(style);
+    }
+
+    public int saveStyleAndReturnHead(String style) throws Exception {
         JSONObject body = new JSONObject().put("style", style.trim());
         HttpClient.Response response = http.putBytes(Api.filesBase() + "/style", auth.bearer(), "application/json", body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("save style HTTP " + response.code);
+        return new JSONObject(response.text()).optInt("head", 0);
     }
 
     public void saveName(String name) throws Exception {

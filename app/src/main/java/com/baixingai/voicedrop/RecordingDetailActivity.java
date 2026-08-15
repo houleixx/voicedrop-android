@@ -79,6 +79,7 @@ import com.baixingai.voicedrop.data.PromptStore;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.data.WechatLogin;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
+import com.baixingai.voicedrop.data.WritingStyleHistoryCache;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.StatusSession;
@@ -1437,35 +1438,74 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void showStyleVersions(Recording rec, Integer currentStyleVersion) {
         if (inlineEditingInput != null) return;
+        WritingStyleHistoryCache styleCache = new WritingStyleHistoryCache(
+                this, auth.libraryCacheIdentity());
+        JSONObject cachedStyleHistory = styleCache.read();
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(14), dp(10), dp(14), dp(18));
-        form.addView(new LoadingStateView(this, "正在加载写作风格..."), new LinearLayout.LayoutParams(-1, dp(180)));
         final int[] selectedStyleVersion = {currentStyleVersion == null ? -1 : currentStyleVersion};
         final IosDialog[] dialogRef = {null};
         dialogRef[0] = IosDialog.showBottomSheet(this, "换个风格重写", form, 520,
                 null, null, null, null, true, true);
+        if (cachedStyleHistory == null) {
+            form.addView(new LoadingStateView(this, "正在加载写作风格..."),
+                    new LinearLayout.LayoutParams(-1, dp(180)));
+        } else {
+            renderStyleRewriteChoices(form, rec, cachedStyleHistory, new HashMap<>(),
+                    currentStyleVersion, selectedStyleVersion, dialogRef[0], false);
+        }
         io.execute(() -> {
+            Map<Integer, JSONObject> generatedVersions = new HashMap<>();
+            Exception articleHistoryError = null;
             try {
-                JSONObject styleHistory = settingsStore.loadStyleHistory();
                 JSONObject articleHistory = library.versionHistory(rec);
-                main.post(() -> renderStyleRewriteChoices(form, rec, styleHistory, generatedStyleVersions(articleHistory),
-                        currentStyleVersion, selectedStyleVersion, dialogRef[0]));
-            } catch (Exception e) {
-                main.post(() -> {
+                generatedVersions = generatedStyleVersions(articleHistory);
+            } catch (Exception error) {
+                articleHistoryError = error;
+            }
+
+            JSONObject styleHistory = cachedStyleHistory;
+            Exception styleHistoryError = null;
+            try {
+                JSONObject fresh = settingsStore.loadStyleHistory();
+                if (fresh.optJSONArray("versions") == null) {
+                    throw new IllegalStateException("style history unavailable");
+                }
+                styleCache.write(fresh);
+                styleHistory = fresh;
+            } catch (Exception error) {
+                styleHistoryError = error;
+            }
+
+            JSONObject visibleStyleHistory = styleHistory;
+            Map<Integer, JSONObject> visibleGeneratedVersions = generatedVersions;
+            Exception visibleArticleError = articleHistoryError;
+            Exception visibleStyleError = styleHistoryError;
+            main.post(() -> {
+                if (visibleStyleHistory == null) {
                     form.removeAllViews();
                     TextView failed = text("写作风格加载失败，请稍后重试。", 14, Theme.SECONDARY, Typeface.NORMAL);
                     failed.setGravity(Gravity.CENTER);
                     form.addView(failed, new LinearLayout.LayoutParams(-1, dp(180)));
-                    toast("写作风格加载失败：" + e.getMessage());
-                });
-            }
+                    if (visibleStyleError != null) {
+                        toast("写作风格加载失败：" + visibleStyleError.getMessage());
+                    }
+                    return;
+                }
+                renderStyleRewriteChoices(form, rec, visibleStyleHistory, visibleGeneratedVersions,
+                        currentStyleVersion, selectedStyleVersion, dialogRef[0],
+                        visibleArticleError == null);
+                if (visibleArticleError != null) toast("文章版本加载失败，请稍后重试");
+                else if (visibleStyleError != null) toast("刷新失败，已显示本地风格缓存");
+            });
         });
     }
 
     protected void renderStyleRewriteChoices(LinearLayout form, Recording rec, JSONObject history,
                                              Map<Integer, JSONObject> generatedVersions, Integer currentStyleVersion,
-                                             int[] selectedStyleVersion, IosDialog dialog) {
+                                             int[] selectedStyleVersion, IosDialog dialog,
+                                             boolean actionsReady) {
         form.removeAllViews();
         TextView title = text("选一个范文版本，把本文重写一遍，原文不变，可随时换回。", 14, Theme.SECONDARY, Typeface.NORMAL);
         title.setPadding(0, 0, 0, dp(12));
@@ -1488,17 +1528,28 @@ public final class RecordingDetailActivity extends Activity {
             LinearLayout row = styleRewriteRow(item, version, selected, current);
             row.setOnClickListener(v -> {
                 selectedStyleVersion[0] = version;
-                renderStyleRewriteChoices(form, rec, history, generatedVersions, currentStyleVersion, selectedStyleVersion, dialog);
+                renderStyleRewriteChoices(form, rec, history, generatedVersions, currentStyleVersion,
+                        selectedStyleVersion, dialog, actionsReady);
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(76));
             lp.setMargins(0, i == versions.length() - 1 ? 0 : dp(8), 0, 0);
             form.addView(row, lp);
         }
 
-        TextView confirm = text(styleRewriteButtonText(selectedStyleVersion[0], generatedVersions), 16, 0xffffffff, Typeface.BOLD);
+        String confirmLabel = actionsReady
+                ? styleRewriteButtonText(selectedStyleVersion[0], generatedVersions)
+                : "正在检查文章版本…";
+        TextView confirm = text(confirmLabel, 16, 0xffffffff, Typeface.BOLD);
         confirm.setGravity(Gravity.CENTER);
-        confirm.setBackground(round(selectedStyleVersion[0] < 0 ? Theme.ACCENT_SOFT : Theme.RED, 12));
+        boolean confirmEnabled = actionsReady && selectedStyleVersion[0] >= 0;
+        confirm.setEnabled(confirmEnabled);
+        confirm.setAlpha(confirmEnabled ? 1f : 0.55f);
+        confirm.setBackground(round(confirmEnabled ? Theme.RED : Theme.ACCENT_SOFT, 12));
         confirm.setOnClickListener(v -> {
+            if (!actionsReady) {
+                toast("正在检查本文已有版本");
+                return;
+            }
             if (selectedStyleVersion[0] < 0) {
                 toast("请先选一个版本");
                 return;

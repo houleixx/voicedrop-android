@@ -27,6 +27,7 @@ public class AccountLocalStateTest {
                 "voicedrop.prompts",
                 "voicedrop.prefs",
                 "voicedrop.referral",
+                WritingStyleHistoryCache.PREFS,
                 "vd_community_terms",
                 "vd_block_store"
         )));

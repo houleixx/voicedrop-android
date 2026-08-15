@@ -91,8 +91,8 @@ public final class ShareBottomSheet {
             }
             Item item = items.get(index);
             View target = targetView(activity, item, () -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                item.action.run();
+                if (dialogRef[0] != null) dialogRef[0].dismissAnimated(item.action);
+                else item.action.run();
             });
             GridLayout.LayoutParams params = new GridLayout.LayoutParams(
                     GridLayout.spec((index / COLUMN_COUNT) * 2),

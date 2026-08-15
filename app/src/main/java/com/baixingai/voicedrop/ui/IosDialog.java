@@ -16,12 +16,18 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.view.animation.AccelerateInterpolator;
 
 /**
  * iOS-style alert dialog: rounded card, centered, with styled buttons.
  */
 public final class IosDialog extends Dialog {
     private static final int SCRIM_COLOR = 0x66000000;
+    private static final int BOTTOM_SHEET_EXIT_DURATION_MS = 200;
+    private View bottomSheetRoot;
+    private View bottomSheetCard;
+    private boolean bottomSheetExitAnimating;
+    private Runnable bottomSheetExitCompletion;
 
     public IosDialog(Context context) {
         super(context, android.R.style.Theme_Translucent_NoTitleBar);
@@ -35,6 +41,57 @@ public final class IosDialog extends Dialog {
             DialogWindowDefaults.applyFullscreen(getWindow());
         } catch (RuntimeException ignored) {
             try { dismiss(); } catch (Exception ignoredDismiss) {}
+        }
+    }
+
+    /** Slides a bottom sheet away before dismissing, then runs the selected action once. */
+    public void dismissAnimated(Runnable completion) {
+        if (completion != null && bottomSheetExitCompletion == null) {
+            bottomSheetExitCompletion = completion;
+        }
+        if (bottomSheetExitAnimating) return;
+        if (!isShowing() || bottomSheetRoot == null || bottomSheetCard == null
+                || !isContextAlive(getContext())) {
+            finishBottomSheetDismiss();
+            return;
+        }
+
+        bottomSheetExitAnimating = true;
+        bottomSheetRoot.animate().cancel();
+        bottomSheetCard.animate().cancel();
+        bottomSheetRoot.animate()
+                .alpha(0f)
+                .setDuration(BOTTOM_SHEET_EXIT_DURATION_MS)
+                .start();
+        bottomSheetCard.animate()
+                .translationY(bottomSheetCard.getHeight())
+                .setDuration(BOTTOM_SHEET_EXIT_DURATION_MS)
+                .setInterpolator(new AccelerateInterpolator())
+                .withEndAction(this::finishBottomSheetDismiss)
+                .start();
+    }
+
+    @Override
+    public void dismiss() {
+        if (bottomSheetRoot != null && bottomSheetCard != null && isShowing()
+                && isContextAlive(getContext())) {
+            dismissAnimated(null);
+            return;
+        }
+        finishBottomSheetDismiss();
+    }
+
+    private void finishBottomSheetDismiss() {
+        if (!isShowing() && bottomSheetRoot == null && bottomSheetCard == null) return;
+        Runnable completion = bottomSheetExitCompletion;
+        bottomSheetExitCompletion = null;
+        bottomSheetExitAnimating = false;
+        bottomSheetRoot = null;
+        bottomSheetCard = null;
+        try {
+            super.dismiss();
+        } finally {
+            if (completion != null) completion.run();
         }
     }
 
@@ -275,6 +332,8 @@ public final class IosDialog extends Dialog {
         card.setClickable(true);
         if (bottomSheet) {
             card.setTranslationY(ctx.getResources().getDisplayMetrics().heightPixels);
+            bottomSheetRoot = root;
+            bottomSheetCard = card;
         }
 
         // Title

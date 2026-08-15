@@ -23,6 +23,8 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("ROW_SEPARATOR_HEIGHT_DP = 17"));
         assertTrue(source.contains("index % COLUMN_COUNT == 0"));
         assertTrue(source.contains("setContentDescription(item.label)"));
+        assertTrue(source.contains("dialogRef[0].dismissAnimated(item.action)"));
+        assertFalse(source.contains("dialogRef[0].dismiss();\n                item.action.run();"));
     }
 
     @Test public void recordingDetailMovesOnlyShareActionsIntoTheSheet() throws Exception {

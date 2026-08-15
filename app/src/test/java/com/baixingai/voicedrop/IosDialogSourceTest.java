@@ -24,6 +24,19 @@ public class IosDialogSourceTest {
         assertFalse(source.contains("card.addView(btnDivider, new LinearLayout.LayoutParams(-1, dp(ctx, 1)));\n\n            btnRow = new LinearLayout(ctx);"));
     }
 
+    @Test
+    public void bottomSheetDismissesWithSlideAndFadeBeforeCompletion() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/ui/IosDialog.java");
+
+        assertTrue(source.contains("public void dismissAnimated(Runnable completion)"));
+        assertTrue(source.contains("bottomSheetRoot.animate()"));
+        assertTrue(source.contains(".alpha(0f)"));
+        assertTrue(source.contains(".translationY(bottomSheetCard.getHeight())"));
+        assertTrue(source.contains("new AccelerateInterpolator()"));
+        assertTrue(source.contains(".withEndAction(this::finishBottomSheetDismiss)"));
+        assertTrue(source.contains("if (completion != null) completion.run()"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

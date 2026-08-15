@@ -34,6 +34,12 @@ public final class PhotoService {
 
     private PhotoService() {}
 
+    /** Drops decoded images and per-process thumbnail misses after a user cache clear. */
+    public static void clearMemoryCache() {
+        cache.evictAll();
+        missingThumbs.clear();
+    }
+
     /** Mirrors iOS Caches/photo-cache so immutable community covers survive cold starts. */
     public static synchronized void configure(Context context) {
         if (diskDir != null || context == null) return;

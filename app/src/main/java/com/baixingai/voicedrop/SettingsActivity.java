@@ -18,8 +18,10 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.CacheManager;
 import com.baixingai.voicedrop.data.ExportManager;
 import com.baixingai.voicedrop.data.LibraryStore;
+import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.data.SettingsStore;
@@ -30,6 +32,8 @@ import com.baixingai.voicedrop.ui.BouncyScrollView;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
+import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.update.AppUpdateManager;
@@ -44,6 +48,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SettingsActivity extends Activity {
     private interface CardBuilder {
@@ -76,11 +82,19 @@ public class SettingsActivity extends Activity {
     private SettingsStore settingsStore;
     private UsageStore usageStore;
     private ExportManager exportManager;
+    private CacheManager cacheManager;
     private File pendingExportZip;
     private TextView nameValueText;
     private TextView usageBalanceText;
     private TextView usageCapacityText;
+    private TextView cacheSizeText;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService cacheIo = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean cacheClearInProgress = new AtomicBoolean(false);
+    private final Object cacheRefreshLock = new Object();
+    private boolean cacheRefreshRunning;
+    private boolean cacheRefreshPending;
+    private volatile boolean activityDestroyed;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +105,7 @@ public class SettingsActivity extends Activity {
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
         exportManager = new ExportManager(this, auth, http, library);
+        cacheManager = new CacheManager(getCacheDir(), PhotoService::clearMemoryCache);
 
         configureEdgeToEdge();
 
@@ -151,6 +166,19 @@ public class SettingsActivity extends Activity {
         if (hasFocus) configureEdgeToEdge();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        requestCacheSizeRefresh();
+    }
+
+    @Override
+    protected void onDestroy() {
+        activityDestroyed = true;
+        cacheIo.shutdownNow();
+        super.onDestroy();
+    }
+
     private void configureEdgeToEdge() {
         SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
     }
@@ -185,6 +213,8 @@ public class SettingsActivity extends Activity {
         addSection(content, "其他");
         addCard(content, card -> {
             addCardRow(card, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
+            addCardDivider(card);
+            addCacheRow(card);
             addCardDivider(card);
             addCardRow(card, R.drawable.ic_settings_update, "检查更新", "版本 " + appVersionName(), () -> AppUpdateManager.checkManually(this));
             addCardDivider(card);
@@ -306,6 +336,125 @@ public class SettingsActivity extends Activity {
         chevron.setColorFilter(0xffcfc6b6);
         chevron.setLayoutParams(new LinearLayout.LayoutParams(dp(16), dp(16)));
         return chevron;
+    }
+
+    private void addCacheRow(LinearLayout card) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(13), dp(16), dp(13));
+        row.addView(settingRemixIcon(RemixIconGlyph.DELETE_BIN_LINE, "清除缓存"));
+
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        texts.addView(text("清除缓存", 16, Theme.INK, Typeface.BOLD));
+        TextView subtitle = text("文章与图片缓存", 12, Theme.SECONDARY, Typeface.NORMAL);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        texts.addView(subtitle);
+
+        cacheSizeText = text("计算中…", 13, Theme.FAINT, Typeface.NORMAL);
+        cacheSizeText.setSingleLine(true);
+        cacheSizeText.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams sizeLp = new LinearLayout.LayoutParams(-2, -2);
+        sizeLp.setMargins(dp(8), 0, dp(4), 0);
+        row.addView(cacheSizeText, sizeLp);
+        row.addView(settingsChevron());
+        row.setOnClickListener(v -> confirmClearCache());
+        card.addView(row);
+    }
+
+    private View settingRemixIcon(String glyph, String description) {
+        RemixIconView icon = new RemixIconView(this);
+        icon.setIcon(glyph);
+        icon.setTextSize(21);
+        icon.setTextColor(Theme.SECONDARY);
+        icon.setContentDescription(description);
+        icon.setBackground(round(SETTINGS_TILE_NEUTRAL_BG, SETTINGS_TILE_CORNER_DP));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(SETTINGS_TILE_SIZE_DP), dp(SETTINGS_TILE_SIZE_DP));
+        lp.setMargins(0, 0, dp(12), 0);
+        icon.setLayoutParams(lp);
+        return icon;
+    }
+
+    private void confirmClearCache() {
+        IosDialog.showConfirmation(this, "清除文章与图片缓存？",
+                "只会删除文章文档与图片的本地缓存。不会删除录音、待上传内容、服务器上的文章或图片，也不会清除登录信息。需要时会重新下载缓存内容。",
+                "清除缓存", this::clearCache, "取消", null);
+    }
+
+    private void clearCache() {
+        if (!cacheClearInProgress.compareAndSet(false, true)) {
+            toast("正在清除缓存…");
+            return;
+        }
+        if (cacheSizeText != null) cacheSizeText.setText("清理中…");
+        try {
+            cacheIo.execute(() -> {
+                CacheManager.ClearResult result;
+                try {
+                    result = cacheManager.clear();
+                } catch (RuntimeException e) {
+                    result = null;
+                } finally {
+                    cacheClearInProgress.set(false);
+                }
+                CacheManager.ClearResult finalResult = result;
+                runOnUiThreadIfAlive(() -> {
+                    if (finalResult == null || !finalResult.succeeded()) {
+                        toast("缓存清理失败，请稍后再试");
+                    } else {
+                        toast("已清除 " + CacheManager.formatBytes(finalResult.clearedBytes()) + " 缓存");
+                    }
+                    requestCacheSizeRefresh();
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            cacheClearInProgress.set(false);
+        }
+    }
+
+    private void requestCacheSizeRefresh() {
+        synchronized (cacheRefreshLock) {
+            cacheRefreshPending = true;
+            if (cacheRefreshRunning) return;
+            cacheRefreshRunning = true;
+        }
+        if (cacheSizeText != null && !cacheClearInProgress.get()) cacheSizeText.setText("计算中…");
+        try {
+            cacheIo.execute(this::drainCacheSizeRefreshes);
+        } catch (RejectedExecutionException ignored) {
+            synchronized (cacheRefreshLock) {
+                cacheRefreshPending = false;
+                cacheRefreshRunning = false;
+            }
+        }
+    }
+
+    private void drainCacheSizeRefreshes() {
+        while (true) {
+            synchronized (cacheRefreshLock) {
+                if (!cacheRefreshPending) {
+                    cacheRefreshRunning = false;
+                    return;
+                }
+                cacheRefreshPending = false;
+            }
+            long bytes = cacheManager.sizeBytes();
+            runOnUiThreadIfAlive(() -> {
+                if (cacheSizeText != null && !cacheClearInProgress.get()) {
+                    cacheSizeText.setText(CacheManager.formatBytes(bytes));
+                }
+            });
+        }
+    }
+
+    private void runOnUiThreadIfAlive(Runnable action) {
+        if (activityDestroyed) return;
+        runOnUiThread(() -> {
+            if (!activityDestroyed && !isFinishing()) action.run();
+        });
     }
 
     private void addCardRow(LinearLayout card, int iconResId, String title, String subtitle, Runnable action) {

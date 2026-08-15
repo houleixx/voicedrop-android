@@ -18,6 +18,7 @@ public final class RemixIconGlyph {
     public static final String CHECK = "\uEB7B";
     public static final String CLOSE = "\uEB99";
     public static final String DELETE = "\uEC26";
+    public static final String DELETE_BIN_LINE = "\uEC2A";
     public static final String DOWNLOAD = "\uEC54";
     public static final String EDIT = "\uEC80";
     public static final String FILE_COPY = "\uECD5";

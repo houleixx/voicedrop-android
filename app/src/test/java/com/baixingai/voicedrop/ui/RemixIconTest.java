@@ -17,6 +17,7 @@ public class RemixIconTest {
         assertEquals("\uEA64", RemixIconGlyph.ARROW_LEFT);
         assertEquals("\uEB30", RemixIconGlyph.CAMERA_LENS_LINE);
         assertEquals("\uEB7B", RemixIconGlyph.CHECK);
+        assertEquals("\uEC2A", RemixIconGlyph.DELETE_BIN_LINE);
         assertEquals("\uEE0E", RemixIconGlyph.HEART_FILL);
         assertEquals("\uEF50", RemixIconGlyph.MIC);
         assertEquals("\uF0E8", RemixIconGlyph.SETTINGS);

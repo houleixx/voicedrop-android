@@ -95,6 +95,8 @@ import com.baixingai.voicedrop.ui.MarkdownRowRenderer;
 import com.baixingai.voicedrop.ui.PlaybackProgressButton;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
+import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.ShareBottomSheet;
 import com.baixingai.voicedrop.ui.SoftRoundedShadowFrameLayout;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
@@ -968,7 +970,8 @@ public final class RecordingDetailActivity extends Activity {
         addArticleHistoryControls(iconRow, rec);
         if (refreshHistory) refreshArticleHistoryState(rec);
 
-        toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY, dp(18), dp(38), dp(2), true, v -> showMoreMenu(rec, v));
+        toolbarIconButton(iconRow, Theme.CARD, 11, AliIconFont.MORE, Theme.SECONDARY,
+                dp(18), dp(38), dp(2), true, v -> showMoreMenu(rec, v));
 
         articleInlineEditActions = buildInlineEditToolbar();
         articleInlineEditActions.setVisibility(View.GONE);
@@ -1932,6 +1935,68 @@ public final class RecordingDetailActivity extends Activity {
         });
     }
 
+    protected void showRecordingShareSheet(Recording rec) {
+        warmArticleShareThumbnail();
+        List<ShareBottomSheet.Item> items = new ArrayList<>();
+        items.add(ShareBottomSheet.drawable("小程序卡片", R.drawable.ic_wechat,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareMiniProgramCard(rec)));
+        items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareRecordingTimeline(rec)));
+        items.add(ShareBottomSheet.drawable("小红书", R.drawable.ic_xiaohongshu,
+                ShareBottomSheet.XIAOHONGSHU_RED, Color.WHITE, 30, () -> shareToXhs(rec)));
+        items.add(ShareBottomSheet.drawable("复制链接", R.drawable.ic_link_flat,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 23,
+                () -> copyRecordingLink(rec)));
+        items.add(ShareBottomSheet.drawable("其它分享", R.drawable.ic_share_forward,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 24,
+                () -> shareRecording(rec)));
+        ShareBottomSheet.show(this, items);
+    }
+
+    protected void shareRecordingTimeline(Recording rec) {
+        WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        String title = currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
+                ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
+                : rec.rowTitle();
+        io.execute(() -> {
+            try {
+                String url = library.shareUrl(rec, articleIndex);
+                if (url == null) throw new IllegalStateException("无法生成链接");
+                android.graphics.Bitmap image = articleShareThumbnail(currentArticleDoc, articleIndex);
+                main.post(() -> {
+                    loading.dismiss();
+                    toast(WechatMiniProgramShare.sendTimeline(this, title, url, image,
+                            "打开 VoiceDrop 阅读这篇文章").message());
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    loading.dismiss();
+                    toast("分享失败：" + e.getMessage());
+                });
+            }
+        });
+    }
+
+    protected void copyRecordingLink(Recording rec) {
+        io.execute(() -> {
+            try {
+                String url = library.shareUrl(rec, articleIndex);
+                if (url == null) throw new IllegalStateException("无法生成链接");
+                main.post(() -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard == null) {
+                        toast("复制失败");
+                        return;
+                    }
+                    clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 文章链接", url));
+                    toast("链接已复制");
+                });
+            } catch (Exception e) {
+                main.post(() -> toast("复制失败：" + e.getMessage()));
+            }
+        });
+    }
+
     protected void shareMiniProgramCard(Recording rec) {
         if (Boolean.FALSE.equals(sharedToCommunity)) {
             toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
@@ -2139,7 +2204,6 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void showMoreMenu(Recording rec, View anchor) {
         if (sharedToCommunity == null) refreshCommunityShareState(rec);
-        warmArticleShareThumbnail();
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(0, dp(3), 0, dp(3));
@@ -2162,30 +2226,15 @@ public final class RecordingDetailActivity extends Activity {
             toggleCommunityVisibility(rec);
         });
         menu.addView(commRow);
-        menu.addView(divider());
 
-        LinearLayout xhsRow = menuRow("分享到小红书", AliIconFont.DOC, Theme.RED);
-        xhsRow.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareToXhs(rec);
-        });
-        menu.addView(xhsRow);
         menu.addView(divider());
-
-        LinearLayout miniProgramRow = menuRow("分享到微信", AliIconFont.SHARE_UP, Theme.RED);
-        miniProgramRow.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareMiniProgramCard(rec);
-        });
-        menu.addView(miniProgramRow);
-        menu.addView(divider());
-
-        LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED);
+        LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_FORWARD, Theme.RED);
         shareRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
-            shareRecording(rec);
+            showRecordingShareSheet(rec);
         });
         menu.addView(shareRow);
+
         View thickDivider = new View(this);
         thickDivider.setBackgroundColor(0xffe9e5dc);
         LinearLayout.LayoutParams thickDividerLp = new LinearLayout.LayoutParams(-1, dp(1));

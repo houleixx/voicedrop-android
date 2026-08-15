@@ -1,12 +1,13 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -15,21 +16,21 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
-import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
-import com.baixingai.voicedrop.ui.PopupMenuPosition;
+import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.ShareBottomSheet;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -59,10 +60,9 @@ public final class BookReaderActivity extends Activity {
         page.setBackgroundColor(0xfffffaf0);
         PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
-        final FrameLayout[] shareAnchor = {null};
-        shareAnchor[0] = titleBar.addIconAction(
+        titleBar.addIconAction(
                 AliIconFont.SHARE_FORWARD, Theme.SECONDARY, "分享",
-                () -> showWechatShareMenu(shareAnchor[0]));
+                this::showBookShareSheet);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout content = new FrameLayout(this);
@@ -112,77 +112,33 @@ public final class BookReaderActivity extends Activity {
         if (loadingState != null) loadingState.setVisibility(View.GONE);
     }
 
-    private void showWechatShareMenu(View anchor) {
-        LinearLayout menu = new LinearLayout(this);
-        menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(0, dp(3), 0, dp(3));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(0xf9ffffff);
-        background.setCornerRadius(dp(16));
-        menu.setBackground(background);
-        menu.setElevation(dp(8));
-
-        final PopupWindow[] popupRef = {null};
-        LinearLayout friend = shareMenuRow("微信好友", AliIconFont.PEOPLE);
-        friend.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareBookToWechat(false);
-        });
-        menu.addView(friend);
-        menu.addView(shareMenuDivider());
-
-        LinearLayout timeline = shareMenuRow("朋友圈", AliIconFont.SHARE_FORWARD);
-        timeline.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareBookToWechat(true);
-        });
-        menu.addView(timeline);
-        menu.addView(shareMenuDivider());
-
-        LinearLayout system = shareMenuRow("分享", AliIconFont.SHARE_UP);
-        system.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareBookWithSystem();
-        });
-        menu.addView(system);
-
-        int popupWidth = dp(260);
-        PopupWindow popup = new PopupWindow(menu, popupWidth, -2, true);
-        popup.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
-        popup.setOutsideTouchable(true);
-        popup.setElevation(dp(10));
-        popupRef[0] = popup;
-        popup.showAsDropDown(anchor,
-                PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth) - dp(5),
-                dp(10));
+    private void showBookShareSheet() {
+        List<ShareBottomSheet.Item> items = new ArrayList<>();
+        items.add(ShareBottomSheet.drawable("微信好友", R.drawable.ic_wechat,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(false)));
+        items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(true)));
+        items.add(ShareBottomSheet.drawable("复制链接", R.drawable.ic_link_flat,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 23, this::copyBookLink));
+        items.add(ShareBottomSheet.drawable("其它分享", R.drawable.ic_share_forward,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 24, this::shareBookWithSystem));
+        ShareBottomSheet.show(this, items);
     }
 
-    private LinearLayout shareMenuRow(String label, int iconResId) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(18), 0, dp(16), 0);
-        row.setMinimumHeight(dp(48));
-        TextView text = new TextView(this);
-        text.setText(label);
-        text.setTextSize(17);
-        text.setTextColor(Theme.INK);
-        text.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-        ImageView icon = new ImageView(this);
-        AliIconFont.apply(icon, iconResId, Theme.SECONDARY);
-        icon.setScaleType(ImageView.ScaleType.CENTER);
-        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        return row;
-    }
-
-    private View shareMenuDivider() {
-        View divider = new View(this);
-        divider.setBackgroundColor(0xffe0d8cc);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1));
-        params.setMargins(dp(16), 0, dp(16), 0);
-        divider.setLayoutParams(params);
-        return divider;
+    private void copyBookLink() {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) {
+            SimpleToast.show(this, "复制失败");
+            return;
+        }
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) {
+            SimpleToast.show(this, "复制失败");
+            return;
+        }
+        String url = "https://voicedrop.cn/books/" + slug + "/";
+        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接", url));
+        SimpleToast.show(this, "链接已复制");
     }
 
     private void shareBookToWechat(boolean timeline) {

@@ -14,9 +14,11 @@ public class CommunityMiniProgramShareSourceTest {
     public void communityArticleMenuCanShareAWechatMiniProgramCard() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/CommunityDetailActivity.java");
 
-        assertTrue(source.contains("分享到微信"));
+        assertTrue(source.contains("ShareBottomSheet.drawable(\"小程序卡片\""));
         assertTrue(source.contains("shareCommunityMiniProgramCard(post)"));
-        assertTrue(source.indexOf("分享到微信") < source.indexOf("menuRow(\"分享\""));
+        assertTrue(source.contains("ShareBottomSheet.remix(\"朋友圈\""));
+        assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
+        assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
         assertTrue(source.contains("Api.sharePage(post.shareId)"));
         assertTrue(source.contains("WechatMiniProgramShare.communityPath(post.shareId)"));
         assertTrue(source.contains("communityShareThumbnail(post)"));

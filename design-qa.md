@@ -1,35 +1,48 @@
-# Recording Detail Long-press Menu — Design QA
+# Design QA — Share sheet divider symmetry
 
-## Evidence
+**Evidence**
 
-- Source visual truth: `/var/folders/h2/_6smmfkj2z1f7pbmqc0f36gm0000gn/T/codex-clipboard-XPC209.png`
-- Source dimensions: 945 × 2048 px
-- Implementation: Android native `RecordingDetailActivity`
-- Target state: long-pressing article text or an article image
+- Source visual truth: `/private/tmp/voicedrop-share-spacing-v2.png`, plus the approved 16dp/16dp divider spacing specification.
+- Source pixels: 1080 × 2400.
+- Implementation screenshot: `/private/tmp/voicedrop-share-divider-16dp.png`.
+- Implementation pixels: 1080 × 2400 on Pixel 7 API 31 at 420 dpi (approximately 411 × 914dp).
+- Normalized comparison: `/private/tmp/share-divider-16dp-comparison.png`; equal 1080 × 780 crops from the same device and interaction state.
+- State: recording article detail → 更多 → 分享 Bottom Sheet.
 
-## Implemented fidelity surfaces
+**Full-view comparison evidence**
 
-- Typography: single-line 16sp labels, with bold submenu labels and normal-weight actions.
-- Spacing: Android-standard 48dp touch targets and 18dp horizontal content insets.
-- Shape: project-aligned 14dp popup radius, clipped outer scroll surface, subtle elevation, and an inset divider between every item.
-- Assets: action icons remain removed; only entries that open a second-level menu show the existing project right-chevron affordance.
-- Interaction: system actions and local copy/edit controls remain fixed in the root menu; user-created/imported root rows scroll, while every second-level menu keeps “返回” fixed and scrolls its remaining rows when needed, including image menus.
-- Shadow: the native bottom-weighted popup elevation is disabled in favor of the project's uniform four-sided soft shadow.
-- Placement: popup coordinates are clamped to 16dp screen margins.
+- The overall sheet width, bottom safe area, icons, labels, colors, and actions are unchanged.
+- Only the vertical rhythm around the row divider changed, so the final row and system navigation remain at the same position.
 
-## Findings
+**Focused region comparison evidence**
 
-- Source-level regression coverage verifies icon removal, responsive width, capped height, scrollbar visibility, and popup placement.
-- A current rendered screenshot is intentionally omitted because the user asked to perform visual confirmation directly.
+- Before: the first-row label was approximately 13dp above the divider, while the divider was approximately 20dp above the second-row circle.
+- After: UI bounds show the first-row label bottom at y=1883 and divider at y=1925, giving exactly 16dp; the divider ends at y=1928 and the second-row circle begins at y=1970, also giving exactly 16dp.
+- The “其它分享” label still ends at y=2198, confirming that bottom spacing did not increase.
 
-## Comparison history
+**Findings**
 
-1. The source screenshot showed a narrow, icon-heavy popup with wrapped labels and clipped lower rows.
-2. The implementation removes decorative icons, widens the popup, prevents label wrapping, and provides native scrolling for long menus.
-3. Rendered visual comparison remains user-owned.
+- No remaining P0, P1, or P2 findings.
+- The divider now reads as a true section boundary rather than touching either row.
 
-## Final result
+**Required fidelity surfaces**
 
-final result: blocked
+- Fonts and typography: unchanged native 14sp labels, normal weight, centered and single-line.
+- Spacing and layout rhythm: the divider has 16dp clear space on both sides; final-row and navigation safe-area spacing are preserved.
+- Colors and visual tokens: unchanged VoiceDrop greens, Xiaohongshu red, warm neutral utility fill, and secondary text.
+- Image quality and asset fidelity: all existing vector and icon-font assets remain unchanged and sharp.
+- Copy and content: all destination labels and actions are unchanged.
 
-Blocked only on the intentionally omitted post-change screenshot comparison.
+**Interaction evidence**
+
+- Opened the recording overflow menu and the share Bottom Sheet after installing the updated APK.
+- Confirmed all five share targets remain visible and tappable.
+- Unit tests and debug APK assembly passed.
+
+**Comparison history**
+
+1. Earlier finding (P2): the divider's 13dp/20dp spacing was visibly asymmetric.
+2. Fix: set `FIRST_ROW_EXTRA_BOTTOM_DP = 11` and `ROW_SEPARATOR_HEIGHT_DP = 17`, producing 16dp clear space above and below the 1dp line.
+3. Post-fix evidence: `/private/tmp/voicedrop-share-divider-16dp.png` and `/private/tmp/share-divider-16dp-comparison.png`.
+
+final result: passed

@@ -2,6 +2,9 @@ package com.baixingai.voicedrop;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -78,6 +81,8 @@ import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.MarkdownRowRenderer;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RoundedImageView;
+import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.ShareBottomSheet;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
@@ -1803,18 +1808,10 @@ public final class CommunityDetailActivity extends Activity {
             menu.addView(divider());
         }
 
-        LinearLayout miniProgramRow = menuRow("分享到微信", AliIconFont.SHARE_UP, Theme.RED, Theme.INK);
-        miniProgramRow.setOnClickListener(v -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            shareCommunityMiniProgramCard(post);
-        });
-        menu.addView(miniProgramRow);
-        menu.addView(divider());
-
-        LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_UP, Theme.RED, Theme.INK);
+        LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_FORWARD, Theme.RED, Theme.INK);
         shareRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
-            shareCommunityUrl(post);
+            showCommunityShareSheet(post);
         });
         menu.addView(shareRow);
         menu.addView(divider());
@@ -1912,6 +1909,49 @@ public final class CommunityDetailActivity extends Activity {
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TEXT, com.baixingai.voicedrop.net.Api.sharePage(post.shareId));
         startActivity(Intent.createChooser(intent, "分享社区文章"));
+    }
+
+    protected void showCommunityShareSheet(CommunityStore.Post post) {
+        warmCommunityShareThumbnail(post);
+        List<ShareBottomSheet.Item> items = new ArrayList<>();
+        items.add(ShareBottomSheet.drawable("小程序卡片", R.drawable.ic_wechat,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE,
+                () -> shareCommunityMiniProgramCard(post)));
+        items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,
+                ShareBottomSheet.WECHAT_GREEN, Color.WHITE,
+                () -> shareCommunityTimeline(post)));
+        items.add(ShareBottomSheet.drawable("复制链接", R.drawable.ic_link_flat,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 23,
+                () -> copyCommunityLink(post)));
+        items.add(ShareBottomSheet.drawable("其它分享", R.drawable.ic_share_forward,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 24,
+                () -> shareCommunityUrl(post)));
+        ShareBottomSheet.show(this, items);
+    }
+
+    protected void shareCommunityTimeline(CommunityStore.Post post) {
+        WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        io.execute(() -> {
+            android.graphics.Bitmap thumbnail = communityShareThumbnail(post);
+            main.post(() -> {
+                loading.dismiss();
+                WechatMiniProgramShare.Result result = WechatMiniProgramShare.sendTimeline(
+                        this, post.title, com.baixingai.voicedrop.net.Api.sharePage(post.shareId), thumbnail,
+                        "打开 VoiceDrop 查看这篇社区分享");
+                toast(result.message());
+            });
+        });
+    }
+
+    protected void copyCommunityLink(CommunityStore.Post post) {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) {
+            toast("复制失败");
+            return;
+        }
+        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 社区链接",
+                com.baixingai.voicedrop.net.Api.sharePage(post.shareId)));
+        toast("链接已复制");
     }
 
 

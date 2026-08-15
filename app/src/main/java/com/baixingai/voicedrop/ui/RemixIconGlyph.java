@@ -13,6 +13,7 @@ public final class RemixIconGlyph {
     public static final String ARROW_RIGHT = "\uEA6E";
     public static final String BOOK_OPEN = "\uEADB";
     public static final String BOOK_READ = "\uEADD";
+    public static final String CAMERA_LENS_LINE = "\uEB30";
     public static final String CHAT = "\uEB4F";
     public static final String CHECK = "\uEB7B";
     public static final String CLOSE = "\uEB99";

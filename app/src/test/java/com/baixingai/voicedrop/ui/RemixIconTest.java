@@ -15,6 +15,7 @@ public class RemixIconTest {
     @Test
     public void glyphCatalogMatchesMiniProgramAndHarmonyOsVersion25() {
         assertEquals("\uEA64", RemixIconGlyph.ARROW_LEFT);
+        assertEquals("\uEB30", RemixIconGlyph.CAMERA_LENS_LINE);
         assertEquals("\uEB7B", RemixIconGlyph.CHECK);
         assertEquals("\uEE0E", RemixIconGlyph.HEART_FILL);
         assertEquals("\uEF50", RemixIconGlyph.MIC);

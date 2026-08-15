@@ -97,28 +97,38 @@ public final class WechatMiniProgramShare {
     public static Result sendFriend(Context context, String title, String webpageUrl,
                                     Bitmap thumbnailImage) {
         return sendWebpage(context, title, webpageUrl, thumbnailImage,
+                "打开 VoiceDrop 阅读这本书",
                 SendMessageToWX.Req.WXSceneSession, Result.FRIEND_SENT);
     }
 
     public static Result sendTimeline(Context context, String title, String webpageUrl,
                                       Bitmap thumbnailImage) {
         return sendWebpage(context, title, webpageUrl, thumbnailImage,
+                "打开 VoiceDrop 阅读这本书",
+                SendMessageToWX.Req.WXSceneTimeline, Result.TIMELINE_SENT);
+    }
+
+    public static Result sendTimeline(Context context, String title, String webpageUrl,
+                                      Bitmap thumbnailImage, String description) {
+        return sendWebpage(context, title, webpageUrl, thumbnailImage, description,
                 SendMessageToWX.Req.WXSceneTimeline, Result.TIMELINE_SENT);
     }
 
     private static Result sendWebpage(Context context, String title, String webpageUrl,
-                                      Bitmap thumbnailImage, int scene, Result sentResult) {
+                                      Bitmap thumbnailImage, String description,
+                                      int scene, Result sentResult) {
         if (!WechatLogin.api(context).isWXAppInstalled()) return Result.WECHAT_NOT_INSTALLED;
 
         WXWebpageObject webpage = new WXWebpageObject();
         webpage.webpageUrl = webpageUrl;
         WXMediaMessage message = new WXMediaMessage(webpage);
-        message.title = trim(title, WXMediaMessage.TITLE_LENGTH_LIMIT, "VoiceDrop 书籍");
-        message.description = "打开 VoiceDrop 阅读这本书";
+        message.title = trim(title, WXMediaMessage.TITLE_LENGTH_LIMIT, "VoiceDrop 分享");
+        message.description = trim(description, WXMediaMessage.DESCRIPTION_LENGTH_LIMIT,
+                "打开 VoiceDrop 查看内容");
         message.thumbData = thumbnail(context, thumbnailImage);
 
         SendMessageToWX.Req request = new SendMessageToWX.Req();
-        request.transaction = "voicedrop-book-webpage-" + System.currentTimeMillis();
+        request.transaction = "voicedrop-webpage-" + System.currentTimeMillis();
         request.message = message;
         request.scene = scene;
         return WechatLogin.api(context).sendReq(request) ? sentResult : Result.SEND_FAILED;

@@ -44,6 +44,7 @@ public final class BookReaderNavigationContractTest {
         assertTrue(!reader.contains("intent.putExtra(\"title\", book.main)"));
         assertTrue(reader.contains("new PopupWindow(menu, popupWidth, -2, true)"));
         assertTrue(reader.contains("popup.showAsDropDown(anchor"));
+        assertTrue(reader.contains("dividerParams.setMargins(dp(16), 0, dp(16), 0)"));
         assertTrue(reader.contains("WechatMiniProgramShare.sendFriend(this, title, url, cover)"));
         assertTrue(reader.contains("WechatMiniProgramShare.sendTimeline(this, title, url, cover)"));
         assertTrue(!reader.contains("WechatMiniProgramShare.bookPath("));

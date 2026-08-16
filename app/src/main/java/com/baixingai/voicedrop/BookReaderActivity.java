@@ -136,7 +136,9 @@ public final class BookReaderActivity extends Activity {
         menu.addView(reviseRow);
         View divider = new View(this);
         divider.setBackgroundColor(0xffe0d8cc);
-        menu.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
+        dividerParams.setMargins(dp(16), 0, dp(16), 0);
+        menu.addView(divider, dividerParams);
 
         LinearLayout shareRow = bookMenuRow("分享", RemixIconGlyph.SHARE_FORWARD, Theme.SECONDARY);
         shareRow.setOnClickListener(ignored -> {

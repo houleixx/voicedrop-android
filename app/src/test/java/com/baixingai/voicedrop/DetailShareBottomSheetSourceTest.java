@@ -26,6 +26,8 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("dialogRef[0].dismissAnimated(item.action)"));
         assertFalse(source.contains("handleArea"));
         assertFalse(source.contains("handleParams"));
+        assertTrue(source.contains("new LinearLayout.LayoutParams(-1, dp(activity, 20))"));
+        assertTrue(source.contains("int contentHeight = 28 + rows * TARGET_HEIGHT_DP"));
         assertFalse(source.contains("dialogRef[0].dismiss();\n                item.action.run();"));
     }
 

@@ -55,6 +55,9 @@ public final class ShareBottomSheet {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
 
+        // Keep the original breathing room after removing the visible drag handle.
+        content.addView(new View(activity), new LinearLayout.LayoutParams(-1, dp(activity, 20)));
+
         GridLayout grid = new GridLayout(activity);
         grid.setColumnCount(COLUMN_COUNT);
         int rows = (items.size() + COLUMN_COUNT - 1) / COLUMN_COUNT;
@@ -95,7 +98,7 @@ public final class ShareBottomSheet {
             grid.addView(target, params);
         }
 
-        int contentHeight = 8 + rows * TARGET_HEIGHT_DP
+        int contentHeight = 28 + rows * TARGET_HEIGHT_DP
                 + (rows > 1 ? FIRST_ROW_EXTRA_BOTTOM_DP : 0)
                 + Math.max(0, rows - 1) * ROW_SEPARATOR_HEIGHT_DP;
         dialogRef[0] = IosDialog.showBottomSheet(activity, null, content,

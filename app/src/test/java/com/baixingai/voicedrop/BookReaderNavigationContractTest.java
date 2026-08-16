@@ -20,6 +20,11 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("AliIconFont.MORE, Theme.SECONDARY, \"更多\""));
         assertTrue(reader.contains("this::showBookMenu"));
         assertTrue(reader.contains("ShareBottomSheet.remix(\"修改这本书\""));
+        assertTrue(reader.contains("ShareBottomSheet.remix(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
+        String bookMenu = reader.substring(reader.indexOf("private void showBookMenu()"),
+                reader.indexOf("private void showBookShareSheet()"));
+        assertTrue(!bookMenu.contains("微信好友"));
+        assertTrue(!bookMenu.contains("朋友圈"));
         assertTrue(reader.contains("BookReviseBottomSheet.show"));
         assertTrue(reader.contains("web.reload()"));
         assertTrue(reader.contains("ShareBottomSheet.drawable(\"微信好友\""));

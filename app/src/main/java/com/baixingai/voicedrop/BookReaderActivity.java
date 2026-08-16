@@ -117,6 +117,13 @@ public final class BookReaderActivity extends Activity {
         List<ShareBottomSheet.Item> items = new ArrayList<>();
         items.add(ShareBottomSheet.remix("修改这本书", RemixIconGlyph.EDIT,
                 ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.ACCENT, this::openBookRevision));
+        items.add(ShareBottomSheet.remix("分享", RemixIconGlyph.SHARE_FORWARD,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, this::showBookShareSheet));
+        ShareBottomSheet.show(this, items);
+    }
+
+    private void showBookShareSheet() {
+        List<ShareBottomSheet.Item> items = new ArrayList<>();
         items.add(ShareBottomSheet.drawable("微信好友", R.drawable.ic_wechat,
                 ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(false)));
         items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,

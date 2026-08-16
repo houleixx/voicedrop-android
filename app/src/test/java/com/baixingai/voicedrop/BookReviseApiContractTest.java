@@ -25,7 +25,9 @@ public final class BookReviseApiContractTest {
         assertTrue(revise.contains("Math.round(screenHeightDp * 0.84f) - 74"));
         assertTrue(revise.contains("composer.setVisibility(View.GONE)"));
         assertTrue(revise.contains("loading.setTranslationY(-dp(180))"));
-        assertTrue(revise.contains("denied.setTranslationY(-dp(180))"));
+        assertTrue(revise.contains("deniedContent.setTranslationY(-dp(180))"));
+        assertTrue(revise.contains("deniedIcon.setIcon(RemixIconGlyph.LOCK)"));
+        assertTrue(!revise.contains("🔒"));
         assertTrue(revise.contains("dialog.setOnDismissListener(ignored -> destroy())"));
         assertTrue(revise.contains("started = true;"));
         assertTrue(revise.contains("started = false;"));

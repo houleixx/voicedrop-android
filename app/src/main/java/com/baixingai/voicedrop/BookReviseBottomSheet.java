@@ -23,6 +23,8 @@ import com.baixingai.voicedrop.core.BookReviseThread;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.Theme;
 import com.umeng.analytics.MobclickAgent;
 
@@ -57,7 +59,8 @@ public final class BookReviseBottomSheet {
     private ScrollView scroll;
     private LinearLayout threadList;
     private ProgressBar loading;
-    private TextView denied;
+    private View denied;
+    private TextView deniedMessage;
     private TextView error;
     private View composer;
     private EditText input;
@@ -103,11 +106,23 @@ public final class BookReviseBottomSheet {
         loading.setTranslationY(-dp(180));
         content.addView(loading, loadingParams);
 
-        denied = text("", 14, Theme.SECONDARY, Typeface.NORMAL);
-        denied.setGravity(Gravity.CENTER);
-        denied.setPadding(dp(36), dp(30), dp(36), dp(30));
-        denied.setTranslationY(-dp(180));
-        denied.setVisibility(View.GONE);
+        LinearLayout deniedContent = new LinearLayout(activity);
+        deniedContent.setOrientation(LinearLayout.VERTICAL);
+        deniedContent.setGravity(Gravity.CENTER);
+        deniedContent.setPadding(dp(36), dp(30), dp(36), dp(30));
+        deniedContent.setTranslationY(-dp(180));
+        deniedContent.setVisibility(View.GONE);
+        RemixIconView deniedIcon = new RemixIconView(activity);
+        deniedIcon.setIcon(RemixIconGlyph.LOCK);
+        deniedIcon.setTextSize(42);
+        deniedIcon.setTextColor(Theme.SECONDARY);
+        deniedContent.addView(deniedIcon, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        deniedMessage = text("", 14, Theme.SECONDARY, Typeface.NORMAL);
+        deniedMessage.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams deniedMessageParams = new LinearLayout.LayoutParams(-1, -2);
+        deniedMessageParams.topMargin = dp(18);
+        deniedContent.addView(deniedMessage, deniedMessageParams);
+        denied = deniedContent;
         content.addView(denied, new FrameLayout.LayoutParams(-1, -1));
         page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         composer = buildInputBar();
@@ -324,7 +339,7 @@ public final class BookReviseBottomSheet {
     private void showDenied(String message) {
         running = false;
         scroll.setVisibility(View.GONE);
-        denied.setText("🔒\n\n" + message);
+        deniedMessage.setText(message);
         denied.setVisibility(View.VISIBLE);
         composer.setVisibility(View.GONE);
         input.setEnabled(false);

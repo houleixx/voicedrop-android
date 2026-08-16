@@ -34,6 +34,7 @@ public final class RemixIconGlyph {
     public static final String INFORMATION = "\uEE59";
     public static final String LINK = "\uEEB2";
     public static final String LOADER = "\uEEC6";
+    public static final String LOCK = "\uEECE";
     public static final String MAGIC = "\uEEEA";
     public static final String MIC = "\uEF50";
     public static final String MORE = "\uEF78";

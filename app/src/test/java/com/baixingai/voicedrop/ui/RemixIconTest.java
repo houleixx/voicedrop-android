@@ -19,6 +19,7 @@ public class RemixIconTest {
         assertEquals("\uEB7B", RemixIconGlyph.CHECK);
         assertEquals("\uEC2A", RemixIconGlyph.DELETE_BIN_LINE);
         assertEquals("\uEE0E", RemixIconGlyph.HEART_FILL);
+        assertEquals("\uEECE", RemixIconGlyph.LOCK);
         assertEquals("\uEF50", RemixIconGlyph.MIC);
         assertEquals("\uF0E8", RemixIconGlyph.SETTINGS);
         assertEquals("\uF2B6", RemixIconGlyph.WECHAT);

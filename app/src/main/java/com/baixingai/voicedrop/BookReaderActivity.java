@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -17,12 +20,16 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
+import com.baixingai.voicedrop.ui.PopupMenuPosition;
 import com.baixingai.voicedrop.ui.RemixIconGlyph;
+import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.ShareBottomSheet;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
@@ -61,9 +68,9 @@ public final class BookReaderActivity extends Activity {
         page.setBackgroundColor(0xfffffaf0);
         PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
-        titleBar.addIconAction(
-                AliIconFont.MORE, Theme.SECONDARY, "更多",
-                this::showBookMenu);
+        FrameLayout moreAction = titleBar.addIconAction(
+                AliIconFont.MORE, Theme.SECONDARY, "更多", () -> {});
+        moreAction.setOnClickListener(this::showBookMenu);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout content = new FrameLayout(this);
@@ -113,13 +120,67 @@ public final class BookReaderActivity extends Activity {
         if (loadingState != null) loadingState.setVisibility(View.GONE);
     }
 
-    private void showBookMenu() {
-        List<ShareBottomSheet.Item> items = new ArrayList<>();
-        items.add(ShareBottomSheet.remix("修改这本书", RemixIconGlyph.EDIT,
-                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.ACCENT, this::openBookRevision));
-        items.add(ShareBottomSheet.remix("分享", RemixIconGlyph.SHARE_FORWARD,
-                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, this::showBookShareSheet));
-        ShareBottomSheet.show(this, items);
+    private void showBookMenu(View anchor) {
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(0, dp(3), 0, dp(3));
+        menu.setBackground(roundedMenuBackground());
+        menu.setElevation(dp(8));
+        final PopupWindow[] popupRef = {null};
+
+        LinearLayout reviseRow = bookMenuRow("修改这本书", RemixIconGlyph.EDIT, Theme.ACCENT);
+        reviseRow.setOnClickListener(ignored -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            openBookRevision();
+        });
+        menu.addView(reviseRow);
+        View divider = new View(this);
+        divider.setBackgroundColor(0xffe0d8cc);
+        menu.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+
+        LinearLayout shareRow = bookMenuRow("分享", RemixIconGlyph.SHARE_FORWARD, Theme.SECONDARY);
+        shareRow.setOnClickListener(ignored -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            showBookShareSheet();
+        });
+        menu.addView(shareRow);
+
+        int popupWidth = dp(220);
+        PopupWindow popup = new PopupWindow(menu, popupWidth, -2, true);
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setElevation(dp(10));
+        popup.showAsDropDown(anchor,
+                PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth) - dp(5),
+                dp(10));
+        popupRef[0] = popup;
+    }
+
+    private LinearLayout bookMenuRow(String label, String glyph, int iconColor) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(18), 0, dp(16), 0);
+        row.setMinimumHeight(dp(48));
+        TextView text = new TextView(this);
+        text.setText(label);
+        text.setTextSize(17);
+        text.setTextColor(Theme.INK);
+        text.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+        RemixIconView icon = new RemixIconView(this);
+        icon.setIcon(glyph);
+        icon.setTextSize(22);
+        icon.setTextColor(iconColor);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        return row;
+    }
+
+    private GradientDrawable roundedMenuBackground() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xf9ffffff);
+        background.setCornerRadius(dp(16));
+        return background;
     }
 
     private void showBookShareSheet() {

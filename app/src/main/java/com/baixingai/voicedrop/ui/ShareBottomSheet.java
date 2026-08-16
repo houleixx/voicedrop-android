@@ -55,15 +55,6 @@ public final class ShareBottomSheet {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
 
-        FrameLayout handleArea = new FrameLayout(activity);
-        View handle = new View(activity);
-        handle.setBackground(pill(0x26766f67, activity));
-        FrameLayout.LayoutParams handleParams = new FrameLayout.LayoutParams(
-                dp(activity, 34), dp(activity, 4), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        handleParams.topMargin = dp(activity, 8);
-        handleArea.addView(handle, handleParams);
-        content.addView(handleArea, new LinearLayout.LayoutParams(-1, dp(activity, 20)));
-
         GridLayout grid = new GridLayout(activity);
         grid.setColumnCount(COLUMN_COUNT);
         int rows = (items.size() + COLUMN_COUNT - 1) / COLUMN_COUNT;
@@ -104,7 +95,7 @@ public final class ShareBottomSheet {
             grid.addView(target, params);
         }
 
-        int contentHeight = 28 + rows * TARGET_HEIGHT_DP
+        int contentHeight = 8 + rows * TARGET_HEIGHT_DP
                 + (rows > 1 ? FIRST_ROW_EXTRA_BOTTOM_DP : 0)
                 + Math.max(0, rows - 1) * ROW_SEPARATOR_HEIGHT_DP;
         dialogRef[0] = IosDialog.showBottomSheet(activity, null, content,
@@ -166,13 +157,6 @@ public final class ShareBottomSheet {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setShape(GradientDrawable.OVAL);
         drawable.setColor(color);
-        return drawable;
-    }
-
-    private static GradientDrawable pill(int color, Activity activity) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp(activity, 2));
         return drawable;
     }
 

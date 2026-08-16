@@ -24,6 +24,8 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("index % COLUMN_COUNT == 0"));
         assertTrue(source.contains("setContentDescription(item.label)"));
         assertTrue(source.contains("dialogRef[0].dismissAnimated(item.action)"));
+        assertFalse(source.contains("handleArea"));
+        assertFalse(source.contains("handleParams"));
         assertFalse(source.contains("dialogRef[0].dismiss();\n                item.action.run();"));
     }
 

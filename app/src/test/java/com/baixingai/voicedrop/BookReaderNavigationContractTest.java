@@ -18,10 +18,10 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("this::finishWithPageTransition"));
         assertTrue(shelf.contains("BookReaderActivity.open((Activity) getContext(), book)"));
         assertTrue(reader.contains("AliIconFont.MORE, Theme.SECONDARY, \"更多\""));
-        assertTrue(reader.contains("this::showBookMenu"));
-        assertTrue(reader.contains("ShareBottomSheet.remix(\"修改这本书\""));
-        assertTrue(reader.contains("ShareBottomSheet.remix(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
-        String bookMenu = reader.substring(reader.indexOf("private void showBookMenu()"),
+        assertTrue(reader.contains("moreAction.setOnClickListener(this::showBookMenu)"));
+        assertTrue(reader.contains("bookMenuRow(\"修改这本书\", RemixIconGlyph.EDIT"));
+        assertTrue(reader.contains("bookMenuRow(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
+        String bookMenu = reader.substring(reader.indexOf("private void showBookMenu(View anchor)"),
                 reader.indexOf("private void showBookShareSheet()"));
         assertTrue(!bookMenu.contains("微信好友"));
         assertTrue(!bookMenu.contains("朋友圈"));
@@ -42,7 +42,8 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("String shareTitle = getIntent().getStringExtra(\"shareTitle\")"));
         assertTrue(reader.contains("? getIntent().getStringExtra(\"displayTitle\") : shareTitle"));
         assertTrue(!reader.contains("intent.putExtra(\"title\", book.main)"));
-        assertTrue(!reader.contains("new PopupWindow"));
+        assertTrue(reader.contains("new PopupWindow(menu, popupWidth, -2, true)"));
+        assertTrue(reader.contains("popup.showAsDropDown(anchor"));
         assertTrue(reader.contains("WechatMiniProgramShare.sendFriend(this, title, url, cover)"));
         assertTrue(reader.contains("WechatMiniProgramShare.sendTimeline(this, title, url, cover)"));
         assertTrue(!reader.contains("WechatMiniProgramShare.bookPath("));

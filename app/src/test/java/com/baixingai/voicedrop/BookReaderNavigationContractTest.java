@@ -54,6 +54,10 @@ public final class BookReaderNavigationContractTest {
         assertTrue(titleBar.contains("new FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)"));
         assertTrue(titleBar.contains("touch.addView(button, new FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER))"));
         assertTrue(reader.contains("new LoadingStateView(this, \"正在加载书籍…\")"));
+        assertTrue(reader.contains("page.setBackgroundColor(Theme.BG)"));
+        assertTrue(reader.contains("web.setBackgroundColor(Theme.BG)"));
+        assertTrue(reader.contains("loadingState.setBackgroundColor(Theme.BG)"));
+        assertTrue(!reader.contains("0xfffffaf0"));
         assertTrue(reader.contains("onPageStarted(WebView view"));
         assertTrue(reader.contains("onPageFinished(WebView view"));
         assertTrue(reader.contains("request.isForMainFrame()"));

@@ -65,7 +65,7 @@ public final class BookReaderActivity extends Activity {
         SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(0xfffffaf0);
+        page.setBackgroundColor(Theme.BG);
         PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
         FrameLayout moreAction = titleBar.addIconAction(
@@ -75,7 +75,7 @@ public final class BookReaderActivity extends Activity {
 
         FrameLayout content = new FrameLayout(this);
         web = new WebView(this);
-        web.setBackgroundColor(0xfffffaf0);
+        web.setBackgroundColor(Theme.BG);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.setWebViewClient(new WebViewClient() {
@@ -97,7 +97,7 @@ public final class BookReaderActivity extends Activity {
         });
         content.addView(web, new FrameLayout.LayoutParams(-1, -1));
         loadingState = new LoadingStateView(this, "正在加载书籍…");
-        loadingState.setBackgroundColor(0xfffffaf0);
+        loadingState.setBackgroundColor(Theme.BG);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
         loadingParams.topMargin = dp(20);
         content.addView(loadingState, loadingParams);

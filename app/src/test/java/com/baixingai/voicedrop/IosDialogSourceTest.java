@@ -49,6 +49,8 @@ public class IosDialogSourceTest {
         assertTrue(bars.contains("public static void applyEdgeToEdgeModal"));
         assertTrue(bars.contains("WindowCompat.setDecorFitsSystemWindows(window, false)"));
         assertTrue(bars.contains("window.setStatusBarColor(Color.TRANSPARENT)"));
+        assertTrue(dialog.contains("WindowInsets.Type.navigationBars()"));
+        assertTrue(dialog.contains("Math.max(imeBottom, navigationBottom)"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

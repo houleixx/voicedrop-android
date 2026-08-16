@@ -323,7 +323,9 @@ public final class IosDialog extends Dialog {
         if (bottomSheet && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             root.setOnApplyWindowInsetsListener((view, insets) -> {
                 int imeBottom = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
-                view.setPadding(0, rootTopPadding, 0, imeBottom);
+                int navigationBottom = insets.getInsets(
+                        android.view.WindowInsets.Type.navigationBars()).bottom;
+                view.setPadding(0, rootTopPadding, 0, Math.max(imeBottom, navigationBottom));
                 return insets;
             });
         }

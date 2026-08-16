@@ -43,6 +43,12 @@ import java.util.concurrent.Executors;
 
 /** In-app web reader for a published VoiceDrop book. */
 public final class BookReaderActivity extends Activity {
+    private static final String MATCH_NATIVE_BACKGROUND_SCRIPT =
+            "(function(){var id='voicedrop-native-background';"
+                    + "var style=document.getElementById(id);"
+                    + "if(!style){style=document.createElement('style');style.id=id;"
+                    + "style.textContent='html,body{background:#FAF6EF!important}';"
+                    + "document.head.appendChild(style);}})();";
     private WebView web;
     private LoadingStateView loadingState;
     private BookReviseBottomSheet reviseSheet;
@@ -84,6 +90,7 @@ public final class BookReaderActivity extends Activity {
             }
 
             @Override public void onPageFinished(WebView view, String url) {
+                view.evaluateJavascript(MATCH_NATIVE_BACKGROUND_SCRIPT, null);
                 hideLoading();
             }
 

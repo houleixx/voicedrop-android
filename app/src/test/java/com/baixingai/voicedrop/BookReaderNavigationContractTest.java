@@ -60,6 +60,8 @@ public final class BookReaderNavigationContractTest {
         assertTrue(!reader.contains("0xfffffaf0"));
         assertTrue(reader.contains("onPageStarted(WebView view"));
         assertTrue(reader.contains("onPageFinished(WebView view"));
+        assertTrue(reader.contains("html,body{background:#FAF6EF!important}"));
+        assertTrue(reader.contains("view.evaluateJavascript(MATCH_NATIVE_BACKGROUND_SCRIPT, null)"));
         assertTrue(reader.contains("request.isForMainFrame()"));
         assertTrue(reader.contains("new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP)"));
         assertTrue(reader.contains("loadingParams.topMargin = dp(20)"));

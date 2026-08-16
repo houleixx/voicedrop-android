@@ -38,6 +38,7 @@ import java.util.concurrent.Executors;
 public final class BookReaderActivity extends Activity {
     private WebView web;
     private LoadingStateView loadingState;
+    private BookReviseBottomSheet reviseSheet;
     private final ExecutorService shareIo = Executors.newSingleThreadExecutor();
 
     /** Opens with the same leftward page transition used by the rest of the app. */
@@ -61,8 +62,8 @@ public final class BookReaderActivity extends Activity {
         PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
         titleBar.addIconAction(
-                AliIconFont.SHARE_FORWARD, Theme.SECONDARY, "分享",
-                this::showBookShareSheet);
+                AliIconFont.MORE, Theme.SECONDARY, "更多",
+                this::showBookMenu);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 
         FrameLayout content = new FrameLayout(this);
@@ -112,8 +113,10 @@ public final class BookReaderActivity extends Activity {
         if (loadingState != null) loadingState.setVisibility(View.GONE);
     }
 
-    private void showBookShareSheet() {
+    private void showBookMenu() {
         List<ShareBottomSheet.Item> items = new ArrayList<>();
+        items.add(ShareBottomSheet.remix("修改这本书", RemixIconGlyph.EDIT,
+                ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.ACCENT, this::openBookRevision));
         items.add(ShareBottomSheet.drawable("微信好友", R.drawable.ic_wechat,
                 ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(false)));
         items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,
@@ -123,6 +126,24 @@ public final class BookReaderActivity extends Activity {
         items.add(ShareBottomSheet.drawable("其它分享", R.drawable.ic_share_forward,
                 ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 24, this::shareBookWithSystem));
         ShareBottomSheet.show(this, items);
+    }
+
+    private void openBookRevision() {
+        reviseSheet = BookReviseBottomSheet.show(this, getIntent().getStringExtra("slug"),
+                getIntent().getStringExtra("displayTitle"), () -> {
+                    reviseSheet = null;
+                    if (web != null && !isFinishing() && !isDestroyed()) web.reload();
+                });
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        if (reviseSheet != null) reviseSheet.onHostStart();
+    }
+
+    @Override protected void onStop() {
+        if (reviseSheet != null) reviseSheet.onHostStop();
+        super.onStop();
     }
 
     private void copyBookLink() {
@@ -227,6 +248,7 @@ public final class BookReaderActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (reviseSheet != null) reviseSheet.dismiss();
         if (web != null) web.destroy();
         shareIo.shutdownNow();
         super.onDestroy();

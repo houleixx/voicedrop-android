@@ -17,8 +17,11 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)"));
         assertTrue(reader.contains("this::finishWithPageTransition"));
         assertTrue(shelf.contains("BookReaderActivity.open((Activity) getContext(), book)"));
-        assertTrue(reader.contains("AliIconFont.SHARE_FORWARD, Theme.SECONDARY, \"分享\""));
-        assertTrue(reader.contains("this::showBookShareSheet"));
+        assertTrue(reader.contains("AliIconFont.MORE, Theme.SECONDARY, \"更多\""));
+        assertTrue(reader.contains("this::showBookMenu"));
+        assertTrue(reader.contains("ShareBottomSheet.remix(\"修改这本书\""));
+        assertTrue(reader.contains("BookReviseBottomSheet.show"));
+        assertTrue(reader.contains("web.reload()"));
         assertTrue(reader.contains("ShareBottomSheet.drawable(\"微信好友\""));
         assertTrue(reader.contains("ShareBottomSheet.remix(\"朋友圈\""));
         assertTrue(reader.contains("ShareBottomSheet.drawable(\"复制链接\""));

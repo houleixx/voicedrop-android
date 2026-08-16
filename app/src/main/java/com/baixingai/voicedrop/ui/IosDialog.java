@@ -297,7 +297,11 @@ public final class IosDialog extends Dialog {
                                boolean includeDefaultCancelButton) {
         Window window = getWindow();
         if (window != null) {
-            DialogWindowDefaults.applyModal(window, SCRIM_COLOR, bottomSheet ? Theme.CARD : SCRIM_COLOR, bottomSheet);
+            if (bottomSheet) {
+                DialogWindowDefaults.applyEdgeToEdgeModal(window, Theme.CARD, true);
+            } else {
+                DialogWindowDefaults.applyModal(window, SCRIM_COLOR, SCRIM_COLOR, false);
+            }
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                     | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED);
         }

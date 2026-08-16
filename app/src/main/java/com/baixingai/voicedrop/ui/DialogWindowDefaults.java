@@ -9,6 +9,11 @@ public final class DialogWindowDefaults {
         SystemBarDefaults.applyModal(window, statusBarColor, navigationBarColor, lightNavigationBar);
     }
 
+    public static void applyEdgeToEdgeModal(Window window, int navigationBarColor,
+                                            boolean lightNavigationBar) {
+        SystemBarDefaults.applyEdgeToEdgeModal(window, navigationBarColor, lightNavigationBar);
+    }
+
     public static void applyFullscreen(Window window) {
         SystemBarDefaults.applyFullscreen(window);
     }

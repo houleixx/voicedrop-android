@@ -20,7 +20,9 @@ public class CommunityMiniProgramShareSourceTest {
         assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
         assertTrue(source.contains("Api.sharePage(post.shareId)"));
-        assertTrue(source.contains("WechatMiniProgramShare.communityPath(post.shareId)"));
+        assertTrue(source.contains("WechatMiniProgramShare.communityPath(post.shareId, articleIndex)"));
+        assertTrue(source.contains("WechatShareContent.communityUrl("));
+        assertTrue(source.contains("WechatShareContent.excerpt("));
         assertTrue(source.contains("communityShareThumbnail(post)"));
         assertTrue(source.contains("ArticleBody.firstPhotoKey(article.body, doc.photos)"));
         assertTrue(source.contains("warmCommunityShareThumbnail(post)"));

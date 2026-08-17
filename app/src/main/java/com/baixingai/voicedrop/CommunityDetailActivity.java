@@ -44,6 +44,7 @@ import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.WechatShareContent;
 import com.baixingai.voicedrop.core.MarkdownBlock;
 import com.baixingai.voicedrop.core.ArticleRenderPolicy;
 import com.baixingai.voicedrop.core.PhotoLoadPolicy;
@@ -1907,7 +1908,7 @@ public final class CommunityDetailActivity extends Activity {
     protected void shareCommunityUrl(CommunityStore.Post post) {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_TEXT, com.baixingai.voicedrop.net.Api.sharePage(post.shareId));
+        intent.putExtra(Intent.EXTRA_TEXT, communityShareUrl(post));
         startActivity(Intent.createChooser(intent, "分享社区文章"));
     }
 
@@ -1931,14 +1932,19 @@ public final class CommunityDetailActivity extends Activity {
 
     protected void shareCommunityTimeline(CommunityStore.Post post) {
         WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        MinedArticle article = communityShareArticle(post);
+        String title = article == null || article.title == null || article.title.trim().isEmpty()
+                ? post.title : article.title;
+        String author = post.author == null || post.author.trim().isEmpty() ? "匿名" : post.author.trim();
+        String description = author + " · " + WechatShareContent.excerpt(
+                article == null ? null : article.body, "来自 VD 社区");
         io.execute(() -> {
             android.graphics.Bitmap thumbnail = communityShareThumbnail(post);
             main.post(() -> {
                 loading.dismiss();
                 WechatMiniProgramShare.Result result = WechatMiniProgramShare.sendTimeline(
-                        this, post.title, com.baixingai.voicedrop.net.Api.sharePage(post.shareId), thumbnail,
-                        "打开 VoiceDrop 查看这篇社区分享");
-                toast(result.message());
+                        this, title, communityShareUrl(post), thumbnail, description);
+                showCommunityWechatResult(result, title, communityShareUrl(post));
             });
         });
     }
@@ -1950,34 +1956,37 @@ public final class CommunityDetailActivity extends Activity {
             return;
         }
         clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 社区链接",
-                com.baixingai.voicedrop.net.Api.sharePage(post.shareId)));
+                communityShareUrl(post)));
         toast("链接已复制");
     }
 
 
     protected void shareCommunityMiniProgramCard(CommunityStore.Post post) {
         WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
+        MinedArticle article = communityShareArticle(post);
+        String title = article == null || article.title == null || article.title.trim().isEmpty()
+                ? post.title : article.title;
+        String author = post.author == null || post.author.trim().isEmpty() ? "匿名" : post.author.trim();
+        String description = author + " · " + WechatShareContent.excerpt(
+                article == null ? null : article.body, "来自 VD 社区");
         io.execute(() -> {
             android.graphics.Bitmap thumbnail = communityShareThumbnail(post);
             main.post(() -> {
                 loading.dismiss();
-                WechatMiniProgramShare.Result result = WechatMiniProgramShare.send(this, post.title,
-                        com.baixingai.voicedrop.net.Api.sharePage(post.shareId),
-                        WechatMiniProgramShare.communityPath(post.shareId), thumbnail);
-                toast(result.message());
+                WechatMiniProgramShare.Result result = WechatMiniProgramShare.send(this, title,
+                        communityShareUrl(post),
+                        WechatMiniProgramShare.communityPath(post.shareId, articleIndex), thumbnail,
+                        description);
+                showCommunityWechatResult(result, title, communityShareUrl(post));
             });
         });
     }
 
     private android.graphics.Bitmap communityShareThumbnail(CommunityStore.Post post) {
-        String key = post.coverPhotoKey;
-        ArticleDoc doc = post.doc;
-        if ((key == null || key.trim().isEmpty()) && doc != null && doc.articles != null) {
-            for (MinedArticle article : doc.articles) {
-                key = ArticleBody.firstPhotoKey(article.body, doc.photos);
-                if (key != null && !key.trim().isEmpty()) break;
-            }
-        }
+        ArticleDoc doc = currentArticleDoc != null ? currentArticleDoc : post.doc;
+        MinedArticle article = communityShareArticle(post);
+        String key = article == null || doc == null ? null
+                : ArticleBody.firstPhotoKey(article.body, doc.photos);
         if (key == null || key.trim().isEmpty()) return null;
         try {
             String fullKey = key;
@@ -1991,6 +2000,30 @@ public final class CommunityDetailActivity extends Activity {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private MinedArticle communityShareArticle(CommunityStore.Post post) {
+        ArticleDoc doc = currentArticleDoc != null ? currentArticleDoc : (post == null ? null : post.doc);
+        if (doc == null || doc.articles == null || doc.articles.isEmpty()) return null;
+        return doc.articles.get(Math.min(Math.max(0, articleIndex), doc.articles.size() - 1));
+    }
+
+    private String communityShareUrl(CommunityStore.Post post) {
+        return WechatShareContent.communityUrl(
+                com.baixingai.voicedrop.net.Api.sharePage(post.shareId), articleIndex);
+    }
+
+    private void showCommunityWechatResult(WechatMiniProgramShare.Result result,
+                                           String title, String url) {
+        if (result == WechatMiniProgramShare.Result.WECHAT_NOT_INSTALLED) {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 社区链接", title + "\n" + url));
+                toast("未安装微信，链接已复制");
+                return;
+            }
+        }
+        toast(result.message());
     }
 
     private void warmCommunityShareThumbnail(CommunityStore.Post post) {

@@ -40,7 +40,7 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("ShareBottomSheet.drawable(\"小红书\""));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
-        assertTrue(source.contains("打开 VoiceDrop 阅读这篇文章"));
+        assertTrue(source.contains("WechatShareContent.excerpt("));
         String more = method(source, "protected void showMoreMenu", "protected void shareToXhs");
         assertTrue(more.contains("发布公众号草稿"));
         assertTrue(more.contains("VD 社区可见"));
@@ -61,7 +61,7 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("ShareBottomSheet.remix(\"朋友圈\""));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
-        assertTrue(source.contains("打开 VoiceDrop 查看这篇社区分享"));
+        assertTrue(source.contains("WechatShareContent.excerpt("));
         assertFalse(source.contains("ShareBottomSheet.drawable(\"小红书\""));
         String more = method(source, "protected void showCommunityPostMenu", "protected void showReportConfirm");
         assertTrue(more.contains("menuRow(\"写回应\""));
@@ -82,7 +82,7 @@ public final class DetailShareBottomSheetSourceTest {
         assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
         assertTrue(source.contains("this::copyBookLink"));
         assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
-        assertTrue(source.contains("ClipData.newPlainText(\"VoiceDrop 书籍链接\", url)"));
+        assertTrue(source.contains("ClipData.newPlainText(\"VoiceDrop 书籍链接\", target.url)"));
     }
 
     private static String method(String source, String start, String end) {

@@ -24,7 +24,8 @@ public final class BookShelfIndex {
                         item.optString("sub", ""), item.optString("c", "#8B6652"),
                         item.optString("c2", "#4B342C"), item.optBoolean("cover", false),
                         Math.max(0, item.optInt("chapters", 0)), item.optString("author", ""),
-                        Math.max(0L, item.optLong("createdAt", 0L))));
+                        Math.max(0L, item.optLong("createdAt", 0L)),
+                        Math.max(0L, item.optLong("coverAt", 0L))));
             }
         } catch (Exception ignored) {}
         return out;
@@ -34,14 +35,17 @@ public final class BookShelfIndex {
         public final String slug, title, main, sub, c, c2, author;
         public final boolean cover;
         public final int chapters;
-        public final long createdAt;
+        public final long createdAt, coverAt;
         public Book(String slug, String title, String main, String sub, String c, String c2,
-                    boolean cover, int chapters, String author, long createdAt) {
+                    boolean cover, int chapters, String author, long createdAt, long coverAt) {
             this.slug = slug; this.title = title; this.main = main; this.sub = sub;
             this.c = c; this.c2 = c2; this.cover = cover; this.chapters = chapters;
             this.author = author == null ? "" : author; this.createdAt = createdAt;
+            this.coverAt = coverAt;
         }
         public String readerUrl() { return "https://voicedrop.cn/books/" + slug + "/"; }
-        public String coverUrl() { return readerUrl() + "cover.jpg"; }
+        public String coverUrl() {
+            return readerUrl() + "cover.jpg" + (coverAt > 0 ? "?v=" + coverAt : "");
+        }
     }
 }

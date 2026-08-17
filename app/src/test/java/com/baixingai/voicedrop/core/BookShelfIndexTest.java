@@ -6,13 +6,15 @@ import static org.junit.Assert.*;
 public final class BookShelfIndexTest {
     @Test public void parsesIosShelfContractAndSkipsMissingSlug() {
         java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
-                "{\"slug\":\"a-book\",\"main\":\"主标题\",\"sub\":\"副标题\",\"c\":\"#111111\",\"c2\":\"#222222\",\"cover\":true,\"chapters\":7,\"author\":\"作者\",\"createdAt\":123},{}]}");
+                "{\"slug\":\"a-book\",\"main\":\"主标题\",\"sub\":\"副标题\",\"c\":\"#111111\",\"c2\":\"#222222\",\"cover\":true,\"coverAt\":456,\"chapters\":7,\"author\":\"作者\",\"createdAt\":123},{}]}");
         assertEquals(1, books.size());
         assertEquals("主标题", books.get(0).main);
         assertEquals(7, books.get(0).chapters);
         assertEquals("作者", books.get(0).author);
         assertEquals(123L, books.get(0).createdAt);
         assertEquals("https://voicedrop.cn/books/a-book/", books.get(0).readerUrl());
+        assertEquals(456L, books.get(0).coverAt);
+        assertEquals("https://voicedrop.cn/books/a-book/cover.jpg?v=456", books.get(0).coverUrl());
     }
 
     @Test public void preservesServerOrderInsteadOfSortingByCreatedAt() {
@@ -32,5 +34,7 @@ public final class BookShelfIndexTest {
         assertEquals(1, books.size());
         assertEquals("主标题：副标题", books.get(0).title);
         assertEquals(0L, books.get(0).createdAt);
+        assertEquals(0L, books.get(0).coverAt);
+        assertEquals("https://voicedrop.cn/books/legacy/cover.jpg", books.get(0).coverUrl());
     }
 }

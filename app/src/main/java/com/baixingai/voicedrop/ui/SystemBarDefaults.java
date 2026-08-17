@@ -201,6 +201,26 @@ public final class SystemBarDefaults {
         relayoutSystemBars(window);
     }
 
+    /** Hides only the navigation bar while preserving the caller's status-bar treatment. */
+    public static void hideNavigationBar(Window window) {
+        if (window == null) return;
+        WindowCompat.setDecorFitsSystemWindows(window, false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.setNavigationBarColor(Color.TRANSPARENT);
+        }
+        int flags = window.getDecorView().getSystemUiVisibility()
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        window.getDecorView().setSystemUiVisibility(flags);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+                window, window.getDecorView());
+        controller.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        controller.hide(WindowInsetsCompat.Type.navigationBars());
+        relayoutSystemBars(window);
+    }
+
     private static void allowDisplayCutout(Window window) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
         WindowManager.LayoutParams attributes = window.getAttributes();

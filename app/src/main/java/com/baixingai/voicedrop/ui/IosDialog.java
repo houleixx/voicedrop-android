@@ -228,6 +228,24 @@ public final class IosDialog extends Dialog {
         return dialog;
     }
 
+    /**
+     * Bottom sheet for a custom view that already owns its scrolling and fixed chrome.
+     * Keeping the custom view out of the dialog's ScrollView lets weighted children
+     * (for example, a conversation history above a pinned composer) measure correctly.
+     */
+    public static IosDialog showBottomSheetFixedContent(Context ctx, String title, View customView,
+                                                        int contentHeightDp,
+                                                        String positiveText, Runnable onPositive,
+                                                        String neutralText, Runnable onNeutral,
+                                                        boolean showCloseButton,
+                                                        boolean dismissOnOutside) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.buildWithView(ctx, title, customView, dp(ctx, contentHeightDp), positiveText, onPositive,
+                neutralText, onNeutral, showCloseButton, true, dismissOnOutside, true, false);
+        dialog.show();
+        return dialog;
+    }
+
     public static void show(Context ctx, String title, View customView, int contentHeightDp,
                             String positiveText, Runnable onPositive) {
         show(ctx, title, customView, contentHeightDp, positiveText, onPositive, false);
@@ -295,6 +313,20 @@ public final class IosDialog extends Dialog {
                                boolean bottomSheet,
                                boolean dismissOnOutside,
                                boolean includeDefaultCancelButton) {
+        buildWithView(ctx, title, contentView, contentHeight, positiveText, onPositive,
+                neutralText, onNeutral, showCloseButton, bottomSheet, dismissOnOutside,
+                includeDefaultCancelButton, true);
+    }
+
+    private void buildWithView(Context ctx, String title, View contentView,
+                               int contentHeight,
+                               String positiveText, Runnable onPositive,
+                               String neutralText, Runnable onNeutral,
+                               boolean showCloseButton,
+                               boolean bottomSheet,
+                               boolean dismissOnOutside,
+                               boolean includeDefaultCancelButton,
+                               boolean wrapContentInScrollView) {
         Window window = getWindow();
         if (window != null) {
             if (bottomSheet) {
@@ -334,7 +366,8 @@ public final class IosDialog extends Dialog {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(bottomSheet ? bottomSheetCard(ctx) : roundCard(ctx));
-        card.setPadding(0, 0, 0, bottomSheet ? dp(ctx, 20) : 0);
+        card.setPadding(0, 0, 0,
+                bottomSheet && wrapContentInScrollView ? dp(ctx, 20) : 0);
         card.setClickable(true);
         if (bottomSheet) {
             card.setTranslationY(ctx.getResources().getDisplayMetrics().heightPixels);
@@ -376,14 +409,19 @@ public final class IosDialog extends Dialog {
             card.addView(divider, new LinearLayout.LayoutParams(-1, dp(ctx, 1)));
         }
 
-        // Content (scrollable if tall)
-        ScrollView scroll = new ScrollView(ctx);
-        scroll.setFillViewport(true);
-        scroll.addView(contentView);
+        // Most dialog content benefits from an outer scroller. Complex custom pages can
+        // opt out when they already contain their own scrolling region and fixed chrome.
         int resolvedContentHeight = bottomSheet
                 ? Math.min(contentHeight, ctx.getResources().getDisplayMetrics().heightPixels - dp(ctx, 96))
                 : contentHeight;
-        card.addView(scroll, new LinearLayout.LayoutParams(-1, resolvedContentHeight));
+        if (wrapContentInScrollView) {
+            ScrollView scroll = new ScrollView(ctx);
+            scroll.setFillViewport(true);
+            scroll.addView(contentView);
+            card.addView(scroll, new LinearLayout.LayoutParams(-1, resolvedContentHeight));
+        } else {
+            card.addView(contentView, new LinearLayout.LayoutParams(-1, resolvedContentHeight));
+        }
 
         boolean hasButtons = (neutralText != null && !neutralText.isEmpty()) || positiveText != null;
         LinearLayout btnRow = null;

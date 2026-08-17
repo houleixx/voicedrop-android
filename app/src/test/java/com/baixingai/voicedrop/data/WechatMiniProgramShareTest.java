@@ -16,7 +16,9 @@ public class WechatMiniProgramShareTest {
 
     @Test
     public void buildsTheExistingMiniProgramCommunityRoute() {
-        assertEquals("pages/community-detail/index?shareId=share%20id%2F1&fromShare=1",
+        assertEquals("pages/community-detail/index?shareId=share%20id%2F1&section=0&fromShare=1",
                 WechatMiniProgramShare.communityPath("share id/1"));
+        assertEquals("pages/community-detail/index?shareId=abc123&section=2&fromShare=1",
+                WechatMiniProgramShare.communityPath("abc123", 2));
     }
 }

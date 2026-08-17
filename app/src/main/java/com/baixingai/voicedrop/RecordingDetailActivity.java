@@ -53,6 +53,7 @@ import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleRenderPolicy;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.WechatShareContent;
 import com.baixingai.voicedrop.core.MarkdownBlock;
 import com.baixingai.voicedrop.core.ArticleSharePayload;
 import com.baixingai.voicedrop.core.PhotoLoadPolicy;
@@ -2006,9 +2007,12 @@ public final class RecordingDetailActivity extends Activity {
 
     protected void shareRecordingTimeline(Recording rec) {
         WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
-        String title = currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
-                ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
+        MinedArticle article = currentShareArticle(currentArticleDoc, articleIndex);
+        String title = article != null
+                ? article.title
                 : rec.rowTitle();
+        String description = WechatShareContent.excerpt(article == null ? null : article.body,
+                "一篇口述而成的文章");
         io.execute(() -> {
             try {
                 String url = library.shareUrl(rec, articleIndex);
@@ -2016,8 +2020,8 @@ public final class RecordingDetailActivity extends Activity {
                 android.graphics.Bitmap image = articleShareThumbnail(currentArticleDoc, articleIndex);
                 main.post(() -> {
                     loading.dismiss();
-                    toast(WechatMiniProgramShare.sendTimeline(this, title, url, image,
-                            "打开 VoiceDrop 阅读这篇文章").message());
+                    showArticleWechatResult(WechatMiniProgramShare.sendTimeline(
+                            this, title, url, image, description), title, url);
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -2049,50 +2053,30 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void shareMiniProgramCard(Recording rec) {
-        if (Boolean.FALSE.equals(sharedToCommunity)) {
-            toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
-            return;
-        }
-        if (Boolean.TRUE.equals(sharedToCommunity) && communityShareId != null && !communityShareId.trim().isEmpty()) {
-            prepareMiniProgramCard(rec, communityShareId);
-            return;
-        }
-        // 分享状态还在同步时，只核对社区可见性；确认后才显示 loading 和准备封面。
-        io.execute(() -> {
-            try {
-                String shareId = community.sharedShareId(rec);
-                main.post(() -> {
-                    sharedToCommunity = shareId != null && !shareId.trim().isEmpty();
-                    communityShareId = sharedToCommunity ? shareId : null;
-                    if (!sharedToCommunity) {
-                        toast("请先在更多菜单开启“VD 社区可见”，再分享小程序卡片");
-                        return;
-                    }
-                    prepareMiniProgramCard(rec, shareId);
-                });
-            } catch (Exception e) {
-                main.post(() -> {
-                    toast("无法确认 VD 社区可见状态，请稍后重试");
-                });
-            }
-        });
+        prepareMiniProgramCard(rec);
     }
 
-    private void prepareMiniProgramCard(Recording rec, String shareId) {
+    private void prepareMiniProgramCard(Recording rec) {
         WechatShareLoadingDialog loading = WechatShareLoadingDialog.show(this);
-        String title = currentArticleDoc != null && !currentArticleDoc.articles.isEmpty()
-                ? currentArticleDoc.articles.get(Math.min(articleIndex, currentArticleDoc.articles.size() - 1)).title
+        MinedArticle article = currentShareArticle(currentArticleDoc, articleIndex);
+        String title = article != null
+                ? article.title
                 : rec.rowTitle();
+        String description = WechatShareContent.excerpt(article == null ? null : article.body,
+                "一篇口述而成的文章");
         io.execute(() -> {
             try {
                 String url = library.shareUrl(rec, articleIndex);
                 if (url == null) throw new IllegalStateException("无法生成链接");
+                String shareId = WechatShareContent.publicShareId(url);
+                String miniPath = WechatShareContent.sharedArticlePath(shareId, articleIndex);
+                if (miniPath.isEmpty()) throw new IllegalStateException("无法识别分享链接");
                 android.graphics.Bitmap image = articleShareThumbnail(currentArticleDoc, articleIndex);
                 main.post(() -> {
                     loading.dismiss();
                     WechatMiniProgramShare.Result result = WechatMiniProgramShare.send(this, title, url,
-                            WechatMiniProgramShare.communityPath(shareId), image);
-                    toast(result.message());
+                            miniPath, image, description);
+                    showArticleWechatResult(result, title, url);
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -2103,9 +2087,27 @@ public final class RecordingDetailActivity extends Activity {
         });
     }
 
-    private android.graphics.Bitmap articleShareThumbnail(ArticleDoc doc, int section) {
+    private MinedArticle currentShareArticle(ArticleDoc doc, int section) {
         if (doc == null || doc.articles == null || doc.articles.isEmpty()) return null;
-        MinedArticle article = doc.articles.get(Math.min(Math.max(0, section), doc.articles.size() - 1));
+        return doc.articles.get(Math.min(Math.max(0, section), doc.articles.size() - 1));
+    }
+
+    private void showArticleWechatResult(WechatMiniProgramShare.Result result,
+                                         String title, String url) {
+        if (result == WechatMiniProgramShare.Result.WECHAT_NOT_INSTALLED) {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 文章链接", title + "\n" + url));
+                toast("未安装微信，链接已复制");
+                return;
+            }
+        }
+        toast(result.message());
+    }
+
+    private android.graphics.Bitmap articleShareThumbnail(ArticleDoc doc, int section) {
+        MinedArticle article = currentShareArticle(doc, section);
+        if (article == null) return null;
         String key = ArticleBody.firstPhotoKey(article.body, doc.photos);
         if (key == null || key.trim().isEmpty()) return null;
         try {

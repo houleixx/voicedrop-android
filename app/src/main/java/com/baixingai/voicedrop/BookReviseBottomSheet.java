@@ -9,6 +9,7 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -23,6 +24,7 @@ import com.baixingai.voicedrop.core.BookReviseThread;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.IosDialog;
+import com.baixingai.voicedrop.ui.DialogWindowDefaults;
 import com.baixingai.voicedrop.ui.RemixIconGlyph;
 import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.Theme;
@@ -94,6 +96,10 @@ public final class BookReviseBottomSheet {
         FrameLayout content = new FrameLayout(activity);
         scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
+        scroll.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_MOVE) hideKeyboard();
+            return false;
+        });
         threadList = new LinearLayout(activity);
         threadList.setOrientation(LinearLayout.VERTICAL);
         threadList.setPadding(dp(18), dp(6), dp(18), dp(12));
@@ -131,8 +137,9 @@ public final class BookReviseBottomSheet {
         int screenHeightDp = Math.round(activity.getResources().getDisplayMetrics().heightPixels
                 / activity.getResources().getDisplayMetrics().density);
         int contentHeightDp = Math.max(360, Math.round(screenHeightDp * 0.84f) - 74);
-        dialog = IosDialog.showBottomSheet(activity, "修改《" + safeTitle(title) + "》", page,
+        dialog = IosDialog.showBottomSheetFixedContent(activity, "修改《" + safeTitle(title) + "》", page,
                 contentHeightDp, null, null, null, null, true, true);
+        DialogWindowDefaults.hideNavigationBar(dialog.getWindow());
         dialog.setOnDismissListener(ignored -> destroy());
         started = true;
         loadHistory(true);
@@ -147,6 +154,7 @@ public final class BookReviseBottomSheet {
 
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.BOTTOM);
+        row.setBaselineAligned(false);
         input = new EditText(activity);
         input.setHint("想怎么改这本书？比如：第三章开头太啰嗦，删一半");
         input.setTextSize(15);
@@ -159,12 +167,17 @@ public final class BookReviseBottomSheet {
         input.setBackground(stroked(Theme.CARD, 9, Theme.ACCENT, 1));
         row.addView(input, new LinearLayout.LayoutParams(0, -2, 1));
 
-        send = text("↑", 23, 0xffffffff, Typeface.BOLD);
+        RemixIconView sendIcon = new RemixIconView(activity);
+        sendIcon.setIcon(RemixIconGlyph.ARROW_UP_LINE);
+        sendIcon.setTextSize(22);
+        sendIcon.setTextColor(0xffffffff);
+        send = sendIcon;
         send.setGravity(Gravity.CENTER);
         send.setContentDescription("提交修改");
         send.setOnClickListener(v -> submit());
         LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(42), dp(42));
         sendParams.leftMargin = dp(10);
+        sendParams.gravity = Gravity.BOTTOM;
         row.addView(send, sendParams);
         bar.addView(row, new LinearLayout.LayoutParams(-1, -2));
 

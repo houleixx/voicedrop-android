@@ -11,6 +11,7 @@ public final class RemixIconGlyph {
     public static final String ARROW_GO_FORWARD = "\uEA5A";
     public static final String ARROW_LEFT = "\uEA64";
     public static final String ARROW_RIGHT = "\uEA6E";
+    public static final String ARROW_UP_LINE = "\uEA76";
     public static final String BOOK_OPEN = "\uEADB";
     public static final String BOOK_READ = "\uEADD";
     public static final String CAMERA_LENS_LINE = "\uEB30";

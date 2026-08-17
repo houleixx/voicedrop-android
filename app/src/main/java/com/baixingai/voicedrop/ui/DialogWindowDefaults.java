@@ -17,4 +17,8 @@ public final class DialogWindowDefaults {
     public static void applyFullscreen(Window window) {
         SystemBarDefaults.applyFullscreen(window);
     }
+
+    public static void hideNavigationBar(Window window) {
+        SystemBarDefaults.hideNavigationBar(window);
+    }
 }

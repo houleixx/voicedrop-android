@@ -23,6 +23,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
+import com.baixingai.voicedrop.core.BookShareTarget;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.LoadingStateView;
@@ -53,6 +54,8 @@ public final class BookReaderActivity extends Activity {
     private LoadingStateView loadingState;
     private BookReviseBottomSheet reviseSheet;
     private final ExecutorService shareIo = Executors.newSingleThreadExecutor();
+    private String currentPageUrl;
+    private String currentPageTitle;
 
     /** Opens with the same leftward page transition used by the rest of the app. */
     public static void open(Activity source, BookShelfIndex.Book book) {
@@ -62,6 +65,7 @@ public final class BookReaderActivity extends Activity {
         intent.putExtra("shareTitle", book.title);
         intent.putExtra("author", book.author);
         intent.putExtra("cover", book.cover);
+        intent.putExtra("coverUrl", book.coverUrl());
         source.startActivity(intent);
         source.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
@@ -90,8 +94,13 @@ public final class BookReaderActivity extends Activity {
             }
 
             @Override public void onPageFinished(WebView view, String url) {
+                updateShareLocation(view, url);
                 view.evaluateJavascript(MATCH_NATIVE_BACKGROUND_SCRIPT, null);
                 hideLoading();
+            }
+
+            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                updateShareLocation(view, url);
             }
 
             @Override public void onReceivedError(WebView view, WebResourceRequest request,
@@ -224,8 +233,8 @@ public final class BookReaderActivity extends Activity {
     }
 
     private void copyBookLink() {
-        String slug = getIntent().getStringExtra("slug");
-        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) {
+        BookShareTarget.Target target = currentShareTarget();
+        if (target == null) {
             SimpleToast.show(this, "复制失败");
             return;
         }
@@ -234,65 +243,56 @@ public final class BookReaderActivity extends Activity {
             SimpleToast.show(this, "复制失败");
             return;
         }
-        String url = "https://voicedrop.cn/books/" + slug + "/";
-        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接", url));
+        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接", target.url));
         SimpleToast.show(this, "链接已复制");
     }
 
     private void shareBookToWechat(boolean timeline) {
         String slug = getIntent().getStringExtra("slug");
         if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
-        String shareTitle = getIntent().getStringExtra("shareTitle");
-        final String title = shareTitle == null || shareTitle.trim().isEmpty()
-                ? getIntent().getStringExtra("displayTitle") : shareTitle;
-        String url = "https://voicedrop.cn/books/" + slug + "/";
+        BookShareTarget.Target target = currentShareTarget();
+        if (target == null) return;
         if (!getIntent().getBooleanExtra("cover", false)) {
-            showWechatShareResult(sendToWechat(timeline, title, url, null));
+            showWechatShareResult(sendToWechat(timeline, target, null), target);
             return;
         }
         SimpleToast.show(this, "正在准备微信分享…");
         shareIo.execute(() -> {
-            Bitmap cover = loadBookCover(url + "cover.jpg");
+            Bitmap cover = loadBookCover(getIntent().getStringExtra("coverUrl"));
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) {
                     if (cover != null) cover.recycle();
                     return;
                 }
                 WechatMiniProgramShare.Result result = sendToWechat(
-                        timeline, title, url, cover);
+                        timeline, target, cover);
                 if (cover != null) cover.recycle();
-                showWechatShareResult(result);
+                showWechatShareResult(result, target);
             });
         });
     }
 
-    private WechatMiniProgramShare.Result sendToWechat(boolean timeline, String title,
-                                                        String url, Bitmap cover) {
-        if (timeline) return WechatMiniProgramShare.sendTimeline(this, title, url, cover);
-        return WechatMiniProgramShare.sendFriend(this, title, url, cover);
+    private WechatMiniProgramShare.Result sendToWechat(boolean timeline,
+                                                        BookShareTarget.Target target, Bitmap cover) {
+        String description = target.chapter ? rootBookTitle() : "VoiceDrop 图书馆 · 点开即读";
+        if (timeline) return WechatMiniProgramShare.sendTimeline(
+                this, target.title, target.url, cover, description);
+        return WechatMiniProgramShare.sendFriend(this, target.title, target.url, cover, description);
     }
 
     private void shareBookWithSystem() {
-        String slug = getIntent().getStringExtra("slug");
-        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
-        String title = getIntent().getStringExtra("shareTitle");
-        if (title == null || title.trim().isEmpty()) {
-            title = getIntent().getStringExtra("displayTitle");
-        }
-        String author = getIntent().getStringExtra("author");
-        String safeTitle = title == null || title.trim().isEmpty() ? "未命名" : title.trim();
-        String safeAuthor = author == null ? "" : author.trim();
-        String url = "https://voicedrop.cn/books/" + slug + "/";
-        String text = "《" + safeTitle + "》"
-                + (safeAuthor.isEmpty() ? "" : " — " + safeAuthor) + "\n" + url;
+        BookShareTarget.Target target = currentShareTarget();
+        if (target == null) return;
+        String text = target.title + "\n" + target.url;
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
-        send.putExtra(Intent.EXTRA_SUBJECT, safeTitle);
+        send.putExtra(Intent.EXTRA_SUBJECT, target.title);
         send.putExtra(Intent.EXTRA_TEXT, text);
         startActivity(Intent.createChooser(send, "分享这本书"));
     }
 
     private Bitmap loadBookCover(String coverUrl) {
+        if (coverUrl == null || coverUrl.trim().isEmpty()) return null;
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(coverUrl).openConnection();
@@ -306,7 +306,43 @@ public final class BookReaderActivity extends Activity {
         }
     }
 
-    private void showWechatShareResult(WechatMiniProgramShare.Result result) {
+    private void updateShareLocation(WebView view, String url) {
+        currentPageUrl = url;
+        currentPageTitle = view == null ? null : view.getTitle();
+    }
+
+    private BookShareTarget.Target currentShareTarget() {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return null;
+        String root = "https://voicedrop.cn/books/" + slug + "/";
+        String bookTitle = getIntent().getStringExtra("shareTitle");
+        if (bookTitle == null || bookTitle.trim().isEmpty()) {
+            bookTitle = getIntent().getStringExtra("displayTitle");
+        }
+        return BookShareTarget.resolve(root, currentPageUrl, currentPageTitle,
+                bookTitle, getIntent().getStringExtra("author"));
+    }
+
+    private String rootBookTitle() {
+        String title = getIntent().getStringExtra("shareTitle");
+        if (title == null || title.trim().isEmpty()) title = getIntent().getStringExtra("displayTitle");
+        if (title == null || title.trim().isEmpty()) title = "未命名";
+        String author = getIntent().getStringExtra("author");
+        return "《" + title.trim() + "》"
+                + (author == null || author.trim().isEmpty() ? "" : " — " + author.trim());
+    }
+
+    private void showWechatShareResult(WechatMiniProgramShare.Result result,
+                                       BookShareTarget.Target target) {
+        if (result == WechatMiniProgramShare.Result.WECHAT_NOT_INSTALLED) {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接",
+                        target.title + "\n" + target.url));
+                SimpleToast.show(this, "未安装微信，链接已复制");
+                return;
+            }
+        }
         SimpleToast.show(this, result.message());
     }
 

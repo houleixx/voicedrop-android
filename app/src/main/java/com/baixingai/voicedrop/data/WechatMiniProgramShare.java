@@ -86,9 +86,14 @@ public final class WechatMiniProgramShare {
     }
 
     public static String communityPath(String shareId) {
+        return communityPath(shareId, 0);
+    }
+
+    public static String communityPath(String shareId, int section) {
         String id = shareId == null ? "" : shareId.trim();
         try {
-            return "pages/community-detail/index?shareId=" + URLEncoder.encode(id, "UTF-8").replace("+", "%20") + "&fromShare=1";
+            return "pages/community-detail/index?shareId=" + URLEncoder.encode(id, "UTF-8").replace("+", "%20")
+                    + "&section=" + Math.max(0, section) + "&fromShare=1";
         } catch (UnsupportedEncodingException impossible) {
             throw new AssertionError(impossible);
         }
@@ -96,8 +101,12 @@ public final class WechatMiniProgramShare {
 
     public static Result sendFriend(Context context, String title, String webpageUrl,
                                     Bitmap thumbnailImage) {
-        return sendWebpage(context, title, webpageUrl, thumbnailImage,
-                "打开 VoiceDrop 阅读这本书",
+        return sendFriend(context, title, webpageUrl, thumbnailImage, "打开 VoiceDrop 阅读这本书");
+    }
+
+    public static Result sendFriend(Context context, String title, String webpageUrl,
+                                    Bitmap thumbnailImage, String description) {
+        return sendWebpage(context, title, webpageUrl, thumbnailImage, description,
                 SendMessageToWX.Req.WXSceneSession, Result.FRIEND_SENT);
     }
 

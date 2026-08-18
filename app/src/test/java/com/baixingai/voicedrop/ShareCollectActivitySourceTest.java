@@ -45,10 +45,33 @@ public class ShareCollectActivitySourceTest {
         assertTrue(styles.contains("<item name=\"android:windowIsTranslucent\">true</item>"));
     }
 
+    @Test
+    public void datasetTitlesUseEndEllipsisInsteadOfHardClipping() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/ShareCollectActivity.java");
+        String existing = methodBody(source, "private View existingRow");
+        String incoming = methodBody(source, "private View incomingRow");
+
+        assertTrue(existing.contains("setEllipsize(TextUtils.TruncateAt.END)"));
+        assertTrue(incoming.contains("setEllipsize(TextUtils.TruncateAt.END)"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path cwd = Paths.get("").toAbsolutePath();
         Path file = cwd.resolve(moduleRelative);
         if (!Files.exists(file)) file = cwd.resolve("app").resolve(moduleRelative);
         return new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+    }
+
+    private static String methodBody(String source, String signature) {
+        int start = source.indexOf(signature);
+        if (start < 0) return "";
+        int open = source.indexOf('{', start);
+        int depth = 0;
+        for (int index = open; index < source.length(); index++) {
+            char value = source.charAt(index);
+            if (value == '{') depth++;
+            if (value == '}' && --depth == 0) return source.substring(open + 1, index);
+        }
+        return "";
     }
 }

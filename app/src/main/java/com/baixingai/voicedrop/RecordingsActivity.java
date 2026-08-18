@@ -1368,14 +1368,34 @@ public final class RecordingsActivity extends Activity {
             refreshDataInBackground();
             return;
         }
+        final List<String> before = recordingsViewSignature(recordings);
         io.execute(() -> {
             uploader.drainPending();
+            boolean tagsChanged = false;
             try {
-                loadRecordingsAndPublishPendingReplies();
+                tagsChanged = loadRecordingsAndPublishPendingReplies();
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
+            boolean recordingsChanged = !before.equals(recordingsViewSignature(recordings));
+            final boolean rebuildHome = tagsChanged;
+            if (recordingsChanged || rebuildHome) {
+                main.post(() -> refreshHomeAfterRecordingLoad(rebuildHome));
+            }
         });
+    }
+
+    protected List<String> recordingsViewSignature(List<Recording> items) {
+        List<String> signature = new ArrayList<>();
+        if (items == null) return signature;
+        for (Recording item : items) {
+            signature.add(String.valueOf(item.audioName) + "\u001f"
+                    + String.valueOf(item.uploaded) + "\u001f"
+                    + item.hasArticles + "\u001f" + item.isEmpty + "\u001f"
+                    + String.valueOf(item.articleTitle) + "\u001f"
+                    + String.valueOf(item.blockReason));
+        }
+        return signature;
     }
 
     protected boolean loadRecordingsAndPublishPendingReplies() throws Exception {

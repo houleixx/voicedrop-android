@@ -23,4 +23,12 @@ public class ShareRouterTest {
     public void silentAudioBytesAreEmbeddedInCode() {
         assertTrue(SilentAudio.data().length > 256);
     }
+
+    @Test
+    public void browserUrlShareIgnoresItsAuxiliaryContentStream() {
+        assertTrue(ShareRouter.shouldIgnoreAuxiliaryStream("text/plain", true, "content"));
+        assertTrue(ShareRouter.shouldIgnoreAuxiliaryStream("text/html", true, "content"));
+        assertFalse(ShareRouter.shouldIgnoreAuxiliaryStream("text/plain", false, "content"));
+        assertFalse(ShareRouter.shouldIgnoreAuxiliaryStream("application/pdf", true, "content"));
+    }
 }

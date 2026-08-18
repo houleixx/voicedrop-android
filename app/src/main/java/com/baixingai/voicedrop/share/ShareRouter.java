@@ -8,6 +8,11 @@ public final class ShareRouter {
 
     private ShareRouter() {}
 
+    public static boolean shouldIgnoreAuxiliaryStream(String mimeType, boolean hasWebUrl, String scheme) {
+        String mime = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
+        return hasWebUrl && mime.startsWith("text/") && "content".equalsIgnoreCase(scheme);
+    }
+
     public static ShareKind classify(String action, String mimeType, int streamCount, boolean hasText, String text) {
         String mime = mimeType == null ? "" : mimeType.toLowerCase(Locale.US);
         if (mime.startsWith("audio/")) return ShareKind.AUDIO;

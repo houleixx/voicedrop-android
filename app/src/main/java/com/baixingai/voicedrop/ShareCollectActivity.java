@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -192,6 +193,7 @@ public final class ShareCollectActivity extends Activity {
             out.webUrl = uri;
             return;
         }
+        if (ShareRouter.shouldIgnoreAuxiliaryStream(mime, out.webUrl != null, uri.getScheme())) return;
         String type = mime == null || mime.isEmpty() ? getContentResolver().getType(uri) : mime;
         String lower = type == null ? "" : type.toLowerCase(Locale.US);
         if (lower.startsWith("audio/")) out.audio = uri;
@@ -345,6 +347,7 @@ public final class ShareCollectActivity extends Activity {
         copyLp.setMargins(dp(12), 0, 0, 0);
         TextView title = text(item.title, 15, Theme.INK, Typeface.NORMAL);
         title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title);
         String date = ShareDatasetUi.chineseDate(item.collectedAt);
         String subtitle = ShareDatasetUi.typeLabel(item.type) + " · " + ShareDatasetUi.itemMeta(item)
@@ -390,6 +393,7 @@ public final class ShareCollectActivity extends Activity {
         TextView title = text(item.title, 15, done ? 0xff9a4a30 : Theme.SECONDARY,
                 done ? Typeface.BOLD : Typeface.NORMAL);
         title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title);
         String displayMeta = done ? ShareDatasetUi.formatChars(item.chars) : item.meta;
         String subtitle = ShareDatasetUi.typeLabel(displayType) + " · " + displayMeta

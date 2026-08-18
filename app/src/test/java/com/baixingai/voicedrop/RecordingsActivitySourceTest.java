@@ -11,6 +11,15 @@ import static org.junit.Assert.*;
 
 public class RecordingsActivitySourceTest {
     @Test
+    public void silentResumeRefreshRedrawsOnlyWhenRecordingSnapshotChanges() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String silent = methodBody(source, "protected void refreshDataSilently");
+
+        assertTrue(silent.contains("recordingsViewSignature"));
+        assertTrue(silent.contains("refreshHomeAfterRecordingLoad"));
+    }
+
+    @Test
     public void appTitleUsesVoiceDropBranding() throws Exception {
         String recordings = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String community = readSource("src/main/java/com/baixingai/voicedrop/CommunityActivity.java");

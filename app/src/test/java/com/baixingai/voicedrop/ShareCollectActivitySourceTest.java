@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class ShareCollectActivitySourceTest {
     @Test
@@ -21,6 +22,8 @@ public class ShareCollectActivitySourceTest {
         assertTrue(source.contains("提取后清空数据集"));
         assertTrue(source.contains("retryIncoming(item)"));
         assertTrue(source.contains("runOnUiThread(this::finishAndRemoveTask)"));
+        assertFalse(source.contains("View grabber"));
+        assertTrue(source.contains("datasetExtractAction("));
     }
 
     @Test
@@ -31,6 +34,11 @@ public class ShareCollectActivitySourceTest {
         assertTrue(manifest.contains("android.intent.action.SEND"));
         assertTrue(manifest.contains("android.intent.action.SEND_MULTIPLE"));
         assertTrue(manifest.contains("android:mimeType=\"*/*\""));
+        assertTrue(manifest.contains("android:theme=\"@style/ShareCollectTheme\""));
+
+        String styles = readSource("src/main/res/values/styles.xml");
+        assertTrue(styles.contains("<style name=\"ShareCollectTheme\""));
+        assertTrue(styles.contains("<item name=\"android:windowIsTranslucent\">true</item>"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

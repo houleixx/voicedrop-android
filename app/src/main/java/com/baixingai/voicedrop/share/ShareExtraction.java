@@ -28,19 +28,24 @@ public final class ShareExtraction {
 
     public static String htmlTitle(String html, String fallback) {
         if (html != null) {
-            java.util.regex.Matcher matcher = java.util.regex.Pattern
-                    .compile("(?is)<title[^>]*>(.*?)</title>").matcher(html);
-            if (matcher.find()) {
-                String value = plainHtml(matcher.group(1));
-                if (!value.isEmpty()) return cap(value, 80);
-            }
+            String value = firstGroup(html,
+                    "(?is)<meta[^>]+property=[\\\"']og:title[\\\"'][^>]+content=[\\\"']([^\\\"']+)");
+            if (value.isEmpty()) value = firstGroup(html,
+                    "(?is)<meta[^>]+content=[\\\"']([^\\\"']+)[\\\"'][^>]+property=[\\\"']og:title[\\\"']");
+            if (value.isEmpty()) value = firstGroup(html, "(?is)<title[^>]*>(.*?)</title>");
+            value = plainHtml(value);
+            if (!value.isEmpty()) return cap(value, 80);
         }
         return fallback == null ? "" : fallback;
     }
 
     public static String readableHtml(String html) {
         if (html == null) return "";
-        String body = html.replaceAll("(?is)<script[^>]*>.*?</script>", " ")
+        String body = firstGroup(html, "(?is)<div[^>]+id=[\\\"']js_content[\\\"'][^>]*>(.*)</div>");
+        if (body.isEmpty()) body = firstGroup(html, "(?is)<article[^>]*>(.*)</article>");
+        if (body.isEmpty()) body = firstGroup(html, "(?is)<body[^>]*>(.*)</body>");
+        if (body.isEmpty()) body = html;
+        body = body.replaceAll("(?is)<script[^>]*>.*?</script>", " ")
                 .replaceAll("(?is)<style[^>]*>.*?</style>", " ")
                 .replaceAll("(?is)<(br|/p|/div|/article|/section|/h[1-6]|/li)[^>]*>", "\n")
                 .replaceAll("(?is)<[^>]+>", " ");
@@ -53,6 +58,11 @@ public final class ShareExtraction {
         return value.replace("&nbsp;", " ").replace("&#160;", " ")
                 .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
                 .replace("&quot;", "\"").replace("&#39;", "'").trim();
+    }
+
+    private static String firstGroup(String value, String pattern) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(pattern).matcher(value);
+        return matcher.find() ? matcher.group(1).trim() : "";
     }
 
     public static String cap(String value, int maxChars) {

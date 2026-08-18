@@ -295,13 +295,6 @@ public final class ShareCollectActivity extends Activity {
         int maxHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.88f);
         root.addView(sheet, new FrameLayout.LayoutParams(-1, maxHeight, Gravity.BOTTOM));
 
-        View grabber = new View(this);
-        grabber.setBackground(round(0xffddd3c2, 3));
-        LinearLayout.LayoutParams grabLp = new LinearLayout.LayoutParams(dp(40), dp(5));
-        grabLp.gravity = Gravity.CENTER_HORIZONTAL;
-        grabLp.setMargins(0, 0, 0, dp(8));
-        sheet.addView(grabber, grabLp);
-
         if (isDatasetKind()) renderDatasetPage(sheet);
         else renderComposePage(sheet);
         if (busy) {
@@ -328,7 +321,7 @@ public final class ShareCollectActivity extends Activity {
     private View datasetHeader() {
         LinearLayout row = horizontal();
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(20), 0, dp(12), dp(12));
+        row.setPadding(dp(20), dp(14), dp(12), dp(12));
         LinearLayout copy = vertical();
         copy.addView(text("风格数据集", 21, Theme.INK, Typeface.BOLD));
         copy.addView(text("已收集 " + collectedCount() + " 项 · "
@@ -467,25 +460,42 @@ public final class ShareCollectActivity extends Activity {
         }
         LinearLayout actions = horizontal();
         actions.setPadding(0, dp(8), 0, 0);
-        Button more = button("继续收集", Theme.INK, Theme.CARD, 15, Typeface.BOLD);
+        TextView more = text("继续收集", 15, Theme.INK, Typeface.BOLD);
+        more.setGravity(Gravity.CENTER);
         more.setBackground(roundStroke(Theme.CARD, 11, 0xffe2d8c8, 1));
         more.setOnClickListener(v -> finish());
         LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(dp(110), dp(50));
         actions.addView(more, moreLp);
         boolean enabled = !busy && !datasetCollecting && collectedChars() >= ShareDatasetUi.MIN_EXTRACT_CHARS;
-        Button extract = button(busy ? "处理中…" : "提取文章风格", Color.WHITE,
-                enabled ? Theme.ACCENT : 0xffd9b3a8, 16, Typeface.BOLD);
-        if (!busy) {
-            extract.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_extract_style, 0, 0, 0);
-            extract.setCompoundDrawablePadding(dp(7));
-        }
-        extract.setEnabled(enabled);
-        extract.setOnClickListener(v -> extractStyle());
+        View extract = datasetExtractAction(enabled);
         LinearLayout.LayoutParams extractLp = new LinearLayout.LayoutParams(0, dp(50), 1);
         extractLp.setMargins(dp(10), 0, 0, 0);
         actions.addView(extract, extractLp);
         footer.addView(actions);
         return footer;
+    }
+
+    private View datasetExtractAction(boolean enabled) {
+        LinearLayout action = horizontal();
+        action.setGravity(Gravity.CENTER);
+        action.setBackground(round(enabled ? Theme.ACCENT : 0xffd9b3a8, 11));
+        if (busy) {
+            ProgressBar progress = new ProgressBar(this);
+            progress.getIndeterminateDrawable().setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(dp(18), dp(18));
+            progressLp.setMargins(0, 0, dp(8), 0);
+            action.addView(progress, progressLp);
+        } else {
+            ImageView icon = new ImageView(this);
+            icon.setImageResource(R.drawable.ic_extract_style);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(20), dp(20));
+            iconLp.setMargins(0, 0, dp(8), 0);
+            action.addView(icon, iconLp);
+        }
+        action.addView(text(busy ? "处理中…" : "提取文章风格", 16, Color.WHITE, Typeface.BOLD));
+        action.setEnabled(enabled);
+        action.setOnClickListener(v -> extractStyle());
+        return action;
     }
 
     private View iconBadge(String type, boolean highlighted) {
@@ -540,7 +550,7 @@ public final class ShareCollectActivity extends Activity {
     private void renderComposePage(LinearLayout sheet) {
         LinearLayout header = horizontal();
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(20), 0, dp(12), dp(12));
+        header.setPadding(dp(20), dp(14), dp(12), dp(12));
         header.addView(text(kind == ShareKind.AUDIO ? "从这段录音成文" : "看图写一篇",
                 21, Theme.INK, Typeface.BOLD), new LinearLayout.LayoutParams(0, -2, 1));
         TextView close = text("关闭", 16, Theme.SECONDARY, Typeface.BOLD);

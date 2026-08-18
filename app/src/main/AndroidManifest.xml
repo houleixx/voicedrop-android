@@ -81,7 +81,7 @@
         <activity
             android:name=".ShareCollectActivity"
             android:exported="true"
-            android:theme="@style/AppTheme">
+            android:theme="@style/ShareCollectTheme">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

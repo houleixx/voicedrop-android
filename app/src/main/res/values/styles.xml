@@ -31,6 +31,15 @@
         <item name="android:enforceNavigationBarContrast">false</item>
     </style>
 
+    <!-- Keep the app that launched Android's share sheet visible behind our bottom panel. -->
+    <style name="ShareCollectTheme" parent="AppTheme">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <style name="BottomSheetDialogAnimation">
         <!--
           Keep these names alphabetically after the established slide_* and stay resources.

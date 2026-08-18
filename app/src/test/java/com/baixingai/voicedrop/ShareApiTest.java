@@ -63,6 +63,16 @@ public class ShareApiTest {
     }
 
     @Test
+    public void webTitlePrefersOpenGraphLikeIosReadability() {
+        String html = "<html><head><title>站点标题</title>"
+                + "<meta property=\"og:title\" content=\"文章标题\"></head>"
+                + "<body><article><p>正文内容</p></article></body></html>";
+
+        assertEquals("文章标题", ShareExtraction.htmlTitle(html, "fallback"));
+        assertEquals("正文内容", ShareExtraction.readableHtml(html));
+    }
+
+    @Test
     public void firstLineTitleTrimsAndCapsToFortyChars() {
         assertEquals("第一行标题", ShareExtraction.firstLineTitle("\n 第一行标题 \n正文", "fallback"));
         assertEquals("fallback", ShareExtraction.firstLineTitle("\n\n", "fallback"));

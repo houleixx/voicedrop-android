@@ -70,7 +70,7 @@ public final class ShareApi {
 
     public static String styleExtractTaskName(boolean clearAfter, ZonedDateTime now) {
         String base = RecordingName.make(now, 0, null);
-        String tag = clearAfter ? "TaskStyleExtract" : "TaskStyleExtractKeep";
+        String tag = clearAfter ? "TaskStyleExtract" : "TaskStyleExtract-Keep";
         return base.substring(0, base.length() - ".m4a".length()) + "-" + tag + ".m4a";
     }
 }

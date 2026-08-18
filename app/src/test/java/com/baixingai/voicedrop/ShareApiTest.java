@@ -2,12 +2,15 @@ package com.baixingai.voicedrop;
 
 import com.baixingai.voicedrop.share.ShareApi;
 import com.baixingai.voicedrop.share.ShareExtraction;
+import com.baixingai.voicedrop.share.DatasetItem;
+import com.baixingai.voicedrop.share.ShareDatasetUi;
 
 import org.json.JSONObject;
 import org.junit.Test;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
 
 import static org.junit.Assert.*;
 
@@ -28,8 +31,35 @@ public class ShareApiTest {
 
         assertTrue(ShareApi.styleExtractTaskName(true, now).contains("TaskStyleExtract"));
         assertFalse(ShareApi.styleExtractTaskName(true, now).contains("Keep"));
-        assertTrue(ShareApi.styleExtractTaskName(false, now).contains("TaskStyleExtractKeep"));
+        assertTrue(ShareApi.styleExtractTaskName(false, now).contains("TaskStyleExtract-Keep"));
         assertTrue(ShareApi.styleExtractTaskName(true, now).startsWith("VoiceDrop-2026-07-04-093000-0m0s-"));
+    }
+
+    @Test
+    public void styleExtractKeepTagMatchesBackendContract() {
+        ZonedDateTime now = ZonedDateTime.of(2026, 7, 4, 9, 30, 0, 0, ZoneId.of("Asia/Shanghai"));
+        assertTrue(ShareApi.styleExtractTaskName(false, now).contains("TaskStyleExtract-Keep"));
+    }
+
+    @Test
+    public void datasetUiMatchesIosAndHarmonyMetadata() {
+        DatasetItem text = new DatasetItem("a", "text", "文章", "分享文本", "2026-08-18T02:00:00Z", 1116);
+        DatasetItem web = new DatasetItem("b", "web", "网页", "voicedrop.cn", "2026-08-18T02:00:00Z", 2232);
+        assertEquals(3348, ShareDatasetUi.totalChars(Arrays.asList(text, web)));
+        assertEquals("1,116 字", ShareDatasetUi.itemMeta(text));
+        assertEquals("voicedrop.cn", ShareDatasetUi.itemMeta(web));
+        assertEquals("8月18日", ShareDatasetUi.chineseDate(text.collectedAt));
+        assertEquals("约 3,348 字", ShareDatasetUi.formatTotalChars(3348));
+    }
+
+    @Test
+    public void shareTextMayContainAUrlAlongsidePreviewCopy() {
+        assertEquals("https://voicedrop.cn/article",
+                ShareExtraction.firstWebUrl("文章标题 https://voicedrop.cn/article"));
+        String html = "<html><head><title>文章标题</title><style>x</style></head>"
+                + "<body><article><p>第一段</p><p>第二段</p></article></body></html>";
+        assertEquals("文章标题", ShareExtraction.htmlTitle(html, "fallback"));
+        assertTrue(ShareExtraction.readableHtml(html).contains("第一段\n第二段"));
     }
 
     @Test

@@ -11,4 +11,5 @@ public final class SharePayload {
     public Uri webUrl;
     public final List<Uri> docs = new ArrayList<>();
     public String text;
+    public String title;
 }

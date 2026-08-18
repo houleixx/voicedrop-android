@@ -24,6 +24,8 @@ public class ShareCollectActivitySourceTest {
         assertTrue(source.contains("runOnUiThread(this::finishAndRemoveTask)"));
         assertFalse(source.contains("View grabber"));
         assertTrue(source.contains("datasetExtractAction("));
+        assertTrue(source.contains("String displayType = done ? \"text\" : item.type"));
+        assertTrue(source.contains("done ? ShareDatasetUi.formatChars(item.chars) : item.meta"));
     }
 
     @Test

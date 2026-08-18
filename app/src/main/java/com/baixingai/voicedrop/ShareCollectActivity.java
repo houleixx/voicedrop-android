@@ -380,9 +380,10 @@ public final class ShareCollectActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12), dp(13), dp(12), dp(13));
         boolean done = item.state == IncomingState.DONE;
+        String displayType = done ? "text" : item.type;
         row.setBackground(roundStroke(done ? 0xfffbf1e9 : Theme.CARD, 12,
                 done ? 0xffe8c9b8 : 0xffe8dfd0, 1));
-        row.addView(iconBadge(item.type, done), new LinearLayout.LayoutParams(dp(42), dp(42)));
+        row.addView(iconBadge(displayType, done), new LinearLayout.LayoutParams(dp(42), dp(42)));
         LinearLayout copy = vertical();
         LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(0, -2, 1);
         copyLp.setMargins(dp(12), 0, dp(8), 0);
@@ -390,7 +391,8 @@ public final class ShareCollectActivity extends Activity {
                 done ? Typeface.BOLD : Typeface.NORMAL);
         title.setSingleLine(true);
         copy.addView(title);
-        String subtitle = ShareDatasetUi.typeLabel(item.type) + " · " + item.meta
+        String displayMeta = done ? ShareDatasetUi.formatChars(item.chars) : item.meta;
+        String subtitle = ShareDatasetUi.typeLabel(displayType) + " · " + displayMeta
                 + (done ? " · 刚刚" : "");
         TextView meta = text(subtitle, 12, done ? 0xffa9674d : 0xff8a8175, Typeface.NORMAL);
         meta.setSingleLine(true);

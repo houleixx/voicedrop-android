@@ -540,7 +540,12 @@ public final class ShareCollectActivity extends Activity {
                         auth.bearer(), "audio/mp4", SilentAudio.data());
                 if (!upload.ok()) throw new IllegalStateException("文风提取任务创建失败（" + upload.code + "）");
                 shareApi.triggerMine();
-                runOnUiThread(this::finishAndRemoveTask);
+                runOnUiThread(() -> {
+                    SimpleToast.show(this, "正在提取文章风格，可在“我的录音”查看进度");
+                    // SimpleToast is attached to this Activity, so leave enough time for the
+                    // confirmation to be read before removing the share window.
+                    root.postDelayed(this::finishAndRemoveTask, 1400);
+                });
             } catch (Exception error) {
                 busy = false;
                 message = error.getMessage() == null ? "提取失败，请稍后重试" : error.getMessage();

@@ -22,6 +22,8 @@ public class ShareCollectActivitySourceTest {
         assertTrue(source.contains("提取后清空数据集"));
         assertTrue(source.contains("retryIncoming(item)"));
         assertTrue(source.contains("runOnUiThread(this::finishAndRemoveTask)"));
+        assertTrue(source.contains("正在提取文章风格，可在“我的录音”查看进度"));
+        assertTrue(source.contains("root.postDelayed(this::finishAndRemoveTask"));
         assertFalse(source.contains("View grabber"));
         assertTrue(source.contains("datasetExtractAction("));
         assertTrue(source.contains("String displayType = done ? \"text\" : item.type"));

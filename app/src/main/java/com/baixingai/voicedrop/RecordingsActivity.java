@@ -2529,6 +2529,11 @@ public final class RecordingsActivity extends Activity {
         return badge;
     }
 
+    /**
+     * Mirrors iOS RowCoverIcon: keep the mounted waveform tile square while loading.
+     * Only a successfully decoded dedicated cover may change the row icon to 2:3;
+     * the first-photo fallback always replaces the waveform at the square size.
+     */
     protected void maybeLoadRowCover(Recording rec, FrameLayout iconWrap, View fallbackIcon) {
         if (rec == null || !rec.hasArticles || iconWrap == null || fallbackIcon == null) return;
         String dedicatedKey = rec.coverJpgKey();

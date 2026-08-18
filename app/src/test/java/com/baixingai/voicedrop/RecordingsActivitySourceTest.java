@@ -237,6 +237,25 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
+    public void rowCoverStaysSquareUntilDedicatedCoverSucceedsLikeIos() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String row = methodBody(source, "protected View recordingRow");
+        String load = methodBody(source, "protected void maybeLoadRowCover");
+
+        assertTrue(row.contains("iconWrap.addView(waveIcon, new FrameLayout.LayoutParams(dp(44), dp(44)"));
+        assertTrue(row.contains("row.addView(iconWrap, new LinearLayout.LayoutParams(dp(44), dp(44)))"));
+        assertTrue(load.indexOf("bitmap = PhotoService.thumbnail(dedicatedFullKey)")
+                < load.indexOf("dedicated = bitmap != null"));
+        assertTrue(load.indexOf("if (bitmap == null)")
+                < load.indexOf("ArticleBody.firstPhotoKey"));
+        assertTrue(load.contains("int width = isDedicated ? dp(40) : dp(44)"));
+        assertTrue(load.contains("int height = isDedicated ? dp(60) : dp(44)"));
+
+        String beforeUiSuccess = load.substring(0, load.indexOf("main.post(() ->"));
+        assertFalse(beforeUiSuccess.contains("getLayoutParams().height"));
+    }
+
+    @Test
     public void homeCommandTipHasHorizontalBreathingRoom() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String status = methodBody(source, "protected void addLibraryCommandStatus");

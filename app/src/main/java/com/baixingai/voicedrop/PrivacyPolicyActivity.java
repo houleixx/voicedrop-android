@@ -33,6 +33,7 @@ public final class PrivacyPolicyActivity extends Activity {
     private FrameLayout webContainer;
     private ProgressBar progress;
     private View errorView;
+    private String policyUrl;
 
     public static void open(Activity source) {
         source.startActivity(new Intent(source, PrivacyPolicyActivity.class));
@@ -42,6 +43,7 @@ public final class PrivacyPolicyActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        policyUrl = PrivacyConsent.policyUrl();
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -112,17 +114,17 @@ public final class PrivacyPolicyActivity extends Activity {
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return !PrivacyConsent.POLICY_URL.equals(request.getUrl().toString());
+                return !policyUrl.equals(request.getUrl().toString());
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return !PrivacyConsent.POLICY_URL.equals(url);
+                return !policyUrl.equals(url);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (PrivacyConsent.POLICY_URL.equals(url)) {
+                if (policyUrl.equals(url)) {
                     progress.setVisibility(View.GONE);
                     clearError();
                 }
@@ -181,7 +183,7 @@ public final class PrivacyPolicyActivity extends Activity {
             StringBuilder html = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) html.append(line).append('\n');
-            webView.loadDataWithBaseURL(PrivacyConsent.POLICY_URL, html.toString(),
+            webView.loadDataWithBaseURL(policyUrl, html.toString(),
                     "text/html", "UTF-8", null);
         } catch (Exception error) {
             showError();

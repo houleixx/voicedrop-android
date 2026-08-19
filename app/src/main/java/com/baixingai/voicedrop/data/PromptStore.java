@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public final class PromptStore {
     public static final String CACHE_KEY = "promptsCache.v1";
@@ -42,7 +43,7 @@ public final class PromptStore {
     private final Cache cache;
     private final String bearer;
     private final String shareBearer;
-    private final String baseUrl;
+    private final Supplier<String> baseUrl;
     private final List<PromptNode> builtin;
     private final String cacheKey;
     private List<PromptNode> items;
@@ -63,7 +64,7 @@ public final class PromptStore {
         };
         this.bearer = auth.bearer();
         this.shareBearer = auth.session();
-        this.baseUrl = Api.agentBase();
+        this.baseUrl = Api::agentBase;
         this.builtin = PromptDefaults.items();
         this.cacheKey = cacheKeyFor(this.bearer);
         this.items = loadCached();
@@ -79,7 +80,7 @@ public final class PromptStore {
         this.cache = cache;
         this.bearer = bearer;
         this.shareBearer = shareBearer;
-        this.baseUrl = baseUrl;
+        this.baseUrl = () -> baseUrl;
         this.builtin = PromptTree.copy(builtin);
         this.cacheKey = CACHE_KEY;
         this.items = loadCached();
@@ -103,7 +104,7 @@ public final class PromptStore {
 
     public String refresh() {
         try {
-            HttpClient.Response response = transport.get(baseUrl + "/prompts", bearer);
+            HttpClient.Response response = transport.get(baseUrl() + "/prompts", bearer);
             if (!response.ok()) return "刷新失败，正在显示上次内容";
             List<PromptNode> fresh = PromptTree.decode(response.text());
             synchronized (lock) { items = fresh; }
@@ -124,7 +125,7 @@ public final class PromptStore {
         }
         try {
             byte[] body = PromptTree.encodeRaw(draft).getBytes(StandardCharsets.UTF_8);
-            HttpClient.Response response = transport.put(baseUrl + "/prompts", bearer, body);
+            HttpClient.Response response = transport.put(baseUrl() + "/prompts", bearer, body);
             if (!response.ok()) throw new IllegalStateException("prompt save HTTP " + response.code);
             List<PromptNode> fresh = PromptTree.decode(response.text());
             synchronized (lock) { items = fresh; }
@@ -183,7 +184,7 @@ public final class PromptStore {
             mutating = true;
         }
         try {
-            HttpClient.Response response = transport.post(baseUrl + path, bearer, body.toString().getBytes(StandardCharsets.UTF_8));
+            HttpClient.Response response = transport.post(baseUrl() + path, bearer, body.toString().getBytes(StandardCharsets.UTF_8));
             if (!response.ok()) throw new IllegalStateException("prompt mutation HTTP " + response.code);
             if (path.endsWith("/import")) {
                 JSONObject imported = new JSONObject(response.text()).optJSONObject("item");
@@ -210,7 +211,7 @@ public final class PromptStore {
 
     public Preview preview(String code) {
         try {
-            HttpClient.Response response = transport.get(baseUrl + "/prompt-share/" + code, "");
+            HttpClient.Response response = transport.get(baseUrl() + "/prompt-share/" + code, "");
             if (!response.ok()) return null;
             JSONObject json = new JSONObject(response.text());
             Preview preview = new Preview();
@@ -231,7 +232,7 @@ public final class PromptStore {
     public List<MarketItem> market(String sort, String scope, int limit) {
         try {
             String safeSort = "new".equals(sort) ? "new" : "hot";
-            StringBuilder url = new StringBuilder(baseUrl)
+            StringBuilder url = new StringBuilder(baseUrl())
                     .append("/prompt-market?sort=").append(safeSort)
                     .append("&limit=").append(Math.max(1, Math.min(limit, 100)));
             if ("text".equals(scope) || "image".equals(scope)) url.append("&scope=").append(scope);
@@ -274,7 +275,7 @@ public final class PromptStore {
     public Map<String, ShareState> shareStates() {
         Map<String, ShareState> result = new HashMap<>();
         try {
-            HttpClient.Response response = transport.get(baseUrl + "/prompt-shares", bearer);
+            HttpClient.Response response = transport.get(baseUrl() + "/prompt-shares", bearer);
             if (!response.ok()) return result;
             JSONObject byItem = new JSONObject(response.text()).optJSONObject("byItem");
             if (byItem == null || byItem.names() == null) return result;
@@ -294,8 +295,8 @@ public final class PromptStore {
         }
         try {
             HttpClient.Response response = sharing
-                    ? transport.post(baseUrl + "/prompt-share", shareBearer, new JSONObject().put("id", id).toString().getBytes(StandardCharsets.UTF_8))
-                    : transport.delete(baseUrl + "/prompt-share/" + Uri.encode(id), shareBearer);
+                    ? transport.post(baseUrl() + "/prompt-share", shareBearer, new JSONObject().put("id", id).toString().getBytes(StandardCharsets.UTF_8))
+                    : transport.delete(baseUrl() + "/prompt-share/" + Uri.encode(id), shareBearer);
             if (!response.ok()) {
                 String remote = "";
                 try { remote = new JSONObject(response.text()).optString("error", ""); } catch (Exception ignored) {}
@@ -318,6 +319,10 @@ public final class PromptStore {
             try { return PromptTree.decode(raw); } catch (Exception ignored) {}
         }
         return PromptTree.copy(builtin);
+    }
+
+    private String baseUrl() {
+        return baseUrl.get();
     }
 
     public static String cacheKeyFor(String bearer) {

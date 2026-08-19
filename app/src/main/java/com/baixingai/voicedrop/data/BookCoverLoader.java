@@ -39,9 +39,9 @@ public final class BookCoverLoader {
         if (!diskDir.exists()) diskDir.mkdirs();
     }
 
-    public void load(BookShelfIndex.Book book, ImageView image) {
+    public void load(BookShelfIndex.Book book, String coverUrl, ImageView image) {
         if (book == null || image == null || !book.cover) return;
-        Request request = new Request(book, image);
+        Request request = new Request(book, coverUrl, image);
         requests.add(request);
         image.addOnAttachStateChangeListener(request);
         request.start();
@@ -58,14 +58,16 @@ public final class BookCoverLoader {
 
     private final class Request implements View.OnAttachStateChangeListener {
         private final BookShelfIndex.Book book;
+        private final String coverUrl;
         private final ImageView image;
         private final AtomicBoolean cleanedUp = new AtomicBoolean();
         private volatile Future<?> future;
         private volatile HttpURLConnection connection;
         private volatile boolean cancelled;
 
-        Request(BookShelfIndex.Book book, ImageView image) {
+        Request(BookShelfIndex.Book book, String coverUrl, ImageView image) {
             this.book = book;
+            this.coverUrl = coverUrl;
             this.image = image;
         }
 
@@ -100,7 +102,7 @@ public final class BookCoverLoader {
         private void runAttempt(File target, int attempt) {
             if (cancelled) return;
             try {
-                byte[] data = download(book.coverUrl(), attempt >= 2);
+                byte[] data = download(coverUrl, attempt >= 2);
                 if (!cancelled && data != null) {
                     Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
                     if (bitmap != null) {

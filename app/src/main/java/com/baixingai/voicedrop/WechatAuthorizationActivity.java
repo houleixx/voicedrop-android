@@ -195,7 +195,8 @@ public final class WechatAuthorizationActivity extends Activity {
     /** Keep the authorization handoff in its expected hosts; all other links stay outside the app. */
     private boolean allow(Uri uri) {
         String host = uri == null ? "" : uri.getHost();
-        if (Api.HOST.equalsIgnoreCase(host) || "mp.weixin.qq.com".equalsIgnoreCase(host)) return false;
+        if (Api.CN_HOST.equalsIgnoreCase(host) || Api.CF_HOST.equalsIgnoreCase(host)
+                || "mp.weixin.qq.com".equalsIgnoreCase(host)) return false;
         try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) {}
         return true;
     }

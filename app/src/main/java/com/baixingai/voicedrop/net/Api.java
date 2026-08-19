@@ -4,28 +4,27 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 
 public final class Api {
-    /** HTTP APIs and public photos use the EdgeOne-backed domestic entry. */
-    public static final String HOST = "voicedrop.cn";
-    public static final String PHOTO_HOST = HOST;
+    public static final String CN_HOST = "voicedrop.cn";
+    public static final String CF_HOST = "jianshuo.dev";
     /** EdgeOne WebSocket passthrough is not verified; keep the known-good direct host. */
-    public static final String WS_HOST = "jianshuo.dev";
+    public static final String WS_HOST = CF_HOST;
 
     private Api() {}
 
     public static String filesBase() {
-        return "https://" + HOST + "/files/api";
+        return "https://" + host() + "/files/api";
     }
 
     public static String photoBase() {
-        return "https://" + PHOTO_HOST + "/files/api";
+        return "https://" + host() + "/files/api";
     }
 
     public static String agentBase() {
-        return "https://" + HOST + "/agent";
+        return "https://" + host() + "/agent";
     }
 
     public static String recoBase() {
-        return "https://" + HOST + "/reco";
+        return "https://" + host() + "/reco";
     }
 
     public static String agentWs() {
@@ -34,6 +33,20 @@ public final class Api {
 
     public static String sharePage(String id) {
         return "https://voicedrop.cn/" + id;
+    }
+
+    public static String publicWebBase() {
+        return publicWebBaseForHost(host());
+    }
+
+    static String publicWebBaseForHost(String host) {
+        return CF_HOST.equals(host)
+                ? "https://" + CF_HOST + "/voicedrop"
+                : "https://" + CN_HOST;
+    }
+
+    private static String host() {
+        return ApiRoute.currentHost();
     }
 
     public static String path(String key) {

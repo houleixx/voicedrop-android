@@ -18,6 +18,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
+import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.ui.PullRefreshLayout;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
@@ -29,7 +30,6 @@ import java.util.concurrent.Executors;
 
 /** Native write-book shelf, mirroring iOS BooksShelfView. */
 public final class BooksShelfActivity extends Activity {
-    static final String INDEX = "https://voicedrop.cn/books/?format=json";
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private BookCoverLoader coverLoader;
     private PullRefreshLayout refresher;
@@ -68,7 +68,7 @@ public final class BooksShelfActivity extends Activity {
 
     private void load(boolean quiet) {
         if (!quiet) refresher.setRefreshing(true);
-        io.execute(() -> { String raw = null; try { HttpClient.Response response = new HttpClient().get(INDEX, null); if (response.ok()) raw = response.text(); } catch (Exception ignored) {}
+        io.execute(() -> { String raw = null; try { HttpClient.Response response = new HttpClient().get(Api.publicWebBase() + "/books/?format=json", null); if (response.ok()) raw = response.text(); } catch (Exception ignored) {}
             String finalRaw = raw; runOnUiThread(() -> { if (finalRaw != null) { getSharedPreferences("voicedrop.books", MODE_PRIVATE).edit().putString("index", finalRaw).apply(); books = BookShelfIndex.parse(finalRaw); } render(); refresher.setRefreshing(false); }); });
     }
     private void render() {
@@ -85,7 +85,7 @@ public final class BooksShelfActivity extends Activity {
         LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setOnClickListener(v -> BookReaderActivity.open(this, book));
         FrameLayout cover = new FrameLayout(this); GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{color(book.c), color(book.c2)}); bg.setCornerRadius(dp(7)); cover.setBackground(bg);
         addBookTypography(cover, book);
-        if (book.cover) { ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.addView(image, new FrameLayout.LayoutParams(-1,-1)); coverLoader.load(book, image); }
+        if (book.cover) { ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.addView(image, new FrameLayout.LayoutParams(-1,-1)); coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image); }
         cell.addView(cover, new LinearLayout.LayoutParams(-1, dp(210)));
         cell.addView(caption(book.main)); TextView meta = text(book.chapters > 0 ? book.chapters + " 章" : book.sub, 12, Theme.FAINT, Typeface.NORMAL); meta.setPadding(0,dp(3),0,0); cell.addView(meta); cell.addView(shelfBar()); return cell;
     }

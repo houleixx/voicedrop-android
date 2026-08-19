@@ -2,9 +2,9 @@ package com.baixingai.voicedrop.data;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.baixingai.voicedrop.net.Api;
 
 public final class PrivacyConsent {
-    public static final String POLICY_URL = "https://voicedrop.cn/privacy/";
     public static final String POLICY_ASSET = "privacy.html";
     public static final String CURRENT_VERSION = "2026-07-17";
 
@@ -23,6 +23,10 @@ public final class PrivacyConsent {
 
     private final Storage storage;
     private final Clock clock;
+
+    public static String policyUrl() {
+        return Api.publicWebBase() + "/privacy/";
+    }
 
     public PrivacyConsent(Context context) {
         this(new SharedPreferencesStorage(context.getApplicationContext()

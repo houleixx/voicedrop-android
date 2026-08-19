@@ -29,8 +29,8 @@ public final class PrivacyDocumentationSourceTest {
         assertTrue(activity.contains("setAllowFileAccess(false)"));
         assertTrue(activity.contains("setAllowContentAccess(false)"));
         assertTrue(activity.contains("getAssets().open(PrivacyConsent.POLICY_ASSET)"));
-        assertTrue(activity.contains("webView.loadDataWithBaseURL(PrivacyConsent.POLICY_URL"));
-        assertFalse(activity.contains("webView.loadUrl(PrivacyConsent.POLICY_URL)"));
+        assertTrue(activity.contains("webView.loadDataWithBaseURL(policyUrl"));
+        assertFalse(activity.contains("webView.loadUrl(policyUrl)"));
         assertTrue(policy.contains("百姓网股份有限公司"));
         assertTrue(policy.contains("Android_ID（ANDROID_ID）"));
         assertTrue(policy.contains("友盟移动统计 SDK"));

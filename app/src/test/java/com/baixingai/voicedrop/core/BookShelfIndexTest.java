@@ -12,9 +12,11 @@ public final class BookShelfIndexTest {
         assertEquals(7, books.get(0).chapters);
         assertEquals("作者", books.get(0).author);
         assertEquals(123L, books.get(0).createdAt);
-        assertEquals("https://voicedrop.cn/books/a-book/", books.get(0).readerUrl());
+        assertEquals("https://voicedrop.cn/books/a-book/", books.get(0).readerUrl("https://voicedrop.cn"));
         assertEquals(456L, books.get(0).coverAt);
-        assertEquals("https://voicedrop.cn/books/a-book/cover.jpg?v=456", books.get(0).coverUrl());
+        assertEquals("https://voicedrop.cn/books/a-book/cover.jpg?v=456", books.get(0).coverUrl("https://voicedrop.cn"));
+        assertEquals("https://jianshuo.dev/voicedrop/books/a-book/cover.jpg?v=456",
+                books.get(0).coverUrl("https://jianshuo.dev/voicedrop"));
     }
 
     @Test public void preservesServerOrderInsteadOfSortingByCreatedAt() {
@@ -35,6 +37,7 @@ public final class BookShelfIndexTest {
         assertEquals("主标题：副标题", books.get(0).title);
         assertEquals(0L, books.get(0).createdAt);
         assertEquals(0L, books.get(0).coverAt);
-        assertEquals("https://voicedrop.cn/books/legacy/cover.jpg", books.get(0).coverUrl());
+        assertEquals("https://voicedrop.cn/books/legacy/cover.jpg",
+                books.get(0).coverUrl("https://voicedrop.cn"));
     }
 }

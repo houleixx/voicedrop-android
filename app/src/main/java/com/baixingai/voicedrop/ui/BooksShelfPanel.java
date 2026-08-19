@@ -28,6 +28,7 @@ import com.baixingai.voicedrop.BookWritingActivity;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
+import com.baixingai.voicedrop.net.Api;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -35,7 +36,6 @@ import java.util.concurrent.Executors;
 
 /** Physical two-column book shelf, kept visually aligned with iOS BooksShelfView. */
 public final class BooksShelfPanel extends LinearLayout {
-    private static final String INDEX = "https://voicedrop.cn/books/?format=json";
     private static final int CREAM = 0xfff7f1df;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final BookCoverLoader coverLoader;
@@ -75,7 +75,8 @@ public final class BooksShelfPanel extends LinearLayout {
         io.execute(() -> {
             String raw = null;
             try {
-                HttpClient.Response response = new HttpClient().get(INDEX, null);
+                HttpClient.Response response = new HttpClient().get(
+                        Api.publicWebBase() + "/books/?format=json", null);
                 if (response.ok()) raw = response.text();
             } catch (Exception ignored) {}
             String result = raw;
@@ -178,7 +179,7 @@ public final class BooksShelfPanel extends LinearLayout {
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             cover.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            coverLoader.load(book, image);
+            coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image);
         }
         cell.addView(cover, new LinearLayout.LayoutParams(-1, -2));
         String meta = book.chapters > 0 ? book.chapters + " 章" : book.sub;

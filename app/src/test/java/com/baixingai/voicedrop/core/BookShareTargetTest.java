@@ -25,4 +25,13 @@ public final class BookShareTargetTest {
             assertFalse(target.chapter);
         }
     }
+
+    @Test public void cloudflareReaderChapterIsSharedThroughCn() {
+        BookShareTarget.Target target = BookShareTarget.resolve(ROOT,
+                "https://jianshuo.dev/voicedrop/books/demo/chapter-2.html?from=reader",
+                "第二章", "书名", "作者");
+        assertEquals(ROOT + "chapter-2.html?from=reader", target.url);
+        assertEquals("第二章", target.title);
+        assertTrue(target.chapter);
+    }
 }

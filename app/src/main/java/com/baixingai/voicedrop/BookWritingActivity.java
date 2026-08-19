@@ -43,7 +43,6 @@ import java.util.concurrent.Executors;
 /** Native Android counterpart of iOS BookWritingSheet. */
 public final class BookWritingActivity extends Activity {
     static final String API = "https://lab.jianshuo.dev/api/book";
-    static final String SHELF = "https://voicedrop.cn/books/";
     static final int SHELF_ICON_RES_ID = R.drawable.ic_about_books_vertical;
     static final int POWER_ICON_RES_ID = R.drawable.ic_settings_bolt;
     private static final int PRICE = 320;

@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import com.baixingai.voicedrop.data.PhotoService;
 import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.ReferralManager;
+import com.baixingai.voicedrop.net.ApiRoute;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.kongzue.dialogx.DialogX;
 import com.kongzue.dialogx.style.IOSStyle;
@@ -15,6 +16,7 @@ import com.umeng.commonsdk.UMConfigure;
 
 public class VoiceDropApplication extends Application {
     private boolean consentedServicesActivated;
+    private int startedActivities;
 
     @Override
     public void onCreate() {
@@ -23,6 +25,7 @@ public class VoiceDropApplication extends Application {
         DialogX.globalStyle = IOSStyle.style();
         DialogX.globalTheme = DialogX.THEME.LIGHT;
         DialogX.DEBUGMODE = false;
+        ApiRoute.initialize(this);
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity activity, Bundle savedInstanceState) {
                 applySystemBarDefaults(activity);
@@ -32,9 +35,13 @@ public class VoiceDropApplication extends Application {
                 applySystemBarDefaults(activity);
             }
 
-            @Override public void onActivityStarted(Activity activity) {}
+            @Override public void onActivityStarted(Activity activity) {
+                if (startedActivities++ == 0 && consentedServicesActivated) ApiRoute.probe(false);
+            }
             @Override public void onActivityPaused(Activity activity) {}
-            @Override public void onActivityStopped(Activity activity) {}
+            @Override public void onActivityStopped(Activity activity) {
+                startedActivities = Math.max(0, startedActivities - 1);
+            }
             @Override public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
             @Override public void onActivityDestroyed(Activity activity) {}
         });
@@ -44,6 +51,8 @@ public class VoiceDropApplication extends Application {
     public synchronized void activateConsentedServices() {
         if (consentedServicesActivated) return;
         consentedServicesActivated = true;
+        // Own-server route probing is still network access: keep the first-launch privacy gate.
+        ApiRoute.probe(true);
         // Configure the persistent image cache once for every entry point, including
         // article/detail activities that are not reached through the library screen.
         PhotoService.configure(this);

@@ -107,7 +107,7 @@ public final class PhotoService {
 
     /**
      * Card/list images use Cloudflare's 512px edge transform. A transform failure
-     * must be invisible to users, so remember it for this run and load the EdgeOne
+     * must be invisible to users, so remember it for this run and load the selected-route
      * original instead. Inline article callers use image(), not this method.
      */
     public static Bitmap thumbnail(String fullKey) throws Exception {

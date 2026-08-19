@@ -12,7 +12,7 @@ public final class BookShareTarget {
                 + (blank(author) ? "" : " — " + author.trim());
         try {
             URI root = new URI(rootUrl).normalize();
-            URI current = new URI(currentUrl == null ? "" : currentUrl).normalize();
+            URI current = canonicalPublicUrl(root, new URI(currentUrl == null ? "" : currentUrl).normalize());
             String rootPath = root.getPath();
             String currentPath = current.getPath();
             if (root.getScheme() == null || root.getHost() == null || rootPath == null
@@ -27,6 +27,16 @@ public final class BookShareTarget {
         } catch (Exception ignored) {
             return new Target(rootUrl, fallbackTitle, false);
         }
+    }
+
+    /** Reading may use CF, but links sent to other people stay on the WeChat-safe .cn host. */
+    private static URI canonicalPublicUrl(URI root, URI current) throws Exception {
+        if (!"voicedrop.cn".equalsIgnoreCase(root.getHost())
+                || !"jianshuo.dev".equalsIgnoreCase(current.getHost())) return current;
+        String path = current.getPath();
+        if (path == null || !path.startsWith("/voicedrop/books/")) return current;
+        return new URI(root.getScheme(), null, root.getHost(), root.getPort(),
+                path.substring("/voicedrop".length()), current.getQuery(), current.getFragment()).normalize();
     }
 
     private static boolean blank(String value) { return value == null || value.trim().isEmpty(); }

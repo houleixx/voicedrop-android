@@ -26,8 +26,8 @@ public final class BookCoverLoadingContractTest {
         String activity = read("BooksShelfActivity.java");
         String loader = read("data/BookCoverLoader.java");
 
-        assertTrue(panel.contains("coverLoader.load(book, image)"));
-        assertTrue(activity.contains("coverLoader.load(book, image)"));
+        assertTrue(panel.contains("coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image)"));
+        assertTrue(activity.contains("coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image)"));
         assertTrue(panel.contains("coverLoader.cancelAll()"));
         assertTrue(activity.contains("coverLoader.cancelAll()"));
         assertTrue(loader.contains("getFilesDir()"));

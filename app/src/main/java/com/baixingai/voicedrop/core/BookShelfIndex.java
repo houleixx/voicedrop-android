@@ -43,9 +43,11 @@ public final class BookShelfIndex {
             this.author = author == null ? "" : author; this.createdAt = createdAt;
             this.coverAt = coverAt;
         }
-        public String readerUrl() { return "https://voicedrop.cn/books/" + slug + "/"; }
-        public String coverUrl() {
-            return readerUrl() + "cover.jpg" + (coverAt > 0 ? "?v=" + coverAt : "");
+        public String readerUrl(String publicWebBase) {
+            return publicWebBase + "/books/" + slug + "/";
+        }
+        public String coverUrl(String publicWebBase) {
+            return readerUrl(publicWebBase) + "cover.jpg" + (coverAt > 0 ? "?v=" + coverAt : "");
         }
     }
 }

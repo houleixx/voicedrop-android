@@ -25,6 +25,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.core.BookShareTarget;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
+import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
@@ -65,7 +66,7 @@ public final class BookReaderActivity extends Activity {
         intent.putExtra("shareTitle", book.title);
         intent.putExtra("author", book.author);
         intent.putExtra("cover", book.cover);
-        intent.putExtra("coverUrl", book.coverUrl());
+        intent.putExtra("coverUrl", book.coverUrl(Api.publicWebBase()));
         source.startActivity(intent);
         source.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
@@ -122,7 +123,7 @@ public final class BookReaderActivity extends Activity {
 
         String slug = getIntent().getStringExtra("slug");
         if (slug != null && slug.matches("[A-Za-z0-9_-]+")) {
-            web.loadUrl("https://voicedrop.cn/books/" + slug + "/");
+            web.loadUrl(Api.publicWebBase() + "/books/" + slug + "/");
         }
     }
 

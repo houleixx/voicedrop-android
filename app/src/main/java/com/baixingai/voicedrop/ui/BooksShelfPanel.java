@@ -3,8 +3,6 @@ package com.baixingai.voicedrop.ui;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -28,6 +26,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.BookReaderActivity;
 import com.baixingai.voicedrop.BookWritingActivity;
 import com.baixingai.voicedrop.core.BookShelfIndex;
+import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +38,7 @@ public final class BooksShelfPanel extends LinearLayout {
     private static final String INDEX = "https://voicedrop.cn/books/?format=json";
     private static final int CREAM = 0xfff7f1df;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
+    private final BookCoverLoader coverLoader;
     private final PullRefreshLayout refresher;
     private final LinearLayout shelves;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
@@ -47,6 +47,7 @@ public final class BooksShelfPanel extends LinearLayout {
         super(context);
         setOrientation(VERTICAL);
         setBackgroundColor(Theme.BG);
+        coverLoader = new BookCoverLoader(context);
 
         refresher = new PullRefreshLayout(context);
         ScrollView scroll = new ScrollView(context);
@@ -91,6 +92,7 @@ public final class BooksShelfPanel extends LinearLayout {
     }
 
     private void render() {
+        coverLoader.cancelAll();
         shelves.removeAllViews();
         List<Object> cells = new ArrayList<>();
         cells.add("write");
@@ -171,41 +173,39 @@ public final class BooksShelfPanel extends LinearLayout {
 
         PhysicalBookCover cover = new PhysicalBookCover(getContext(), color(book.c), color(book.c2));
         cover.setElevation(dp(7));
+        addBookTypography(cover, book);
         if (book.cover) {
             ImageView image = new ImageView(getContext());
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             cover.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            io.execute(() -> {
-                try {
-                    Bitmap bitmap = BitmapFactory.decodeStream(new java.net.URL(book.coverUrl()).openStream());
-                    image.post(() -> image.setImageBitmap(bitmap));
-                } catch (Exception ignored) {}
-            });
-        } else {
-            LinearLayout typography = new LinearLayout(getContext());
-            typography.setOrientation(VERTICAL);
-            typography.setGravity(Gravity.LEFT);
-            typography.setPadding(dp(24), dp(26), dp(16), 0);
-            TextView title = text(book.main, 22, CREAM, Typeface.BOLD, true);
-            title.setLetterSpacing(0.136f);
-            title.setLineSpacing(dp(4), 1f);
-            typography.addView(title, new LinearLayout.LayoutParams(-1, -2));
-            View rule = new View(getContext());
-            rule.setBackgroundColor(0x8cf7f1df);
-            LinearLayout.LayoutParams ruleParams = new LinearLayout.LayoutParams(dp(26), dpF(1));
-            ruleParams.setMargins(0, dp(9), 0, dp(9));
-            typography.addView(rule, ruleParams);
-            if (book.sub != null && !book.sub.isEmpty()) {
-                TextView subtitle = text(book.sub, 12, 0xb8f7f1df, Typeface.NORMAL, true);
-                subtitle.setLineSpacing(dp(3), 1f);
-                typography.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
-            }
-            cover.addView(typography, new FrameLayout.LayoutParams(-1, -1));
+            coverLoader.load(book, image);
         }
         cell.addView(cover, new LinearLayout.LayoutParams(-1, -2));
         String meta = book.chapters > 0 ? book.chapters + " 章" : book.sub;
         cell.addView(caption(book.main, meta == null || meta.isEmpty() ? " " : meta), captionParams());
         return cell;
+    }
+
+    private void addBookTypography(FrameLayout cover, BookShelfIndex.Book book) {
+        LinearLayout typography = new LinearLayout(getContext());
+        typography.setOrientation(VERTICAL);
+        typography.setGravity(Gravity.LEFT);
+        typography.setPadding(dp(24), dp(26), dp(16), 0);
+        TextView title = text(book.main, 22, CREAM, Typeface.BOLD, true);
+        title.setLetterSpacing(0.136f);
+        title.setLineSpacing(dp(4), 1f);
+        typography.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        View rule = new View(getContext());
+        rule.setBackgroundColor(0x8cf7f1df);
+        LinearLayout.LayoutParams ruleParams = new LinearLayout.LayoutParams(dp(26), dpF(1));
+        ruleParams.setMargins(0, dp(9), 0, dp(9));
+        typography.addView(rule, ruleParams);
+        if (book.sub != null && !book.sub.isEmpty()) {
+            TextView subtitle = text(book.sub, 12, 0xb8f7f1df, Typeface.NORMAL, true);
+            subtitle.setLineSpacing(dp(3), 1f);
+            typography.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+        }
+        cover.addView(typography, new FrameLayout.LayoutParams(-1, -1));
     }
 
     private LinearLayout cellContainer() {
@@ -280,6 +280,8 @@ public final class BooksShelfPanel extends LinearLayout {
     private int dpF(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     @Override protected void onDetachedFromWindow() {
+        coverLoader.cancelAll();
+        coverLoader.shutdown();
         io.shutdownNow();
         super.onDetachedFromWindow();
     }

@@ -46,19 +46,19 @@ public class AccountActivitySourceTest {
     }
 
     @Test
-    public void accountIdentityUsesTheCurrentLocalScopeWithoutWaitingForNetwork() throws Exception {
+    public void accountIdentityMatchesIosAnonymousIdForDisplayAndCopy() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/AccountActivity.java");
 
-        assertTrue(source.contains("currentAccountId = accountIdFromScope(auth.storageScope())"));
-        assertTrue(source.indexOf("currentAccountId = accountIdFromScope(auth.storageScope())")
+        assertTrue(source.contains("currentAccountId = auth.anonId()"));
+        assertTrue(source.indexOf("currentAccountId = auth.anonId()")
                 < source.indexOf("render(0, 0, false)"));
+        assertFalse(source.contains("currentAccountId = accountIdFromScope(auth.storageScope())"));
         assertFalse(source.contains("library.ownerScope()"));
         assertTrue(source.contains("currentAccountId"));
         assertTrue(source.contains("keyField(\"你的 ID\", currentAccountId, false, currentAccountId)"));
         assertFalse(source.contains("currentAccountId.isEmpty() ? \"读取失败\""));
         assertTrue(source.contains("keyField(\"访问令牌\", maskedToken(), true, auth.anonymousBearer())"));
         assertTrue(source.contains("auth.adoptToken"));
-        assertEquals("wechat-current", AccountActivity.accountIdFromScope("users/wechat-current/"));
     }
 
     @Test

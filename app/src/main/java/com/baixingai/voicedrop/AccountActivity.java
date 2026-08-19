@@ -45,7 +45,7 @@ public final class AccountActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         auth = new AuthStore(this);
-        currentAccountId = accountIdFromScope(auth.storageScope());
+        currentAccountId = auth.anonId();
         HttpClient http = new HttpClient();
         library = new LibraryStore(auth, http);
         configureEdgeToEdge();
@@ -258,14 +258,6 @@ public final class AccountActivity extends Activity {
         rowLp.setMargins(0, dp(7), 0, dp(16));
         wrap.addView(row, rowLp);
         return wrap;
-    }
-
-    static String accountIdFromScope(String scope) {
-        if (scope == null) return "";
-        String value = scope.trim();
-        if (value.startsWith("users/")) value = value.substring("users/".length());
-        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
-        return value;
     }
 
     private View dataCard(int recordingCount, int minedCount, boolean loaded) {

@@ -911,6 +911,15 @@ public final class RecordingsActivity extends Activity {
     protected void uploadArticlePhoto(Recording rec, Uri uri) {
     }
     protected void showDeviceLinkApproval(String pairingId, String code, String pubkey) {
+        if (auth.isWechatAuthenticated()) {
+            io.execute(() -> {
+                try {
+                    deviceLinkStore.cancel(pairingId);
+                } catch (Exception ignored) {
+                }
+            });
+            return;
+        }
         pendingLinkPairingId = pairingId;
         pendingLinkPubkey = pubkey;
         IosDialog.showDeviceLinkApproval(this, code, null, () -> io.execute(() -> {
@@ -926,12 +935,23 @@ public final class RecordingsActivity extends Activity {
     }
     protected void releaseDeviceLink(String pairingId) {
         if (pendingLinkPairingId == null || !pendingLinkPairingId.equals(pairingId) || pendingLinkPubkey == null) return;
+        if (auth.isWechatAuthenticated()) {
+            pendingLinkPairingId = null;
+            pendingLinkPubkey = null;
+            io.execute(() -> {
+                try {
+                    deviceLinkStore.cancel(pairingId);
+                } catch (Exception ignored) {
+                }
+            });
+            return;
+        }
         String pubkey = pendingLinkPubkey;
         pendingLinkPairingId = null;
         pendingLinkPubkey = null;
         io.execute(() -> {
             try {
-                DeviceLinkCrypto.Blob blob = DeviceLinkCrypto.encrypt(auth.bearer(), pubkey);
+                DeviceLinkCrypto.Blob blob = DeviceLinkCrypto.encrypt(auth.anonymousBearer(), pubkey);
                 JSONObject json = new JSONObject()
                         .put("epk", blob.epkB64)
                         .put("sealed", blob.sealedB64);

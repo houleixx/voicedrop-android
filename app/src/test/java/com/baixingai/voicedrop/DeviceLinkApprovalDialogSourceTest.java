@@ -32,6 +32,28 @@ public final class DeviceLinkApprovalDialogSourceTest {
     }
 
     @Test
+    public void deviceLinkOnlyTransfersAnonymousAccounts() throws Exception {
+        String[] activities = {
+                "RecordingsActivity.java",
+                "RecordingDetailActivity.java",
+                "CommunityActivity.java",
+                "CommunityDetailActivity.java"
+        };
+
+        for (String activity : activities) {
+            String source = readSource("src/main/java/com/baixingai/voicedrop/" + activity);
+            String approval = methodBody(source, "protected void showDeviceLinkApproval");
+            String release = methodBody(source, "protected void releaseDeviceLink");
+
+            assertTrue(activity, approval.contains("auth.isWechatAuthenticated()"));
+            assertTrue(activity, approval.contains("deviceLinkStore.cancel(pairingId)"));
+            assertTrue(activity, release.contains("auth.isWechatAuthenticated()"));
+            assertTrue(activity, release.contains("DeviceLinkCrypto.encrypt(auth.anonymousBearer(), pubkey)"));
+            assertFalse(activity, release.contains("DeviceLinkCrypto.encrypt(auth.bearer(), pubkey)"));
+        }
+    }
+
+    @Test
     public void deviceLinkApprovalCopyAndCodeTypographyMatchTheSharedDesign() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/ui/IosDialog.java");
         String method = methodBody(source, "public static IosDialog showDeviceLinkApproval");

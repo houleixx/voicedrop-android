@@ -22,6 +22,16 @@ public class PlaybackProgressButtonSourceTest {
                 "button.addView(icon, new FrameLayout.LayoutParams(dp(15), dp(15), Gravity.CENTER))"));
     }
 
+    @Test
+    public void playingStateUsesStopSquareAndIdleRestoresPlayIcon() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/ui/PlaybackProgressButton.java");
+        String icons = readSource("src/main/java/com/baixingai/voicedrop/ui/AliIconFont.java");
+
+        assertTrue(icons.contains("public static final int STOP = R.drawable.ic_stop;"));
+        assertTrue(source.contains(
+                "mode == AudioPlaybackState.Mode.PLAYING ? AliIconFont.STOP : AliIconFont.PLAY"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

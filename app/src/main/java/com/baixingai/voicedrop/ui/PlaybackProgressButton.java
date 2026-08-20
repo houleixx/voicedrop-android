@@ -57,6 +57,11 @@ public final class PlaybackProgressButton extends FrameLayout {
     }
 
     public void setState(AudioPlaybackState.Mode mode, float progress) {
+        if (this.mode != mode) {
+            AliIconFont.apply(icon,
+                    mode == AudioPlaybackState.Mode.PLAYING ? AliIconFont.STOP : AliIconFont.PLAY,
+                    0xffffffff);
+        }
         this.mode = mode;
         this.progress = progress;
         loading.setVisibility(mode == AudioPlaybackState.Mode.LOADING ? VISIBLE : GONE);

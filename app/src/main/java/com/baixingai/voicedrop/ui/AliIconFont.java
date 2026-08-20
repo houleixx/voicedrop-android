@@ -23,6 +23,7 @@ public final class AliIconFont {
     public static final int SETTINGS = R.drawable.ic_settings;
     public static final int SHARE_UP = R.drawable.ic_share_up;
     public static final int SHARE_FORWARD = R.drawable.ic_share_forward;
+    public static final int STOP = R.drawable.ic_stop;
     public static final int TRASH = R.drawable.ic_trash;
     public static final int UNDO = R.drawable.ic_undo;
 

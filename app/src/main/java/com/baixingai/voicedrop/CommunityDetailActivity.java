@@ -751,9 +751,7 @@ public final class CommunityDetailActivity extends Activity {
     protected void showDeviceLinkApproval(String pairingId, String code, String pubkey) {
         pendingLinkPairingId = pairingId;
         pendingLinkPubkey = pubkey;
-        IosDialog.show(this, "设备登录请求", "有新设备想登录当前账号。\n\n验证码：" + code + "\n\n如果不是你本人操作，请点\"不是我\"。",
-                "是我", () -> toast("请在新设备输入验证码 " + code),
-                "不是我", () -> io.execute(() -> {
+        IosDialog.showDeviceLinkApproval(this, code, null, () -> io.execute(() -> {
                     try {
                         deviceLinkStore.cancel(pairingId);
                     } catch (Exception ignored) {

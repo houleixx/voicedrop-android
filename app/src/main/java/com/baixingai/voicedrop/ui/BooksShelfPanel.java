@@ -26,6 +26,7 @@ import android.widget.TextView;
 import com.baixingai.voicedrop.BookReaderActivity;
 import com.baixingai.voicedrop.BookWritingActivity;
 import com.baixingai.voicedrop.core.BookShelfIndex;
+import com.baixingai.voicedrop.core.BookShelfLoadingPolicy;
 import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
@@ -42,6 +43,7 @@ public final class BooksShelfPanel extends LinearLayout {
     private final PullRefreshLayout refresher;
     private final LinearLayout shelves;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
+    private boolean initialLoadPending;
 
     public BooksShelfPanel(Context context) {
         super(context);
@@ -66,6 +68,7 @@ public final class BooksShelfPanel extends LinearLayout {
 
         books = BookShelfIndex.parse(context.getSharedPreferences("voicedrop.books", Context.MODE_PRIVATE)
                 .getString("index", ""));
+        initialLoadPending = books.isEmpty();
         render();
         load(true);
     }
@@ -86,6 +89,7 @@ public final class BooksShelfPanel extends LinearLayout {
                             .edit().putString("index", result).apply();
                     books = BookShelfIndex.parse(result);
                 }
+                initialLoadPending = false;
                 render();
                 refresher.setRefreshing(false);
             });
@@ -95,6 +99,12 @@ public final class BooksShelfPanel extends LinearLayout {
     private void render() {
         coverLoader.cancelAll();
         shelves.removeAllViews();
+        if (BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())) {
+            TextView loading = text("正在整理书架…", 14, Theme.SECONDARY, Typeface.NORMAL, false);
+            loading.setGravity(Gravity.CENTER);
+            shelves.addView(loading, new LinearLayout.LayoutParams(-1, dp(220)));
+            return;
+        }
         List<Object> cells = new ArrayList<>();
         cells.add("write");
         cells.addAll(books);

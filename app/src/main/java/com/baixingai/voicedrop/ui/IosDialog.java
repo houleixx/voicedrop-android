@@ -176,6 +176,50 @@ public final class IosDialog extends Dialog {
         return dialog;
     }
 
+    /** Required device-link decision with the verification code as the visual focus. */
+    public static IosDialog showDeviceLinkApproval(Context ctx, String code,
+                                                   Runnable onConfirm, Runnable onReject) {
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(ctx, 28), dp(ctx, 24), dp(ctx, 28), dp(ctx, 22));
+
+        TextView title = deviceLinkText(ctx, "有新设备想登录你的账号", 18, Theme.INK);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        content.addView(title, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView summary = deviceLinkText(ctx, "在新设备上输入下面的验证码", 14, Theme.SECONDARY);
+        LinearLayout.LayoutParams summaryLp = new LinearLayout.LayoutParams(-1, -2);
+        summaryLp.topMargin = dp(ctx, 18);
+        content.addView(summary, summaryLp);
+
+        TextView codeView = deviceLinkText(ctx, code == null ? "" : code, 44, Theme.INK);
+        codeView.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        codeView.setLetterSpacing(0.18f);
+        codeView.setContentDescription("验证码 " + (code == null ? "" : code));
+        LinearLayout.LayoutParams codeLp = new LinearLayout.LayoutParams(-1, -2);
+        codeLp.topMargin = dp(ctx, 16);
+        content.addView(codeView, codeLp);
+
+        TextView note = deviceLinkText(ctx, "不是你本人操作？点「不是我」。", 12, Theme.SECONDARY);
+        LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
+        noteLp.topMargin = dp(ctx, 14);
+        content.addView(note, noteLp);
+
+        return showRequiredChoice(ctx, null, content,
+                "这是我", onConfirm, "不是我", onReject);
+    }
+
+    private static TextView deviceLinkText(Context ctx, String text, int sizeSp, int color) {
+        TextView view = new TextView(ctx);
+        view.setText(text);
+        view.setTextSize(sizeSp);
+        view.setTextColor(color);
+        view.setGravity(Gravity.CENTER);
+        view.setLineSpacing(dp(ctx, 2), 1.0f);
+        return view;
+    }
+
     /** Dialog with custom view */
     public static void show(Context ctx, String title, View customView,
                             String positiveText, Runnable onPositive) {

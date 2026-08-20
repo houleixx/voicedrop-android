@@ -64,7 +64,6 @@ import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BlockStore;
 import com.baixingai.voicedrop.data.CommunityStore;
 import com.baixingai.voicedrop.data.CommunityTerms;
-import com.baixingai.voicedrop.data.DeviceLinkCrypto;
 import com.baixingai.voicedrop.data.DeviceLinkSession;
 import com.baixingai.voicedrop.data.DeviceLinkStore;
 import com.baixingai.voicedrop.data.ExportManager;
@@ -188,11 +187,9 @@ public final class RecordingDetailActivity extends Activity {
     protected SettingsStore settingsStore;
     protected UsageStore usageStore;
     protected PromptStore promptStore;
-    protected DeviceLinkStore deviceLinkStore;
+    protected DeviceLinkResponder deviceLinkResponder;
     protected ExportManager exportManager;
     protected DeviceLinkSession deviceLinkSession;
-    protected String pendingLinkPairingId;
-    protected String pendingLinkPubkey;
     protected Uploader uploader;
     protected AudioRecorder recorder;
     protected StatusSession statusSession;
@@ -302,7 +299,8 @@ public final class RecordingDetailActivity extends Activity {
         settingsStore = new SettingsStore(auth, http);
         usageStore = new UsageStore(auth, http);
         promptStore = new PromptStore(this, auth, http);
-        deviceLinkStore = new DeviceLinkStore(auth, http);
+        DeviceLinkStore deviceLinkStore = new DeviceLinkStore(auth, http);
+        deviceLinkResponder = new DeviceLinkResponder(this, auth, deviceLinkStore, io, this::toast);
         exportManager = new ExportManager(this, auth, http, library);
         uploader = new Uploader(this, auth, prefs, http);
         recorder = new AudioRecorder(this);
@@ -316,11 +314,11 @@ public final class RecordingDetailActivity extends Activity {
             }
 
             @Override public void onLinkRequest(String pairingId, String code, String pubkey) {
-                main.post(() -> showDeviceLinkApproval(pairingId, code, pubkey));
+                main.post(() -> deviceLinkResponder.onRequest(pairingId, code, pubkey));
             }
 
             @Override public void onLinkRelease(String pairingId) {
-                main.post(() -> releaseDeviceLink(pairingId));
+                main.post(() -> deviceLinkResponder.onRelease(pairingId));
             }
 
             @Override public void onError(String message) {
@@ -708,58 +706,6 @@ public final class RecordingDetailActivity extends Activity {
     protected void addRecordingPhoto(Uri uri) {
     }
     protected void uploadCapturedPhotos(List<CapturedPhoto> photos) {
-    }
-    protected void showDeviceLinkApproval(String pairingId, String code, String pubkey) {
-        if (auth.isWechatAuthenticated()) {
-            io.execute(() -> {
-                try {
-                    deviceLinkStore.cancel(pairingId);
-                } catch (Exception ignored) {
-                }
-            });
-            return;
-        }
-        pendingLinkPairingId = pairingId;
-        pendingLinkPubkey = pubkey;
-        IosDialog.showDeviceLinkApproval(this, code, null, () -> io.execute(() -> {
-                    try {
-                        deviceLinkStore.cancel(pairingId);
-                    } catch (Exception ignored) {
-                    }
-                    if (pairingId.equals(pendingLinkPairingId)) {
-                        pendingLinkPairingId = null;
-                        pendingLinkPubkey = null;
-                    }
-                }));
-    }
-    protected void releaseDeviceLink(String pairingId) {
-        if (pendingLinkPairingId == null || !pendingLinkPairingId.equals(pairingId) || pendingLinkPubkey == null) return;
-        if (auth.isWechatAuthenticated()) {
-            pendingLinkPairingId = null;
-            pendingLinkPubkey = null;
-            io.execute(() -> {
-                try {
-                    deviceLinkStore.cancel(pairingId);
-                } catch (Exception ignored) {
-                }
-            });
-            return;
-        }
-        String pubkey = pendingLinkPubkey;
-        pendingLinkPairingId = null;
-        pendingLinkPubkey = null;
-        io.execute(() -> {
-            try {
-                DeviceLinkCrypto.Blob blob = DeviceLinkCrypto.encrypt(auth.anonymousBearer(), pubkey);
-                JSONObject json = new JSONObject()
-                        .put("epk", blob.epkB64)
-                        .put("sealed", blob.sealedB64);
-                deviceLinkStore.complete(pairingId, json);
-                toast("已安全发送账号");
-            } catch (Exception e) {
-                toast("发送账号失败：" + e.getMessage());
-            }
-        });
     }
     protected void handleShareIntent(Intent intent) {
     }

@@ -12,7 +12,7 @@ import static org.junit.Assert.assertTrue;
 
 public final class DeviceLinkApprovalDialogSourceTest {
     @Test
-    public void deviceLinkApprovalRequiresYesOrRejectWithoutAnExtraPrompt() throws Exception {
+    public void activitiesDelegateDeviceLinkBehaviorToSharedResponder() throws Exception {
         String[] activities = {
                 "RecordingsActivity.java",
                 "RecordingDetailActivity.java",
@@ -22,34 +22,14 @@ public final class DeviceLinkApprovalDialogSourceTest {
 
         for (String activity : activities) {
             String source = readSource("src/main/java/com/baixingai/voicedrop/" + activity);
-            String method = methodBody(source, "protected void showDeviceLinkApproval");
 
-            assertTrue(activity, method.contains("IosDialog.showDeviceLinkApproval(this, code, null"));
-            assertTrue(activity, method.contains("deviceLinkStore.cancel(pairingId)"));
-            assertFalse(activity, method.contains("请在新设备输入验证码"));
-            assertFalse(activity, method.contains("IosDialog.show(this"));
-        }
-    }
-
-    @Test
-    public void deviceLinkOnlyTransfersAnonymousAccounts() throws Exception {
-        String[] activities = {
-                "RecordingsActivity.java",
-                "RecordingDetailActivity.java",
-                "CommunityActivity.java",
-                "CommunityDetailActivity.java"
-        };
-
-        for (String activity : activities) {
-            String source = readSource("src/main/java/com/baixingai/voicedrop/" + activity);
-            String approval = methodBody(source, "protected void showDeviceLinkApproval");
-            String release = methodBody(source, "protected void releaseDeviceLink");
-
-            assertTrue(activity, approval.contains("auth.isWechatAuthenticated()"));
-            assertTrue(activity, approval.contains("deviceLinkStore.cancel(pairingId)"));
-            assertTrue(activity, release.contains("auth.isWechatAuthenticated()"));
-            assertTrue(activity, release.contains("DeviceLinkCrypto.encrypt(auth.anonymousBearer(), pubkey)"));
-            assertFalse(activity, release.contains("DeviceLinkCrypto.encrypt(auth.bearer(), pubkey)"));
+            assertTrue(activity, source.contains("DeviceLinkResponder deviceLinkResponder"));
+            assertTrue(activity, source.contains("deviceLinkResponder.onRequest(pairingId, code, pubkey)"));
+            assertTrue(activity, source.contains("deviceLinkResponder.onRelease(pairingId)"));
+            assertFalse(activity, source.contains("protected void showDeviceLinkApproval"));
+            assertFalse(activity, source.contains("protected void releaseDeviceLink"));
+            assertFalse(activity, source.contains("pendingLinkPairingId"));
+            assertFalse(activity, source.contains("pendingLinkPubkey"));
         }
     }
 

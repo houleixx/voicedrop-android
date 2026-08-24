@@ -44,9 +44,12 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("new PopupWindow(menu, popupWidth, -2, true)"));
         assertTrue(reader.contains("popup.showAsDropDown(anchor"));
         assertTrue(reader.contains("dividerParams.setMargins(dp(16), 0, dp(16), 0)"));
-        assertTrue(reader.contains("WechatMiniProgramShare.sendFriend(this, target.title, target.url, cover, description)"));
+        assertTrue(reader.contains("WechatMiniProgramShare.send("));
+        assertTrue(reader.contains("WechatMiniProgramShare.bookReaderPath("));
+        assertTrue(reader.contains("target.chapter ? target.url : null"));
+        assertTrue(reader.contains("intent.putExtra(\"coverAt\", book.coverAt)"));
         assertTrue(reader.contains("WechatMiniProgramShare.sendTimeline("));
-        assertTrue(!reader.contains("WechatMiniProgramShare.bookPath("));
+        assertTrue(!reader.contains("WechatMiniProgramShare.sendFriend(this, target.title"));
         assertTrue(reader.contains("loadBookCover(getIntent().getStringExtra(\"coverUrl\"))"));
         assertTrue(reader.contains("doUpdateVisitedHistory(WebView view"));
         assertTrue(reader.contains("shareIo.shutdownNow()"));

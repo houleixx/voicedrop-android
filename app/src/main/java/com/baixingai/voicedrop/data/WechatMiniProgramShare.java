@@ -99,6 +99,21 @@ public final class WechatMiniProgramShare {
         }
     }
 
+    /** Matches the mini program book reader's share payload, including chapter deep links. */
+    public static String bookReaderPath(String slug, String title, String main, String author,
+                                        boolean cover, long coverAt, String chapterUrl) {
+        String path = "pages/book-reader/index?slug=" + encode(slug)
+                + "&title=" + encode(title)
+                + "&main=" + encode(main)
+                + "&author=" + encode(author)
+                + "&cover=" + (cover ? "1" : "0")
+                + "&coverAt=" + Math.max(0L, coverAt);
+        if (chapterUrl != null && !chapterUrl.trim().isEmpty()) {
+            path += "&page=" + encode(chapterUrl);
+        }
+        return path;
+    }
+
     public static Result sendFriend(Context context, String title, String webpageUrl,
                                     Bitmap thumbnailImage) {
         return sendFriend(context, title, webpageUrl, thumbnailImage, "打开 VoiceDrop 阅读这本书");
@@ -141,6 +156,14 @@ public final class WechatMiniProgramShare {
         request.message = message;
         request.scene = scene;
         return WechatLogin.api(context).sendReq(request) ? sentResult : Result.SEND_FAILED;
+    }
+
+    private static String encode(String value) {
+        try {
+            return URLEncoder.encode(value == null ? "" : value.trim(), "UTF-8").replace("+", "%20");
+        } catch (UnsupportedEncodingException impossible) {
+            throw new AssertionError(impossible);
+        }
     }
 
     private static String trim(String value, int maxLength, String fallback) {

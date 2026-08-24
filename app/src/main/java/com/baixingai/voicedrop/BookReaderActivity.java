@@ -66,6 +66,7 @@ public final class BookReaderActivity extends Activity {
         intent.putExtra("shareTitle", book.title);
         intent.putExtra("author", book.author);
         intent.putExtra("cover", book.cover);
+        intent.putExtra("coverAt", book.coverAt);
         intent.putExtra("coverUrl", book.coverUrl(Api.publicWebBase()));
         source.startActivity(intent);
         source.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
@@ -278,7 +279,17 @@ public final class BookReaderActivity extends Activity {
         String description = target.chapter ? rootBookTitle() : "VoiceDrop 图书馆 · 点开即读";
         if (timeline) return WechatMiniProgramShare.sendTimeline(
                 this, target.title, target.url, cover, description);
-        return WechatMiniProgramShare.sendFriend(this, target.title, target.url, cover, description);
+        String title = getIntent().getStringExtra("shareTitle");
+        String main = getIntent().getStringExtra("displayTitle");
+        return WechatMiniProgramShare.send(
+                this, target.title, target.url,
+                WechatMiniProgramShare.bookReaderPath(
+                        getIntent().getStringExtra("slug"), title, main,
+                        getIntent().getStringExtra("author"),
+                        getIntent().getBooleanExtra("cover", false),
+                        getIntent().getLongExtra("coverAt", 0L),
+                        target.chapter ? target.url : null),
+                cover, description);
     }
 
     private void shareBookWithSystem() {

@@ -27,6 +27,8 @@ import com.baixingai.voicedrop.BookReaderActivity;
 import com.baixingai.voicedrop.BookWritingActivity;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.core.BookShelfLoadingPolicy;
+import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.BookShelfCache;
 import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
@@ -42,6 +44,8 @@ public final class BooksShelfPanel extends LinearLayout {
     private final BookCoverLoader coverLoader;
     private final PullRefreshLayout refresher;
     private final LinearLayout shelves;
+    private final AuthStore auth;
+    private BookShelfCache shelfCache;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
     private boolean initialLoadPending;
 
@@ -49,6 +53,8 @@ public final class BooksShelfPanel extends LinearLayout {
         super(context);
         setOrientation(VERTICAL);
         setBackgroundColor(Theme.BG);
+        auth = new AuthStore(context);
+        shelfCache = new BookShelfCache(context, auth.libraryCacheIdentity());
         coverLoader = new BookCoverLoader(context);
 
         refresher = new PullRefreshLayout(context);
@@ -66,8 +72,7 @@ public final class BooksShelfPanel extends LinearLayout {
         refresher.setOnRefreshListener(() -> load(false));
         addView(refresher, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        books = BookShelfIndex.parse(context.getSharedPreferences("voicedrop.books", Context.MODE_PRIVATE)
-                .getString("index", ""));
+        books = BookShelfIndex.parse(shelfCache.read());
         initialLoadPending = books.isEmpty();
         render();
         load(true);
@@ -75,18 +80,32 @@ public final class BooksShelfPanel extends LinearLayout {
 
     private void load(boolean quiet) {
         if (!quiet) refresher.setRefreshing(true);
+        String requestIdentity = auth.libraryCacheIdentity();
+        if (!shelfCache.matches(requestIdentity)) {
+            shelfCache = new BookShelfCache(getContext(), requestIdentity);
+            books = BookShelfIndex.parse(shelfCache.read());
+            initialLoadPending = books.isEmpty();
+            render();
+        }
+        BookShelfCache requestCache = shelfCache;
+        String bearer = auth.bearer();
         io.execute(() -> {
             String raw = null;
             try {
                 HttpClient.Response response = new HttpClient().get(
-                        Api.publicWebBase() + "/books/?format=json", null);
+                        Api.publicWebBase() + "/books/?format=json", bearer);
                 if (response.ok()) raw = response.text();
             } catch (Exception ignored) {}
             String result = raw;
             post(() -> {
+                if (!requestCache.matches(auth.libraryCacheIdentity())) {
+                    refreshForCurrentAccount();
+                    refresher.setRefreshing(false);
+                    return;
+                }
+                shelfCache = requestCache;
                 if (result != null) {
-                    getContext().getSharedPreferences("voicedrop.books", Context.MODE_PRIVATE)
-                            .edit().putString("index", result).apply();
+                    requestCache.store(result);
                     books = BookShelfIndex.parse(result);
                 }
                 initialLoadPending = false;
@@ -94,6 +113,17 @@ public final class BooksShelfPanel extends LinearLayout {
                 refresher.setRefreshing(false);
             });
         });
+    }
+
+    /** Called by the hosting activity after login, logout, or an account import. */
+    public void refreshForCurrentAccount() {
+        String identity = auth.libraryCacheIdentity();
+        if (shelfCache.matches(identity)) return;
+        shelfCache = new BookShelfCache(getContext(), identity);
+        books = BookShelfIndex.parse(shelfCache.read());
+        initialLoadPending = books.isEmpty();
+        render();
+        load(true);
     }
 
     private void render() {
@@ -191,6 +221,7 @@ public final class BooksShelfPanel extends LinearLayout {
             cover.addView(image, new FrameLayout.LayoutParams(-1, -1));
             coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image);
         }
+        if (book.hidden) addHiddenBadge(cover);
         cell.addView(cover, new LinearLayout.LayoutParams(-1, -2));
         String meta = book.chapters > 0 ? book.chapters + " 章" : book.sub;
         cell.addView(caption(book.main, meta == null || meta.isEmpty() ? " " : meta), captionParams());
@@ -217,6 +248,17 @@ public final class BooksShelfPanel extends LinearLayout {
             typography.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
         }
         cover.addView(typography, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private void addHiddenBadge(FrameLayout cover) {
+        TextView badge = text("隐藏", 10, Color.WHITE, Typeface.BOLD, false);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(7), dp(3), dp(7), dp(3));
+        badge.setBackground(round(0x8c000000, 12));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                -2, -2, Gravity.TOP | Gravity.END);
+        params.setMargins(dp(6), dp(6), dp(6), dp(6));
+        cover.addView(badge, params);
     }
 
     private LinearLayout cellContainer() {

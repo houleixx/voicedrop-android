@@ -214,6 +214,7 @@ public final class RecordingsActivity extends Activity {
     private boolean businessInitialized;
     protected ViewPager homePager;
     protected HomePagerAdapter homePagerAdapter;
+    protected BooksShelfPanel booksShelfPanel;
     protected TextView recordingsTabTitle;
     protected TextView communityTabTitle;
     protected TextView booksTabTitle;
@@ -374,6 +375,7 @@ public final class RecordingsActivity extends Activity {
             communityRefreshDirty = true;
         }
         reconnectAccountSessionsIfNeeded();
+        if (booksShelfPanel != null) booksShelfPanel.refreshForCurrentAccount();
         if (!isDetailActivity() && !booksTab) {
             if (communityTab) {
                 if (communityRefreshDirty) {
@@ -1664,7 +1666,8 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected View buildBooksTabPage() {
-        return new BooksShelfPanel(this);
+        booksShelfPanel = new BooksShelfPanel(this);
+        return booksShelfPanel;
     }
 
     protected String recordingsPageKey(String tag) {
@@ -2942,6 +2945,7 @@ public final class RecordingsActivity extends Activity {
     protected void clearHomePagerRefs() {
         homePager = null;
         homePagerAdapter = null;
+        booksShelfPanel = null;
         recordingsTabTitle = null;
         communityTabTitle = null;
         booksTabTitle = null;

@@ -16,6 +16,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.baixingai.voicedrop.core.BookShelfIndex;
+import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.BookShelfCache;
 import com.baixingai.voicedrop.data.BookCoverLoader;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
@@ -36,9 +38,13 @@ public final class BooksShelfActivity extends Activity {
     private GridLayout grid;
     private TextView state;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
+    private AuthStore auth;
+    private BookShelfCache shelfCache;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        auth = new AuthStore(this);
+        shelfCache = new BookShelfCache(this, auth.libraryCacheIdentity());
         coverLoader = new BookCoverLoader(this);
         SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); page.setBackgroundColor(Theme.BG);
@@ -49,8 +55,22 @@ public final class BooksShelfActivity extends Activity {
         scroll.addView(grid, new ScrollView.LayoutParams(-1, -2)); refresher.addView(scroll, new PullRefreshLayout.LayoutParams(-1, -1));
         refresher.setRefreshTarget(scroll, 0); refresher.setColorSchemeColors(Theme.ACCENT); refresher.setOnRefreshListener(() -> load(false));
         page.addView(refresher, new LinearLayout.LayoutParams(-1, 0, 1)); setContentView(page);
-        books = BookShelfIndex.parse(getSharedPreferences("voicedrop.books", MODE_PRIVATE).getString("index", ""));
+        books = BookShelfIndex.parse(shelfCache.read());
         render(); load(true);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshForCurrentAccount();
+    }
+
+    private void refreshForCurrentAccount() {
+        String identity = auth.libraryCacheIdentity();
+        if (shelfCache.matches(identity)) return;
+        shelfCache = new BookShelfCache(this, identity);
+        books = BookShelfIndex.parse(shelfCache.read());
+        render();
+        load(true);
     }
 
     private View topBar() {
@@ -68,8 +88,37 @@ public final class BooksShelfActivity extends Activity {
 
     private void load(boolean quiet) {
         if (!quiet) refresher.setRefreshing(true);
-        io.execute(() -> { String raw = null; try { HttpClient.Response response = new HttpClient().get(Api.publicWebBase() + "/books/?format=json", null); if (response.ok()) raw = response.text(); } catch (Exception ignored) {}
-            String finalRaw = raw; runOnUiThread(() -> { if (finalRaw != null) { getSharedPreferences("voicedrop.books", MODE_PRIVATE).edit().putString("index", finalRaw).apply(); books = BookShelfIndex.parse(finalRaw); } render(); refresher.setRefreshing(false); }); });
+        String requestIdentity = auth.libraryCacheIdentity();
+        if (!shelfCache.matches(requestIdentity)) {
+            shelfCache = new BookShelfCache(this, requestIdentity);
+            books = BookShelfIndex.parse(shelfCache.read());
+            render();
+        }
+        BookShelfCache requestCache = shelfCache;
+        String bearer = auth.bearer();
+        io.execute(() -> {
+            String raw = null;
+            try {
+                HttpClient.Response response = new HttpClient().get(
+                        Api.publicWebBase() + "/books/?format=json", bearer);
+                if (response.ok()) raw = response.text();
+            } catch (Exception ignored) {}
+            String finalRaw = raw;
+            runOnUiThread(() -> {
+                if (!requestCache.matches(auth.libraryCacheIdentity())) {
+                    refreshForCurrentAccount();
+                    refresher.setRefreshing(false);
+                    return;
+                }
+                shelfCache = requestCache;
+                if (finalRaw != null) {
+                    requestCache.store(finalRaw);
+                    books = BookShelfIndex.parse(finalRaw);
+                }
+                render();
+                refresher.setRefreshing(false);
+            });
+        });
     }
     private void render() {
         coverLoader.cancelAll();
@@ -86,6 +135,7 @@ public final class BooksShelfActivity extends Activity {
         FrameLayout cover = new FrameLayout(this); GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{color(book.c), color(book.c2)}); bg.setCornerRadius(dp(7)); cover.setBackground(bg);
         addBookTypography(cover, book);
         if (book.cover) { ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.addView(image, new FrameLayout.LayoutParams(-1,-1)); coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image); }
+        if (book.hidden) addHiddenBadge(cover);
         cell.addView(cover, new LinearLayout.LayoutParams(-1, dp(210)));
         cell.addView(caption(book.main)); TextView meta = text(book.chapters > 0 ? book.chapters + " 章" : book.sub, 12, Theme.FAINT, Typeface.NORMAL); meta.setPadding(0,dp(3),0,0); cell.addView(meta); cell.addView(shelfBar()); return cell;
     }
@@ -93,6 +143,15 @@ public final class BooksShelfActivity extends Activity {
         LinearLayout typography = new LinearLayout(this); typography.setOrientation(LinearLayout.VERTICAL); typography.setGravity(Gravity.CENTER); typography.setPadding(dp(15), dp(15), dp(15), dp(15));
         TextView main = text(book.main, 20, 0xfffff8e9, Typeface.BOLD); main.setGravity(Gravity.CENTER); typography.addView(main); View rule = new View(this); rule.setBackgroundColor(0xccffffff); LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(dp(28), dp(1)); rlp.setMargins(0,dp(12),0,dp(12)); typography.addView(rule, rlp); TextView sub = text(book.sub, 12, 0xfffff8e9, Typeface.NORMAL); sub.setGravity(Gravity.CENTER); typography.addView(sub);
         cover.addView(typography, new FrameLayout.LayoutParams(-1, -1));
+    }
+    private void addHiddenBadge(FrameLayout cover) {
+        TextView badge = text("隐藏", 10, Color.WHITE, Typeface.BOLD);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(7), dp(3), dp(7), dp(3));
+        badge.setBackground(round(0x8c000000, 12));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        params.setMargins(dp(6), dp(6), dp(6), dp(6));
+        cover.addView(badge, params);
     }
     private View shelfBar(){View bar=new View(this);bar.setBackgroundColor(0xff8b5f3d);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(9));lp.setMargins(0,dp(8),0,0);bar.setLayoutParams(lp);return bar;}
     private TextView caption(String value) { TextView v=text(value,14,Theme.INK,Typeface.BOLD); v.setSingleLine(); v.setPadding(0,dp(10),0,0); return v; }

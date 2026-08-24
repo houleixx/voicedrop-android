@@ -5,7 +5,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Public /books/?format=json contract shared with the iOS shelf. */
+/** Auth-aware /books/?format=json contract shared with the iOS shelf. */
 public final class BookShelfIndex {
     private BookShelfIndex() {}
 
@@ -25,7 +25,8 @@ public final class BookShelfIndex {
                         item.optString("c2", "#4B342C"), item.optBoolean("cover", false),
                         Math.max(0, item.optInt("chapters", 0)), item.optString("author", ""),
                         Math.max(0L, item.optLong("createdAt", 0L)),
-                        Math.max(0L, item.optLong("coverAt", 0L))));
+                        Math.max(0L, item.optLong("coverAt", 0L)),
+                        item.optBoolean("hidden", false)));
             }
         } catch (Exception ignored) {}
         return out;
@@ -33,15 +34,16 @@ public final class BookShelfIndex {
 
     public static final class Book {
         public final String slug, title, main, sub, c, c2, author;
-        public final boolean cover;
+        public final boolean cover, hidden;
         public final int chapters;
         public final long createdAt, coverAt;
         public Book(String slug, String title, String main, String sub, String c, String c2,
-                    boolean cover, int chapters, String author, long createdAt, long coverAt) {
+                    boolean cover, int chapters, String author, long createdAt, long coverAt,
+                    boolean hidden) {
             this.slug = slug; this.title = title; this.main = main; this.sub = sub;
             this.c = c; this.c2 = c2; this.cover = cover; this.chapters = chapters;
             this.author = author == null ? "" : author; this.createdAt = createdAt;
-            this.coverAt = coverAt;
+            this.coverAt = coverAt; this.hidden = hidden;
         }
         public String readerUrl(String publicWebBase) {
             return publicWebBase + "/books/" + slug + "/";

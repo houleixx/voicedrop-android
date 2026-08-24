@@ -37,7 +37,18 @@ public final class BookShelfIndexTest {
         assertEquals("主标题：副标题", books.get(0).title);
         assertEquals(0L, books.get(0).createdAt);
         assertEquals(0L, books.get(0).coverAt);
+        assertFalse(books.get(0).hidden);
         assertEquals("https://voicedrop.cn/books/legacy/cover.jpg",
                 books.get(0).coverUrl("https://voicedrop.cn"));
+    }
+
+    @Test public void parsesOwnerOnlyHiddenMarker() {
+        java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
+                "{\"slug\":\"private-draft\",\"hidden\":true}," +
+                "{\"slug\":\"public-book\"}]}");
+
+        assertEquals(2, books.size());
+        assertTrue(books.get(0).hidden);
+        assertFalse(books.get(1).hidden);
     }
 }

@@ -30,6 +30,7 @@ public final class BookWritingVisualContractTest {
         assertTrue(page.contains("new LinearLayout.LayoutParams(dp(42), dp(42))"));
         assertTrue(page.contains("SystemBarDefaults.applyBottomInsets(bottom"));
         assertTrue(page.contains("done.setBackground(round(Theme.ACCENT, 8))"));
+        assertTrue(page.contains("submittedTitle.setGravity(Gravity.CENTER)"));
         assertTrue(page.contains("WechatShareLoadingDialog.show(this, \"提交中...\")"));
         assertTrue(page.indexOf("hideSubmitLoading();\n        sending = false") > 0);
         assertTrue(page.contains("if (loadedBalance != null && loadedBalance < PRICE)"));

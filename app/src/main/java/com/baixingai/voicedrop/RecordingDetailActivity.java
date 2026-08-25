@@ -2245,6 +2245,19 @@ public final class RecordingDetailActivity extends Activity {
         menu.addView(commRow);
 
         menu.addView(divider());
+        LinearLayout bookRow = menuRow("扩展成一本书", R.drawable.ic_about_books_vertical, Theme.RED);
+        bookRow.setOnClickListener(v -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            MinedArticle article = currentShareArticle(currentArticleDoc, articleIndex);
+            if (article == null) {
+                toast("文章还没准备好");
+                return;
+            }
+            BookWritingActivity.openFromArticle(this, article.title, ArticleBody.stripMarkers(article.body));
+        });
+        menu.addView(bookRow);
+
+        menu.addView(divider());
         LinearLayout shareRow = menuRow("分享", AliIconFont.SHARE_FORWARD, Theme.RED);
         shareRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();

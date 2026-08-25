@@ -27,6 +27,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.baixingai.voicedrop.core.BookWritingResult;
+import com.baixingai.voicedrop.core.BookWritingSeed;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.data.UsageStore;
@@ -56,6 +57,8 @@ public final class BookWritingActivity extends Activity {
     private LinearLayout content;
     private LinearLayout bottomBar;
     private EditText seed;
+    private String seedArticleTitle;
+    private String seedArticleBody;
     private TextView submit;
     private TextView status;
     private WechatShareLoadingDialog submitLoading;
@@ -70,8 +73,19 @@ public final class BookWritingActivity extends Activity {
         source.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
     }
 
+    /** Opens the book writer with an article kept separately from the editable supplemental request. */
+    public static void openFromArticle(Activity source, String title, String markerFreeBody) {
+        Intent intent = new Intent(source, BookWritingActivity.class);
+        intent.putExtra("book_seed_article_title", title);
+        intent.putExtra("book_seed_article_body", markerFreeBody);
+        source.startActivity(intent);
+        source.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        seedArticleTitle = getIntent().getStringExtra("book_seed_article_title");
+        seedArticleBody = getIntent().getStringExtra("book_seed_article_body");
         SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
         FrameLayout root = new FrameLayout(this);
         root.setFitsSystemWindows(false);
@@ -184,8 +198,23 @@ public final class BookWritingActivity extends Activity {
 
     private View seedSection(String preservedSeed) {
         LinearLayout section = vertical();
-        section.addView(sectionLabel("中心思想"));
-        TextView intro = text("一句话说清这本书要讲明白的那一个问题或主张。想法越聚焦，书越好看；也可以贴一整篇文章当种子。", 13, Theme.SECONDARY, Typeface.NORMAL);
+        boolean hasArticle = hasSeedArticle();
+        section.addView(sectionLabel(hasArticle ? "补充要求（可选）" : "中心思想"));
+        if (hasArticle) {
+            LinearLayout card = vertical();
+            card.setPadding(dp(12), dp(12), dp(12), dp(12));
+            card.setBackground(round(AMBER_SOFT, 8));
+            card.addView(text("《" + articleTitle() + "》已作为种子", 14, Theme.INK, Typeface.BOLD));
+            String preview = seedArticleBody == null ? "" : seedArticleBody.replace('\n', ' ').trim();
+            if (preview.length() > 60) preview = preview.substring(0, 60) + "…";
+            TextView previewView = text(preview, 12, Theme.SECONDARY, Typeface.NORMAL);
+            previewView.setMaxLines(2);
+            card.addView(previewView, topMargin(dp(5)));
+            section.addView(card, topMargin(dp(8)));
+        }
+        TextView intro = text(hasArticle
+                ? "可以补充这本书往哪儿写：比如“写成给孩子的绘本”“扩成一本科普书”“沿着文中第三点展开”。不填就由写书代理自己定。"
+                : "一句话说清这本书要讲明白的那一个问题或主张。想法越聚焦，书越好看；也可以贴一整篇文章当种子。", 13, Theme.SECONDARY, Typeface.NORMAL);
         intro.setLineSpacing(dp(2), 1f);
         section.addView(intro, topMargin(dp(8)));
         seed = new EditText(this);
@@ -193,7 +222,8 @@ public final class BookWritingActivity extends Activity {
         seed.setTextSize(16);
         seed.setTextColor(Theme.INK);
         seed.setHintTextColor(Theme.FAINT);
-        String placeholder = "比如：为什么一切都在变乱？\n或：钱不脏，是我一直躲着它。";
+        String placeholder = hasArticle ? "比如：写成给孩子的绘本。（可留空）"
+                : "比如：为什么一切都在变乱？\n或：钱不脏，是我一直躲着它。";
         SpannableString hint = new SpannableString(placeholder);
         hint.setSpan(new AbsoluteSizeSpan(14, true), 0, hint.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         seed.setHint(hint);
@@ -344,8 +374,11 @@ public final class BookWritingActivity extends Activity {
     }
 
     private void startBook() {
-        String value = seed.getText().toString().trim();
-        if (value.isEmpty() || sending || submitted) return;
+        String requirement = seed.getText().toString();
+        if (!BookWritingSeed.canSubmit(requirement, hasSeedArticle()) || sending || submitted) return;
+        String value = hasSeedArticle()
+                ? BookWritingSeed.fromArticle(requirement, articleTitle(), seedArticleBody)
+                : BookWritingSeed.fromIdea(requirement);
         sending = true;
         showStatus(null);
         updateSubmitState();
@@ -393,7 +426,9 @@ public final class BookWritingActivity extends Activity {
         LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(dp(48), dp(48));
         checkParams.topMargin = dp(24);
         content.addView(check, checkParams);
-        content.addView(text("开始写了！", 17, Theme.INK, Typeface.BOLD), centeredTopMargin(dp(12)));
+        TextView submittedTitle = text("开始写了！", 17, Theme.INK, Typeface.BOLD);
+        submittedTitle.setGravity(Gravity.CENTER);
+        content.addView(submittedTitle, centeredTopMargin(dp(12)));
         TextView message = text("现在可以关掉 App。书通常 10–30 分钟写完，过稿一章、上架一章——写好就出现在「写书」书架上，下拉刷新就能看到。", 14, Theme.SECONDARY, Typeface.NORMAL);
         message.setGravity(Gravity.CENTER);
         message.setLineSpacing(dp(2), 1f);
@@ -409,7 +444,7 @@ public final class BookWritingActivity extends Activity {
 
     private void updateSubmitState() {
         if (submit == null) return;
-        boolean enabled = seed != null && !seed.getText().toString().trim().isEmpty()
+        boolean enabled = seed != null && BookWritingSeed.canSubmit(seed.getText().toString(), hasSeedArticle())
                 && !sending && !submitted && (balance == null || balance >= PRICE);
         submit.setEnabled(enabled);
         double gap = balance == null ? 0 : Math.max(0, PRICE - balance);
@@ -483,6 +518,10 @@ public final class BookWritingActivity extends Activity {
     private String format(double value) {
         double rounded = Math.round(value * 10) / 10.0;
         return rounded == Math.rint(rounded) ? Long.toString(Math.round(rounded)) : Double.toString(rounded);
+    }
+    private boolean hasSeedArticle() { return seedArticleTitle != null || seedArticleBody != null; }
+    private String articleTitle() {
+        return seedArticleTitle == null || seedArticleTitle.trim().isEmpty() ? "无题" : seedArticleTitle.trim();
     }
     private LinearLayout vertical() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private TextView text(String value, int size, int color, int style) {

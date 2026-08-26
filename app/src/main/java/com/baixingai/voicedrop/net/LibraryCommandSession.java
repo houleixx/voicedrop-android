@@ -101,7 +101,7 @@ public final class LibraryCommandSession {
     public void enqueue(String text, List<CommandRef> refs) {
         if (text == null || text.trim().isEmpty()) return;
         setRefs(refs);
-        CommandRequest request = new CommandRequest(UUID.randomUUID().toString(), text.trim());
+        CommandRequest request = new CommandRequest(UUID.randomUUID().toString(), text.trim(), refs);
         queue.add(request);
         persist();
         listener.onQueueChanged(queueSnapshot());
@@ -123,7 +123,7 @@ public final class LibraryCommandSession {
 
     private void send(CommandRequest request) {
         if (socket == null || !opened) return;
-        socket.send(payloadFor(request.id, request.text, refs));
+        socket.send(payloadFor(request.id, request.text, request.refs));
     }
 
     private void handle(String text) {
@@ -397,10 +397,16 @@ public final class LibraryCommandSession {
     public static final class CommandRequest {
         public final String id;
         public final String text;
+        public final List<CommandRef> refs;
 
         public CommandRequest(String id, String text) {
+            this(id, text, new ArrayList<CommandRef>());
+        }
+
+        public CommandRequest(String id, String text, List<CommandRef> refs) {
             this.id = id;
             this.text = text;
+            this.refs = refs == null ? new ArrayList<CommandRef>() : new ArrayList<>(refs);
         }
     }
 

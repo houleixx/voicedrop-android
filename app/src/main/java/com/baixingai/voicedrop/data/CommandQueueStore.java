@@ -19,9 +19,13 @@ public final class CommandQueueStore {
     }
 
     public static List<LibraryCommandSession.CommandRequest> load(Context context) {
-        List<LibraryCommandSession.CommandRequest> out = new ArrayList<>();
         SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String raw = prefs.getString(KEY_DEFAULT, "");
+        return parse(raw);
+    }
+
+    public static List<LibraryCommandSession.CommandRequest> parse(String raw) {
+        List<LibraryCommandSession.CommandRequest> out = new ArrayList<>();
         if (raw == null || raw.isEmpty()) return out;
         try {
             JSONArray arr = new JSONArray(raw);
@@ -31,7 +35,18 @@ public final class CommandQueueStore {
                 String id = obj.optString("id", "");
                 String text = obj.optString("text", "");
                 if (!id.isEmpty() && !text.trim().isEmpty()) {
-                    out.add(new LibraryCommandSession.CommandRequest(id, text));
+                    List<LibraryCommandSession.CommandRef> refs = new ArrayList<>();
+                    JSONArray refsJson = obj.optJSONArray("refs");
+                    if (refsJson != null) for (int j = 0; j < refsJson.length(); j++) {
+                        JSONObject ref = refsJson.optJSONObject(j);
+                        if (ref == null) continue;
+                        int n = ref.optInt("n", 0);
+                        String stem = ref.optString("stem", "");
+                        if (n > 0 && !stem.isEmpty()) {
+                            refs.add(new LibraryCommandSession.CommandRef(n, stem, ref.optString("title", "")));
+                        }
+                    }
+                    out.add(new LibraryCommandSession.CommandRequest(id, text, refs));
                 }
             }
         } catch (Exception ignored) {
@@ -40,20 +55,34 @@ public final class CommandQueueStore {
     }
 
     public static void save(Context context, List<LibraryCommandSession.CommandRequest> queue) {
+        String raw = serialize(queue);
+        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        if (raw.isEmpty()) editor.remove(KEY_DEFAULT);
+        else editor.putString(KEY_DEFAULT, raw);
+        editor.apply();
+    }
+
+    public static String serialize(List<LibraryCommandSession.CommandRequest> queue) {
         JSONArray arr = new JSONArray();
+        if (queue == null) return "";
         for (LibraryCommandSession.CommandRequest request : queue) {
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("id", request.id);
                 obj.put("text", request.text);
+                JSONArray refs = new JSONArray();
+                for (LibraryCommandSession.CommandRef ref : request.refs) {
+                    refs.put(new JSONObject()
+                            .put("n", ref.n)
+                            .put("stem", ref.stem)
+                            .put("title", ref.title));
+                }
+                obj.put("refs", refs);
                 arr.put(obj);
             } catch (Exception ignored) {
             }
         }
-        SharedPreferences prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = prefs.edit();
-        if (arr.length() == 0) editor.remove(KEY_DEFAULT);
-        else editor.putString(KEY_DEFAULT, arr.toString());
-        editor.apply();
+        return arr.length() == 0 ? "" : arr.toString();
     }
 }

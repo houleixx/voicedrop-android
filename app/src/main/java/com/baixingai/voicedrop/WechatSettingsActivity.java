@@ -150,7 +150,7 @@ public class WechatSettingsActivity extends Activity {
         io.execute(() -> {
             try {
                 HttpClient.Response response = new HttpClient().get(
-                        Api.filesBase() + "/wechat/bind-status", new AuthStore(this).bearer());
+                        Api.wechatAuthorizationBase() + "/wechat/bind-status", new AuthStore(this).bearer());
                 JSONObject body = response.ok() ? new JSONObject(response.text()) : new JSONObject();
                 boolean connected = body.optBoolean("connected", false);
                 runOnUiThread(() -> showStatus(connected, body));
@@ -206,7 +206,7 @@ public class WechatSettingsActivity extends Activity {
         io.execute(() -> {
             try {
                 HttpClient.Response response = new HttpClient().postJson(
-                        Api.filesBase() + "/wechat/unbind", new AuthStore(this).bearer(),
+                        Api.wechatAuthorizationBase() + "/wechat/unbind", new AuthStore(this).bearer(),
                         "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 if (!response.ok()) throw new IllegalStateException("解绑失败");
                 runOnUiThread(() -> {

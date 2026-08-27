@@ -14,9 +14,9 @@ public class WechatSettingsActivitySourceTest {
     public void officialAccountPageUsesThirdPartyAuthorizationInsteadOfCollectingSecrets() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/WechatSettingsActivity.java");
 
-        assertTrue(source.contains("Api.filesBase() + \"/wechat/bind-status\""));
+        assertTrue(source.contains("Api.wechatAuthorizationBase() + \"/wechat/bind-status\""));
         assertTrue(source.contains("new AuthStore(this).bearer()"));
-        assertTrue(source.contains("/wechat/unbind"));
+        assertTrue(source.contains("Api.wechatAuthorizationBase() + \"/wechat/unbind\""));
         assertFalse(source.contains("wechat.voicedrop.cn"));
         assertFalse(source.contains("bind_status?user"));
         assertTrue(source.contains("未连接微信公众号"));

@@ -15,9 +15,10 @@ public class WechatAuthorizationActivitySourceTest {
     public void authorizationPageCapturesWebViewAndUsesTheAuthenticatedProductionEndpoint() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/WechatAuthorizationActivity.java");
 
-        assertTrue(source.contains("Api.filesBase() + \"/wechat/authorization\""));
+        assertTrue(source.contains("Api.wechatAuthorizationBase() + \"/wechat/authorization\""));
+        assertTrue(source.contains("Api.isWechatAuthorizationHost(host)"));
         assertTrue(source.contains("scan_url"));
-        assertTrue(source.contains("Api.filesBase() + \"/wechat/bind-status\""));
+        assertTrue(source.contains("Api.wechatAuthorizationBase() + \"/wechat/bind-status\""));
         assertTrue(source.contains("new HttpClient().get(scanUrl, null)"));
         assertTrue(source.contains("WechatAuthorizationHandoff.handoffHtml(scanUrl"));
         assertTrue(source.contains("webView.loadDataWithBaseURL(scanUrl"));

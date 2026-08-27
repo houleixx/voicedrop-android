@@ -107,7 +107,7 @@ public final class WechatAuthorizationActivity extends Activity {
             boolean connected = false;
             try {
                 HttpClient.Response response = new HttpClient().get(
-                        Api.filesBase() + "/wechat/bind-status", new AuthStore(this).bearer());
+                        Api.wechatAuthorizationBase() + "/wechat/bind-status", new AuthStore(this).bearer());
                 connected = response.ok() && new JSONObject(response.text()).optBoolean("connected", false);
             } catch (Exception ignored) { }
             final boolean isConnected = connected;
@@ -122,7 +122,7 @@ public final class WechatAuthorizationActivity extends Activity {
         io.execute(() -> {
             try {
                 HttpClient.Response response = new HttpClient().postJson(
-                        Api.filesBase() + "/wechat/authorization", new AuthStore(this).bearer(),
+                        Api.wechatAuthorizationBase() + "/wechat/authorization", new AuthStore(this).bearer(),
                         "{}".getBytes(StandardCharsets.UTF_8));
                 String scanUrl = response.ok() ? new JSONObject(response.text()).optString("scan_url", "") : "";
                 if (scanUrl.isEmpty()) throw new IllegalStateException("missing scan_url");
@@ -195,7 +195,7 @@ public final class WechatAuthorizationActivity extends Activity {
     /** Keep the authorization handoff in its expected hosts; all other links stay outside the app. */
     private boolean allow(Uri uri) {
         String host = uri == null ? "" : uri.getHost();
-        if (Api.CN_HOST.equalsIgnoreCase(host) || Api.CF_HOST.equalsIgnoreCase(host)
+        if (Api.isWechatAuthorizationHost(host)
                 || "mp.weixin.qq.com".equalsIgnoreCase(host)) return false;
         try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) {}
         return true;

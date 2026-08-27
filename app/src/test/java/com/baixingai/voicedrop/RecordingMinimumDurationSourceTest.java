@@ -15,8 +15,8 @@ public class RecordingMinimumDurationSourceTest {
         String recordings = source("RecordingsActivity.java");
         String community = source("CommunityDetailActivity.java");
 
-        assertTrue(recordings.contains("IosDialog.show(this, \"录音太短\", "
-                + "\"时间太短，不足以产生文章，这条录音不会上传。\")"));
+        assertTrue(recordings.contains("IosDialog.showAutoHeight(this, \"录音太短\","));
+        assertTrue(recordings.contains("\"时间太短，不足以产生文章，这条录音不会上传。\", \"好\", null, null, null)"));
         assertTrue(community.contains("RecordingQuality.discardIfTooShort(take)"));
         assertTrue(community.contains("SimpleToast.show(this, \"时间太短，不足以产生文章\")"));
     }

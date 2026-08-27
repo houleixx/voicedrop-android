@@ -2613,14 +2613,19 @@ public final class RecordingsActivity extends Activity {
         // Bottom: stop button + camera
         FrameLayout bottom = new FrameLayout(this);
         SystemBarDefaults.applyBottomInsets(bottom, 0, 0, 0, 0);
-        page.addView(bottom, new LinearLayout.LayoutParams(-1, dp(160)));
+        // The large stop control extends above the side actions. Reserve its
+        // shadow area so the button is never clipped at this container's top.
+        page.addView(bottom, new LinearLayout.LayoutParams(-1, dp(180)));
 
         // Stop button column (centered at bottom)
         LinearLayout stopCol = new LinearLayout(this);
         stopCol.setOrientation(LinearLayout.VERTICAL);
-        stopCol.setGravity(Gravity.CENTER_HORIZONTAL);
+        // Align the stop label's bottom with the two side action labels.
+        stopCol.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         stopCol.setClickable(true);
-        FrameLayout.LayoutParams stopColLp = new FrameLayout.LayoutParams(dp(104), -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+        // The fixed column leaves an 8dp safety area below the text instead of
+        // anchoring the last glyph directly to the bottom clipping edge.
+        FrameLayout.LayoutParams stopColLp = new FrameLayout.LayoutParams(dp(104), dp(112), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         stopColLp.bottomMargin = dp(26);
         bottom.addView(stopCol, stopColLp);
 
@@ -2636,11 +2641,14 @@ public final class RecordingsActivity extends Activity {
         stopCol.addView(stopBtn, stopBtnLp);
 
         TextView stopLabel = text("点击停止", 12, Theme.SECONDARY, Typeface.NORMAL);
-        stopLabel.setGravity(Gravity.CENTER);
+        stopLabel.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         stopLabel.setLetterSpacing(0.08f);
         stopLabel.setPadding(0, 0, 0, 0);
+        // Keep a complete text line below the button. A negative margin can clip
+        // the glyph descent on some Android font renderers.
+        stopLabel.setMinHeight(dp(20));
         LinearLayout.LayoutParams stopLabelLp = new LinearLayout.LayoutParams(-1, -2);
-        stopLabelLp.setMargins(0, -dp(3), 0, 0);
+        stopLabelLp.setMargins(0, dp(2), 0, 0);
         stopCol.addView(stopLabel, stopLabelLp);
         stopBtn.setOnClickListener(v -> stopRecordingFlow());
         stopCol.setOnClickListener(v -> stopRecordingFlow());
@@ -3082,7 +3090,8 @@ public final class RecordingsActivity extends Activity {
     }
 
     protected void showTooShortRecordingMessage() {
-        IosDialog.show(this, "录音太短", "时间太短，不足以产生文章，这条录音不会上传。");
+        IosDialog.showAutoHeight(this, "录音太短",
+                "时间太短，不足以产生文章，这条录音不会上传。", "好", null, null, null);
     }
 
     protected void confirmSilentRecording(AudioRecorder.Take take, List<CapturedPhoto> photos) {

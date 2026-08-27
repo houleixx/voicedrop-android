@@ -13,6 +13,8 @@ import android.widget.TextView;
 
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.UsageStore;
+import com.baixingai.voicedrop.data.WechatLogin;
+import com.baixingai.voicedrop.data.WechatSubscriptionStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
@@ -20,10 +22,13 @@ import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
+import com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram;
+import com.tencent.mm.opensdk.modelbiz.WXOpenBusinessWebview;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +36,7 @@ import java.util.concurrent.Executors;
 
 public final class UsageActivity extends Activity {
     private UsageStore usageStore;
+    private WechatSubscriptionStore subscriptionStore;
     private LinearLayout content;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private UsageStore.Balance balance = new UsageStore.Balance(0, 0);
@@ -38,11 +44,19 @@ public final class UsageActivity extends Activity {
     private final List<UsageStore.Entry> entries = new ArrayList<>();
     private String nextCursor = "";
     private boolean loadingMore;
+    private boolean usageLoaded;
+    private WechatSubscriptionStore.Status subscriptionStatus;
+    private boolean subscriptionLoaded;
+    private boolean subscriptionInProgress;
+    private boolean refreshSubscriptionOnResume;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        usageStore = new UsageStore(new AuthStore(this), new HttpClient());
+        AuthStore auth = new AuthStore(this);
+        HttpClient http = new HttpClient();
+        usageStore = new UsageStore(auth, http);
+        subscriptionStore = new WechatSubscriptionStore(auth, http);
         configureEdgeToEdge();
 
         FrameLayout root = new FrameLayout(this);
@@ -102,6 +116,15 @@ public final class UsageActivity extends Activity {
         finishWithPageTransition();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (refreshSubscriptionOnResume) {
+            refreshSubscriptionOnResume = false;
+            loadSubscription();
+        }
+    }
+
     private void load() {
         io.execute(() -> {
             try {
@@ -114,6 +137,7 @@ public final class UsageActivity extends Activity {
                     entries.clear();
                     entries.addAll(page.entries);
                     nextCursor = page.nextCursor;
+                    usageLoaded = true;
                     render(true);
                 });
             } catch (Exception e) {
@@ -123,9 +147,13 @@ public final class UsageActivity extends Activity {
                     summary = new UsageStore.Summary(new ArrayList<>(), new ArrayList<>());
                     entries.clear();
                     nextCursor = "";
+                    usageLoaded = false;
                     render(false);
                 });
             }
+            // Subscription availability is independent from the ledger.  Keep this queued on the
+            // same executor, but give it its own failure handling in loadSubscription().
+            loadSubscription();
         });
     }
 
@@ -136,7 +164,7 @@ public final class UsageActivity extends Activity {
     private void render(boolean loaded) {
         content.removeAllViews();
         content.addView(heroCard(balance, loaded), matchWrap(0, 0, 0, dp(22)));
-        content.addView(subscriptionCard(), matchWrap(0, 0, 0, dp(22)));
+        content.addView(subscriptionCard(subscriptionStatus, subscriptionLoaded), matchWrap(0, 0, 0, dp(22)));
         if (!summary.granted.isEmpty()) {
             addSection(content, "算力来源");
             content.addView(summaryCard(summary.granted, "+", 0xff2f9b68), matchWrap(0, 0, 0, dp(22)));
@@ -181,7 +209,7 @@ public final class UsageActivity extends Activity {
         return card;
     }
 
-    private View subscriptionCard() {
+    private View subscriptionCard(WechatSubscriptionStore.Status status, boolean loaded) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -196,8 +224,13 @@ public final class UsageActivity extends Activity {
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text("包月算力", 15, Theme.INK, Typeface.BOLD));
-        TextView sub = text("每月 200 算力 · 月底清零 · 随时可取消", 13, Theme.SECONDARY, Typeface.NORMAL);
+        labels.addView(text(status != null && status.active ? "包月算力 · 订阅中" : "包月算力", 15, Theme.INK, Typeface.BOLD));
+        String subtitle;
+        if (!loaded) subtitle = "正在查询订阅状态…";
+        else if (status != null && status.active) subtitle = "每月自动充入 " + fmt(status.monthlySuanli) + " 算力 · 可随时取消";
+        else if (status != null && status.pending()) subtitle = "正在等待微信完成签约";
+        else subtitle = "每月 200 算力 · 月底清零 · 随时可取消";
+        TextView sub = text(subtitle, 13, Theme.SECONDARY, Typeface.NORMAL);
         sub.setPadding(0, dp(2), 0, 0);
         labels.addView(sub);
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
@@ -206,15 +239,109 @@ public final class UsageActivity extends Activity {
         row.addView(text("¥19.9/月", 18, Theme.INK, Typeface.BOLD));
         card.addView(row);
 
-        TextView button = text("包月订阅 · 即将上线", 15, 0xffffffff, Typeface.BOLD);
+        String buttonLabel;
+        if (!loaded) buttonLabel = "查询订阅状态…";
+        else if (status != null && status.active) buttonLabel = "管理微信订阅";
+        else if (status != null && status.pending()) buttonLabel = "刷新订阅状态";
+        else buttonLabel = subscriptionInProgress ? "正在打开微信…" : "微信支付订阅";
+        TextView button = text(buttonLabel, 15, 0xffffffff, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setBackground(round(0x88c98a2e, 9));
+        button.setBackground(round(subscriptionInProgress || !loaded ? 0x88c98a2e : 0xffc98a2e, 9));
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, dp(46));
         btnLp.setMargins(0, dp(13), 0, 0);
         card.addView(button, btnLp);
-        button.setOnClickListener(v -> IosDialog.show(this, "包月订阅即将上线",
-                "包月算力还在开发中，敬请期待。现在的算力来自注册与活动赠送，足够日常使用。"));
+        button.setEnabled(loaded && !subscriptionInProgress);
+        button.setOnClickListener(v -> {
+            if (status != null && status.active) {
+                IosDialog.show(this, "管理微信订阅", "请在微信中打开「我 → 服务 → 钱包 → 支付设置 → 自动续费」，找到 VoiceDrop 后即可管理或取消订阅。");
+            } else if (status != null && status.pending()) {
+                loadSubscription();
+            } else {
+                beginWechatSubscription();
+            }
+        });
+        if (status != null && "payment-failed".equals(status.paymentIssue)) {
+            TextView issue = text("最近一次续费未完成，请在微信中检查支付方式。", 12, Theme.RED, Typeface.NORMAL);
+            issue.setPadding(0, dp(10), 0, 0);
+            card.addView(issue);
+        } else if (status != null && status.active && status.expiresAt > 0) {
+            TextView renew = text("下次续费：" + formatDate(status.expiresAt), 12, Theme.SECONDARY, Typeface.NORMAL);
+            renew.setPadding(0, dp(10), 0, 0);
+            card.addView(renew);
+        }
         return card;
+    }
+
+    private void beginWechatSubscription() {
+        subscriptionInProgress = true;
+        render(usageLoaded);
+        io.execute(() -> {
+            try {
+                WechatSubscriptionStore.Contract contract = subscriptionStore.createContract();
+                runOnUiThread(() -> launchWechatSigning(contract));
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    subscriptionInProgress = false;
+                    render(usageLoaded);
+                    toast("无法发起微信订阅：" + e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void launchWechatSigning(WechatSubscriptionStore.Contract contract) {
+        subscriptionInProgress = false;
+        if (!WechatLogin.api(this).isWXAppInstalled()) {
+            render(usageLoaded);
+            IosDialog.show(this, "未安装微信", "请安装微信后再开通包月算力。");
+            return;
+        }
+        boolean sent;
+        if (contract.canLaunchWechat()) {
+            WXLaunchMiniProgram.Req request = new WXLaunchMiniProgram.Req();
+            request.userName = contract.miniProgramUserName;
+            request.path = contract.miniProgramPath;
+            request.miniprogramType = WXLaunchMiniProgram.Req.MINIPTOGRAM_TYPE_RELEASE;
+            request.extData = contract.contractCode;
+            sent = WechatLogin.api(this).sendReq(request);
+        } else if (contract.preEntrustwebId != null && !contract.preEntrustwebId.isEmpty()) {
+            // Old approved templates use OpenBusinessWebview instead of the signing mini program.
+            WXOpenBusinessWebview.Req request = new WXOpenBusinessWebview.Req();
+            request.businessType = 12; // WeChat's approved APP pure-signing business type.
+            request.queryInfo = new HashMap<>();
+            request.queryInfo.put("pre_entrustweb_id", contract.preEntrustwebId);
+            sent = WechatLogin.api(this).sendReq(request);
+        } else {
+            render(usageLoaded);
+            IosDialog.show(this, "暂时无法打开微信签约", "服务端尚未返回微信签约会话。请稍后重试。");
+            return;
+        }
+        if (sent) {
+            refreshSubscriptionOnResume = true;
+            toast("已打开微信，请完成包月签约");
+        } else {
+            render(usageLoaded);
+            toast("微信未能打开签约页面，请重试");
+        }
+    }
+
+    private void loadSubscription() {
+        io.execute(() -> {
+            try {
+                WechatSubscriptionStore.Status loaded = subscriptionStore.status();
+                runOnUiThread(() -> {
+                    subscriptionStatus = loaded;
+                    subscriptionLoaded = true;
+                    render(usageLoaded);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("订阅状态加载失败：" + e.getMessage()));
+            }
+        });
+    }
+
+    private String formatDate(long timestamp) {
+        return new SimpleDateFormat("M月d日", Locale.CHINA).format(new Date(timestamp));
     }
 
     private View summaryCard(List<UsageStore.SummaryRow> rows, String sign, int amountColor) {

@@ -43,6 +43,8 @@ public final class ApiRoute {
 
     /** Cold start passes force=true; foreground resumes use the persisted 30-minute throttle. */
     public static void probe(boolean force) {
+        // 测试环境的 Pages / Agent / Reco 分属三个域名，不是可互换的两条网络线路。
+        if (Api.isTestEnvironment()) return;
         SharedPreferences store = prefs;
         if (store == null) return;
         long now = System.currentTimeMillis();

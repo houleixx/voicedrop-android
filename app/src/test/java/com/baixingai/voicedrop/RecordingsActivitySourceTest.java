@@ -530,6 +530,20 @@ public class RecordingsActivitySourceTest {
         assertFalse(icon.contains("M15,5"));
     }
 
+    @Test
+    public void recordingStopLabelReservesAFullLineWithoutOverlappingTheStopButton() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String recording = methodBody(source, "protected void showRecording(boolean first)");
+
+        assertTrue(recording.contains("page.addView(bottom, new LinearLayout.LayoutParams(-1, dp(180)));"));
+        assertTrue(recording.contains("new FrameLayout.LayoutParams(dp(104), dp(112), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM)"));
+        assertTrue(recording.contains("stopCol.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);"));
+        assertTrue(recording.contains("stopLabel.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);"));
+        assertTrue(recording.contains("stopLabel.setMinHeight(dp(20));"));
+        assertTrue(recording.contains("stopLabelLp.setMargins(0, dp(2), 0, 0);"));
+        assertFalse(recording.contains("stopLabelLp.setMargins(0, -dp(3), 0, 0);"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

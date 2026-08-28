@@ -164,7 +164,11 @@ public final class UsageActivity extends Activity {
     private void render(boolean loaded) {
         content.removeAllViews();
         content.addView(heroCard(balance, loaded), matchWrap(0, 0, 0, dp(22)));
-        content.addView(subscriptionCard(subscriptionStatus, subscriptionLoaded), matchWrap(0, 0, 0, dp(22)));
+        // 与 iOS 一致：R2 售卖开关关闭时，未签约用户不显示微信订阅入口；
+        // 已签约、已解约但仍有当期权益、或待签约用户仍可查看/管理自己的状态。
+        if (subscriptionStatus != null && (subscriptionStatus.enabled || subscriptionStatus.active || subscriptionStatus.hasContract())) {
+            content.addView(subscriptionCard(subscriptionStatus, subscriptionLoaded), matchWrap(0, 0, 0, dp(22)));
+        }
         if (!summary.granted.isEmpty()) {
             addSection(content, "算力来源");
             content.addView(summaryCard(summary.granted, "+", 0xff2f9b68), matchWrap(0, 0, 0, dp(22)));
@@ -227,7 +231,9 @@ public final class UsageActivity extends Activity {
         labels.addView(text(status != null && status.active ? "包月算力 · 订阅中" : "包月算力", 15, Theme.INK, Typeface.BOLD));
         String subtitle;
         if (!loaded) subtitle = "正在查询订阅状态…";
-        else if (status != null && status.active) subtitle = "每月自动充入 " + fmt(status.monthlySuanli) + " 算力 · 可随时取消";
+        else if (status != null && status.scheduledChargeAt > System.currentTimeMillis()) subtitle = "已恢复自动续费 · 预计于 " + formatDate(status.scheduledChargeAt) + " 发起扣款";
+        else if (status != null && status.canCancel) subtitle = "每月自动充入 " + fmt(status.monthlySuanli) + " 算力 · 可随时取消";
+        else if (status != null && status.cancelled() && status.expiresAt > System.currentTimeMillis()) subtitle = "自动续费已解除 · 算力仍可使用至到期日";
         else if (status != null && status.pending()) subtitle = "正在等待微信完成签约";
         else subtitle = "每月 200 算力 · 月底清零 · 随时可取消";
         TextView sub = text(subtitle, 13, Theme.SECONDARY, Typeface.NORMAL);
@@ -241,9 +247,9 @@ public final class UsageActivity extends Activity {
 
         String buttonLabel;
         if (!loaded) buttonLabel = "查询订阅状态…";
-        else if (status != null && status.active) buttonLabel = "管理微信订阅";
+        else if (status != null && status.canCancel) buttonLabel = subscriptionInProgress ? "正在解除自动续费…" : "解除自动续费";
         else if (status != null && status.pending()) buttonLabel = "刷新订阅状态";
-        else buttonLabel = subscriptionInProgress ? "正在打开微信…" : "微信支付订阅";
+        else buttonLabel = subscriptionInProgress ? "正在打开微信…" : (status != null && status.cancelled() ? "重新开通" : "微信支付订阅");
         TextView button = text(buttonLabel, 15, 0xffffffff, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
         button.setBackground(round(subscriptionInProgress || !loaded ? 0x88c98a2e : 0xffc98a2e, 9));
@@ -252,10 +258,12 @@ public final class UsageActivity extends Activity {
         card.addView(button, btnLp);
         button.setEnabled(loaded && !subscriptionInProgress);
         button.setOnClickListener(v -> {
-            if (status != null && status.active) {
-                IosDialog.show(this, "管理微信订阅", "请在微信中打开「我 → 服务 → 钱包 → 支付设置 → 自动续费」，找到 VoiceDrop 后即可管理或取消订阅。");
+            if (status != null && status.canCancel) {
+                confirmWechatCancellation(status);
             } else if (status != null && status.pending()) {
                 loadSubscription();
+            } else if (status != null && status.cancelled() && status.expiresAt > System.currentTimeMillis()) {
+                confirmWechatResubscription(status);
             } else {
                 beginWechatSubscription();
             }
@@ -264,12 +272,49 @@ public final class UsageActivity extends Activity {
             TextView issue = text("最近一次续费未完成，请在微信中检查支付方式。", 12, Theme.RED, Typeface.NORMAL);
             issue.setPadding(0, dp(10), 0, 0);
             card.addView(issue);
-        } else if (status != null && status.active && status.expiresAt > 0) {
+        } else if (status != null && status.expiresAt > 0 && status.canCancel) {
             TextView renew = text("下次续费：" + formatDate(status.expiresAt), 12, Theme.SECONDARY, Typeface.NORMAL);
+            renew.setPadding(0, dp(10), 0, 0);
+            card.addView(renew);
+        } else if (status != null && status.cancelled() && status.expiresAt > System.currentTimeMillis()) {
+            TextView renew = text("权益有效至：" + formatDate(status.expiresAt), 12, Theme.SECONDARY, Typeface.NORMAL);
             renew.setPadding(0, dp(10), 0, 0);
             card.addView(renew);
         }
         return card;
+    }
+
+    private void confirmWechatCancellation(WechatSubscriptionStore.Status status) {
+        String until = status.expiresAt > 0 ? "已付算力仍可使用至 " + formatDate(status.expiresAt) + "。" : "已付算力不会立即失效。";
+        IosDialog.showConfirmation(this, "解除自动续费", until + "\n\n解除后将不再自动扣款，之后可随时重新开通。",
+                "解除", this::cancelWechatSubscription, "暂不解除", null);
+    }
+
+    private void confirmWechatResubscription(WechatSubscriptionStore.Status status) {
+        IosDialog.showConfirmation(this, "重新开通自动续费",
+                "当前算力有效至 " + formatDate(status.expiresAt) + "。首期扣款计划在到期前 24 小时发起；若距到期不足 24 小时，将立即申请扣款，成功后新增 200 算力。",
+                "去微信签约", this::beginWechatSubscription, "暂不重新开通", null);
+    }
+
+    private void cancelWechatSubscription() {
+        subscriptionInProgress = true;
+        render(usageLoaded);
+        io.execute(() -> {
+            try {
+                subscriptionStore.cancel();
+                runOnUiThread(() -> {
+                    subscriptionInProgress = false;
+                    toast("已解除自动续费");
+                    loadSubscription();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    subscriptionInProgress = false;
+                    render(usageLoaded);
+                    toast("解除订阅失败，请稍后重试");
+                });
+            }
+        });
     }
 
     private void beginWechatSubscription() {

@@ -31,6 +31,14 @@ public final class WechatSubscriptionStore {
         return Contract.fromJson(new JSONObject(response.text()));
     }
 
+    /** Terminates the active WeChat contract server-side. Already-cancelled retries are safe. */
+    public Status cancel() throws Exception {
+        HttpClient.Response response = http.postJson(Api.agentBase() + "/wechat-pay/cancel", auth.bearer(),
+                "{}".getBytes(StandardCharsets.UTF_8));
+        if (!response.ok()) throw failure("cancel subscription", response);
+        return Status.fromJson(new JSONObject(response.text()));
+    }
+
     private static IllegalStateException failure(String operation, HttpClient.Response response) {
         String detail = "";
         try { detail = new JSONObject(response.text()).optString("error", ""); } catch (Exception ignored) {}
@@ -40,29 +48,39 @@ public final class WechatSubscriptionStore {
 
     public static final class Status {
         public final boolean active;
+        public final boolean enabled;
+        public final boolean canCancel;
         public final String status;
         public final String planId;
         public final long expiresAt;
+        public final long scheduledChargeAt;
         public final String paymentIssue;
         public final double subscriptionSuanli;
         public final double monthlySuanli;
 
-        Status(boolean active, String status, String planId, long expiresAt, String paymentIssue,
+        Status(boolean active, boolean enabled, boolean canCancel, String status, String planId, long expiresAt, long scheduledChargeAt, String paymentIssue,
                double subscriptionSuanli, double monthlySuanli) {
             this.active = active;
+            this.enabled = enabled;
+            this.canCancel = canCancel;
             this.status = status;
             this.planId = planId;
             this.expiresAt = expiresAt;
+            this.scheduledChargeAt = scheduledChargeAt;
             this.paymentIssue = paymentIssue;
             this.subscriptionSuanli = subscriptionSuanli;
             this.monthlySuanli = monthlySuanli;
         }
 
         public boolean pending() { return "pending".equals(status); }
+        public boolean cancelled() { return "cancelled".equals(status); }
+        public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
 
         static Status fromJson(JSONObject body) {
-            return new Status(body.optBoolean("active", false), nullable(body, "status"),
+            // 与 iOS 的 config/iap.json 语义一致：服务端没有明确给开启开关时，不展示售卖入口。
+            return new Status(body.optBoolean("active", false), body.optBoolean("enabled", false), body.optBoolean("can_cancel", false), nullable(body, "status"),
                     nullable(body, "plan_id"), body.optLong("expires_date", 0),
+                    body.optLong("scheduled_charge_at", 0),
                     nullable(body, "payment_issue"), body.optDouble("sub_suanli", 0),
                     body.optDouble("monthly_suanli", 200));
         }

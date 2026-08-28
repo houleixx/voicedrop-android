@@ -10,11 +10,29 @@ import static org.junit.Assert.assertTrue;
 public final class WechatSubscriptionStoreTest {
     @Test public void parsesActiveStatus() throws Exception {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(new JSONObject("{"
-                + "\"active\":true,\"status\":\"active\",\"expires_date\":1770000000000,"
-                + "\"sub_suanli\":200,\"monthly_suanli\":200}"));
+                + "\"active\":true,\"enabled\":true,\"can_cancel\":true,\"status\":\"active\",\"expires_date\":1770000000000,\"scheduled_charge_at\":1760000000000,"
+        + "\"sub_suanli\":200,\"monthly_suanli\":200}"));
         assertTrue(status.active);
+        assertTrue(status.enabled);
+        assertTrue(status.canCancel);
         assertEquals(1770000000000L, status.expiresAt);
+        assertEquals(1760000000000L, status.scheduledChargeAt);
         assertEquals(200, status.subscriptionSuanli, 0.01);
+    }
+
+    @Test public void missingSaleFlagDefaultsToClosedLikeIos() throws Exception {
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(new JSONObject("{}"));
+        assertFalse(status.enabled);
+        assertFalse(status.canCancel);
+    }
+
+    @Test public void parsesCancelledSubscriptionThatKeepsCurrentPeriodVisible() throws Exception {
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(new JSONObject("{"
+                + "\"active\":true,\"status\":\"cancelled\",\"expires_date\":1770000000000}"));
+        assertTrue(status.active);
+        assertTrue(status.cancelled());
+        assertTrue(status.hasContract());
+        assertFalse(status.canCancel);
     }
 
     @Test public void parsesAndroidSigningHandoffWithoutSecrets() throws Exception {

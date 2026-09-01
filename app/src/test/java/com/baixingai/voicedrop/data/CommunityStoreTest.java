@@ -13,14 +13,14 @@ import static org.junit.Assert.*;
 
 public class CommunityStoreTest {
     @Test
-    public void recoEndpointsAlwaysUseTheAnonymousCapabilityAfterWechatLogin() throws Exception {
+    public void recoEndpointsUseTheCurrentAccountIdentityLikeIos() throws Exception {
         Path path = Paths.get("src/main/java/com/baixingai/voicedrop/data/CommunityStore.java");
         if (!Files.exists(path)) path = Paths.get("app", path.toString());
         String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
 
-        assertTrue(source.contains("Api.recoBase() + \"/feed\", auth.anonymousBearer()"));
-        assertTrue(source.contains("Api.recoBase() + \"/rank\", auth.anonymousBearer()"));
-        assertTrue(source.contains("http.postJson(url, auth.anonymousBearer()"));
+        assertTrue(source.contains("Api.recoBase() + \"/feed\", auth.bearer()"));
+        assertTrue(source.contains("Api.recoBase() + \"/rank\", auth.bearer()"));
+        assertTrue(source.contains("http.postJson(url, auth.bearer()"));
     }
 
     @Test

@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Loads immutable, versioned book covers while retaining the cloth cover as fallback. */
 public final class BookCoverLoader {
     private static final long MAX_CACHE_BYTES = 64L * 1024L * 1024L;
+    private static final int MAX_DECODED_EDGE = 720;
     private final File diskDir;
     /** Dedicated pool: cover failures can never delay the shelf index request. */
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
@@ -104,7 +105,7 @@ public final class BookCoverLoader {
             try {
                 byte[] data = download(coverUrl, attempt >= 2);
                 if (!cancelled && data != null) {
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                    Bitmap bitmap = decodeSampled(data);
                     if (bitmap != null) {
                         writeAtomically(target, data);
                         pruneDiskCache();
@@ -167,7 +168,28 @@ public final class BookCoverLoader {
 
     private static Bitmap decode(File file) {
         if (!file.isFile()) return null;
-        return BitmapFactory.decodeFile(file.getAbsolutePath());
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+        BitmapFactory.Options options = sampledOptions(bounds);
+        return BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+    }
+
+    private static Bitmap decodeSampled(byte[] data) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+        return BitmapFactory.decodeByteArray(data, 0, data.length, sampledOptions(bounds));
+    }
+
+    private static BitmapFactory.Options sampledOptions(BitmapFactory.Options bounds) {
+        int sample = 1;
+        int longestEdge = Math.max(bounds.outWidth, bounds.outHeight);
+        while (longestEdge / sample > MAX_DECODED_EDGE) sample *= 2;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        return options;
     }
 
     private static void writeAtomically(File target, byte[] data) throws Exception {

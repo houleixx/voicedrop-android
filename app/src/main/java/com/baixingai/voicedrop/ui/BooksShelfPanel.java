@@ -40,6 +40,8 @@ import java.util.concurrent.Executors;
 /** Physical two-column book shelf, kept visually aligned with iOS BooksShelfView. */
 public final class BooksShelfPanel extends LinearLayout {
     private static final int CREAM = 0xfff7f1df;
+    /** Rendering every cover at once can decode hundreds of megabytes on a real library. */
+    private static final int BOOKS_PER_PAGE = 12;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final BookCoverLoader coverLoader;
     private final PullRefreshLayout refresher;
@@ -48,6 +50,7 @@ public final class BooksShelfPanel extends LinearLayout {
     private BookShelfCache shelfCache;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
     private boolean initialLoadPending;
+    private int visibleBookCount = BOOKS_PER_PAGE;
 
     public BooksShelfPanel(Context context) {
         super(context);
@@ -138,7 +141,7 @@ public final class BooksShelfPanel extends LinearLayout {
         }
         List<Object> cells = new ArrayList<>();
         cells.add("write");
-        cells.addAll(books);
+        cells.addAll(books.subList(0, Math.min(visibleBookCount, books.size())));
         for (int index = 0; index < cells.size(); index += 2) {
             LinearLayout row = new LinearLayout(getContext());
             row.setOrientation(HORIZONTAL);
@@ -154,6 +157,21 @@ public final class BooksShelfPanel extends LinearLayout {
             shelves.addView(row, new LinearLayout.LayoutParams(-1, -2));
             shelves.addView(shelfBar(), shelfParams());
         }
+        if (visibleBookCount < books.size()) addMoreBooksAction();
+    }
+
+    private void addMoreBooksAction() {
+        TextView more = text("显示更多图书", 14, Theme.CARD, Typeface.BOLD, false);
+        more.setGravity(Gravity.CENTER);
+        more.setPadding(dp(16), dp(12), dp(16), dp(12));
+        more.setBackground(round(Theme.ACCENT, 12));
+        more.setOnClickListener(v -> {
+            visibleBookCount = Math.min(books.size(), visibleBookCount + BOOKS_PER_PAGE);
+            render();
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(46));
+        params.setMargins(dp(4), 0, dp(4), dp(28));
+        shelves.addView(more, params);
     }
 
     private LinearLayout.LayoutParams weightedCellParams(int leftMargin) {

@@ -900,6 +900,7 @@ public final class I18n {
         copy.put("没有已屏蔽的作者", "No blocked authors");
         copy.put("已取消屏蔽", "Author unblocked");
         copy.put("正在整理书架…", "Organizing shelf…");
+        copy.put("显示更多图书", "Show more books");
         copy.put("写一本新书", "Write a new book");
         copy.put(" 章", " chapters");
         copy.put("隐藏", "Hide");

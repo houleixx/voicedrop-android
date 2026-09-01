@@ -23,6 +23,11 @@ public final class I18n {
         return translated == null ? source : translated;
     }
 
+    /** Formats localized UI copy using the active application locale. */
+    public static String format(Context context, String source, Object... args) {
+        return String.format(locale(), text(context, source), args);
+    }
+
     /** Reads AppCompat once at process start or after a deliberate language change. */
     public static void syncLanguage(Context context) {
         String tags = AppCompatDelegate.getApplicationLocales().toLanguageTags();
@@ -846,6 +851,8 @@ public final class I18n {
         copy.put("照片编码失败", "Couldn't encode photo");
         copy.put("无法创建缓存目录", "Couldn't create cache directory");
         copy.put("开始写书 · 320 算力", "Start writing · 320 credits");
+        copy.put("《%s》已作为种子", "“%s” is used as the seed");
+        copy.put("修改《%s》", "Edit “%s”");
         copy.put("提交后就可以关 App · 10–30 分钟写完，出现在「写书」书架", "After submitting, you can close the app. Your book takes 10–30 minutes and appears on the Write a book shelf.");
         copy.put("写一本书的价钱，提交时一次扣清", "The cost to write a book, charged once on submission");
         copy.put("你现在的算力", "Your credits");
@@ -868,10 +875,13 @@ public final class I18n {
         copy.put("算力不够？", "Not enough credits?");
         copy.put("还差 ", "You need ");
         copy.put(" 算力，两条来路：", " more credits. Two ways to get them:");
+        copy.put("还差 %s 算力，两条来路：", "You need %s more credits. Two ways to get them:");
         copy.put("请朋友给你的文章「加油」——一次约得 ", "Ask friends to boost your article — about ");
+        copy.put("请朋友给你的文章「加油」——一次约得 %s 算力", "Ask friends to boost your article — about %s credits each time");
         copy.put("请朋友给你的文章「加油」——作者每次都得算力", "Ask friends to boost your article — authors earn credits each time");
         copy.put("把文章分享到 VD社区或发给朋友，读的人点「加油」你就进账", "Share an article to VD Community or friends; when readers boost it, you earn credits");
         copy.put("邀请朋友装 VoiceDrop——装一个约得 ", "Invite friends to install VoiceDrop — about ");
+        copy.put("邀请朋友装 VoiceDrop——装一个约得 %s 算力", "Invite friends to install VoiceDrop — about %s credits per install");
         copy.put("邀请朋友装 VoiceDrop——每装一个你都得算力", "Invite friends to install VoiceDrop — you earn credits for every install");
         copy.put("朋友通过你的链接安装，双方都到账", "When a friend installs through your link, you both receive credits");
         copy.put("把邀请链接发给朋友", "Send invite link to friends");
@@ -880,6 +890,7 @@ public final class I18n {
         copy.put("现在可以关掉 App。书通常 10–30 分钟写完，过稿一章、上架一章——写好就出现在「写书」书架上，下拉刷新就能看到。", "You can close the app now. Books usually take 10–30 minutes. Each completed chapter appears on your Write a book shelf; pull to refresh to see it.");
         copy.put("提交中…", "Submitting…");
         copy.put("算力不够 · 还差 ", "Not enough credits · need ");
+        copy.put("算力不够 · 还差 %s", "Not enough credits · need %s");
         copy.put("提交中...", "Submitting...");
         copy.put("书籍加载失败，请检查网络后重试", "Couldn't load book. Check your connection and try again.");
         copy.put("正在加载书籍…", "Loading book…");
@@ -903,6 +914,7 @@ public final class I18n {
         copy.put("显示更多图书", "Show more books");
         copy.put("写一本新书", "Write a new book");
         copy.put(" 章", " chapters");
+        copy.put("%d 章", "%d chapters");
         copy.put("隐藏", "Hide");
         copy.put("图片加载中…", "Loading image…");
         // Remaining visible status, revision, update, and security messaging.

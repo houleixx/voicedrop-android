@@ -242,7 +242,7 @@ public final class BooksShelfPanel extends LinearLayout {
         }
         if (book.hidden) addHiddenBadge(cover);
         cell.addView(cover, new LinearLayout.LayoutParams(-1, -2));
-        String meta = book.chapters > 0 ? book.chapters + " 章" : book.sub;
+        String meta = book.chapters > 0 ? I18n.format(getContext(), "%d 章", book.chapters) : book.sub;
         cell.addView(caption(book.main, meta == null || meta.isEmpty() ? " " : meta), captionParams());
         return cell;
     }

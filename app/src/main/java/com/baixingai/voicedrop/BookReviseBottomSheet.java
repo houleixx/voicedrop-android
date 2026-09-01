@@ -137,7 +137,8 @@ public final class BookReviseBottomSheet {
         int screenHeightDp = Math.round(activity.getResources().getDisplayMetrics().heightPixels
                 / activity.getResources().getDisplayMetrics().density);
         int contentHeightDp = Math.max(360, Math.round(screenHeightDp * 0.84f) - 74);
-        dialog = IosDialog.showBottomSheetFixedContent(activity, "修改《" + safeTitle(title) + "》", page,
+        dialog = IosDialog.showBottomSheetFixedContent(activity,
+                com.baixingai.voicedrop.ui.I18n.format(activity, "修改《%s》", safeTitle(title)), page,
                 contentHeightDp, null, null, null, null, true, true);
         DialogWindowDefaults.hideNavigationBar(dialog.getWindow());
         dialog.setOnDismissListener(ignored -> destroy());
@@ -156,7 +157,7 @@ public final class BookReviseBottomSheet {
         row.setGravity(Gravity.BOTTOM);
         row.setBaselineAligned(false);
         input = new EditText(activity);
-        input.setHint("想怎么改这本书？比如：第三章开头太啰嗦，删一半");
+        input.setHint(com.baixingai.voicedrop.ui.I18n.text(activity, "想怎么改这本书？比如：第三章开头太啰嗦，删一半"));
         input.setTextSize(15);
         input.setTextColor(Theme.INK);
         input.setHintTextColor(Theme.FAINT);
@@ -173,7 +174,7 @@ public final class BookReviseBottomSheet {
         sendIcon.setTextColor(0xffffffff);
         send = sendIcon;
         send.setGravity(Gravity.CENTER);
-        send.setContentDescription("提交修改");
+        send.setContentDescription(com.baixingai.voicedrop.ui.I18n.text(activity, "提交修改"));
         send.setOnClickListener(v -> submit());
         LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(42), dp(42));
         sendParams.leftMargin = dp(10);
@@ -390,11 +391,14 @@ public final class BookReviseBottomSheet {
 
     private static String stamp(double timestampMs) {
         if (!Double.isFinite(timestampMs) || timestampMs <= 0) return "";
-        return new SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(new Date((long) timestampMs));
+        return java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,
+                java.text.DateFormat.SHORT, com.baixingai.voicedrop.ui.I18n.locale())
+                .format(new Date((long) timestampMs));
     }
 
     private String safeTitle(String value) {
-        return value == null || value.trim().isEmpty() ? "未命名" : value.trim();
+        return value == null || value.trim().isEmpty()
+                ? com.baixingai.voicedrop.ui.I18n.text(activity, "未命名") : value.trim();
     }
 
     private TextView text(String value, int size, int color, int style) {

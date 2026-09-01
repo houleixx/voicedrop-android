@@ -15,7 +15,7 @@ public final class BookWritingVisualContractTest {
         assertTrue(page.contains("overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)"));
         assertTrue(page.contains("overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)"));
         assertTrue(shelf.contains("BookWritingActivity.open((Activity) getContext())"));
-        assertTrue(page.contains("new PageTitleBar(this, \"写书\", this::finishWithPageTransition)"));
+        assertTrue(page.contains("I18n.text(this, \"写书\")"));
         assertTrue(page.contains("roundWithStroke(AMBER_SOFT, 8, 0xffebd9b8, 1)"));
         assertTrue(page.contains("POWER_ICON_RES_ID = R.drawable.ic_settings_bolt"));
         assertTrue(page.contains("powerIcon.setColorFilter(Theme.AMBER)"));
@@ -31,10 +31,10 @@ public final class BookWritingVisualContractTest {
         assertTrue(page.contains("SystemBarDefaults.applyBottomInsets(bottom"));
         assertTrue(page.contains("done.setBackground(round(Theme.ACCENT, 8))"));
         assertTrue(page.contains("submittedTitle.setGravity(Gravity.CENTER)"));
-        assertTrue(page.contains("WechatShareLoadingDialog.show(this, \"提交中...\")"));
+        assertTrue(page.contains("WechatShareLoadingDialog.show(this, com.baixingai.voicedrop.ui.I18n.text(this, \"提交中...\"))"));
         assertTrue(page.indexOf("hideSubmitLoading();\n        sending = false") > 0);
         assertTrue(page.contains("if (loadedBalance != null && loadedBalance < PRICE)"));
-        assertTrue(page.contains("format(gap) + \" 算力，两条来路：\""));
+        assertTrue(page.contains("I18n.format(this, \"还差 %s 算力，两条来路：\", format(gap))"));
         assertTrue(page.indexOf(".balance().suanli") < page.indexOf("new ReferralManager(this).inviteLink()"));
     }
 

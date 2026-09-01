@@ -138,7 +138,7 @@ public final class BooksShelfActivity extends VoiceDropActivity {
         if (book.cover) { ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); cover.addView(image, new FrameLayout.LayoutParams(-1,-1)); coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image); }
         if (book.hidden) addHiddenBadge(cover);
         cell.addView(cover, new LinearLayout.LayoutParams(-1, dp(210)));
-        cell.addView(caption(book.main)); TextView meta = text(book.chapters > 0 ? book.chapters + " 章" : book.sub, 12, Theme.FAINT, Typeface.NORMAL); meta.setPadding(0,dp(3),0,0); cell.addView(meta); cell.addView(shelfBar()); return cell;
+        cell.addView(caption(book.main)); TextView meta = text(book.chapters > 0 ? com.baixingai.voicedrop.ui.I18n.format(this, "%d 章", book.chapters) : book.sub, 12, Theme.FAINT, Typeface.NORMAL); meta.setPadding(0,dp(3),0,0); cell.addView(meta); cell.addView(shelfBar()); return cell;
     }
     private void addBookTypography(FrameLayout cover, BookShelfIndex.Book book) {
         LinearLayout typography = new LinearLayout(this); typography.setOrientation(LinearLayout.VERTICAL); typography.setGravity(Gravity.CENTER); typography.setPadding(dp(15), dp(15), dp(15), dp(15));
@@ -157,7 +157,7 @@ public final class BooksShelfActivity extends VoiceDropActivity {
     private View shelfBar(){View bar=new View(this);bar.setBackgroundColor(0xff8b5f3d);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(9));lp.setMargins(0,dp(8),0,0);bar.setLayoutParams(lp);return bar;}
     private TextView caption(String value) { TextView v=text(value,14,Theme.INK,Typeface.BOLD); v.setSingleLine(); v.setPadding(0,dp(10),0,0); return v; }
     private int color(String value) { try { return Color.parseColor(value); } catch (Exception e) { return 0xff8b6652; } }
-    private TextView text(String v,int s,int c,int style){ TextView t=new TextView(this);t.setText(v);t.setTextSize(s);t.setTextColor(c);t.setTypeface(Typeface.DEFAULT,style);return t; }
+    private TextView text(String v,int s,int c,int style){ TextView t=new TextView(this);t.setText(com.baixingai.voicedrop.ui.I18n.text(this, v));t.setTextSize(s);t.setTextColor(c);t.setTypeface(Typeface.DEFAULT,style);return t; }
     private GradientDrawable roundStroke(int c,int r,int sc,int sw){GradientDrawable d=new GradientDrawable();d.setColor(c);d.setCornerRadius(dp(r));d.setStroke(dp(sw),sc);return d;}
     private GradientDrawable round(int c,int r){GradientDrawable d=new GradientDrawable();d.setColor(c);d.setCornerRadius(dp(r));return d;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}

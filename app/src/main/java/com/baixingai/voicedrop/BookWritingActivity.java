@@ -115,7 +115,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
     }
 
     private View buildHeader() {
-        return new PageTitleBar(this, "写书", this::finishWithPageTransition);
+        return new PageTitleBar(this, com.baixingai.voicedrop.ui.I18n.text(this, "写书"), this::finishWithPageTransition);
     }
 
     private LinearLayout buildBottomBar() {
@@ -204,7 +204,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
             LinearLayout card = vertical();
             card.setPadding(dp(12), dp(12), dp(12), dp(12));
             card.setBackground(round(AMBER_SOFT, 8));
-            card.addView(text("《" + articleTitle() + "》已作为种子", 14, Theme.INK, Typeface.BOLD));
+            card.addView(text(com.baixingai.voicedrop.ui.I18n.format(this, "《%s》已作为种子", articleTitle()), 14, Theme.INK, Typeface.BOLD));
             String preview = seedArticleBody == null ? "" : seedArticleBody.replace('\n', ' ').trim();
             if (preview.length() > 60) preview = preview.substring(0, 60) + "…";
             TextView previewView = text(preview, 12, Theme.SECONDARY, Typeface.NORMAL);
@@ -226,7 +226,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
                 : "比如：为什么一切都在变乱？\n或：钱不脏，是我一直躲着它。";
         SpannableString hint = new SpannableString(placeholder);
         hint.setSpan(new AbsoluteSizeSpan(14, true), 0, hint.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        seed.setHint(hint);
+        seed.setHint(com.baixingai.voicedrop.ui.I18n.text(this, hint.toString()));
         seed.setPadding(dp(20), dp(18), dp(20), dp(18));
         seed.setBackground(roundWithStroke(Theme.CARD, 8, Theme.ACCENT, 2));
         seed.setText(preservedSeed);
@@ -295,14 +295,14 @@ public final class BookWritingActivity extends VoiceDropActivity {
         card.setPadding(dp(16), dp(15), dp(16), dp(16));
         card.setBackground(roundWithStroke(Theme.CARD, 8, Theme.BORDER_CHROME, 1));
         double gap = Math.max(0, PRICE - balance);
-        card.addView(text("还差 " + format(gap) + " 算力，两条来路：", 14, Theme.INK, Typeface.BOLD));
+        card.addView(text(com.baixingai.voicedrop.ui.I18n.format(this, "还差 %s 算力，两条来路：", format(gap)), 14, Theme.INK, Typeface.BOLD));
         int feed = invite == null ? 0 : invite.suanliFeedAuthor;
         int invited = invite == null ? 0 : invite.suanliInviter;
         card.addView(earnRow(R.drawable.ic_settings_bolt, Theme.AMBER, Theme.AMBER_BG,
-                feed > 0 ? "请朋友给你的文章「加油」——一次约得 " + feed + " 算力" : "请朋友给你的文章「加油」——作者每次都得算力",
+                feed > 0 ? com.baixingai.voicedrop.ui.I18n.format(this, "请朋友给你的文章「加油」——一次约得 %s 算力", feed) : "请朋友给你的文章「加油」——作者每次都得算力",
                 "把文章分享到 VD社区或发给朋友，读的人点「加油」你就进账"), topMargin(dp(14)));
         card.addView(earnRow(R.drawable.ic_settings_community, Theme.ACCENT, Theme.ACCENT_SOFT,
-                invited > 0 ? "邀请朋友装 VoiceDrop——装一个约得 " + invited + " 算力" : "邀请朋友装 VoiceDrop——每装一个你都得算力",
+                invited > 0 ? com.baixingai.voicedrop.ui.I18n.format(this, "邀请朋友装 VoiceDrop——装一个约得 %s 算力", invited) : "邀请朋友装 VoiceDrop——每装一个你都得算力",
                 "朋友通过你的链接安装，双方都到账"), topMargin(dp(14)));
         if (invite != null && invite.url != null && !invite.url.isEmpty()) {
             TextView share = text("把邀请链接发给朋友", 15, 0xffffffff, Typeface.BOLD);
@@ -370,7 +370,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TEXT, invite.url);
-        startActivity(Intent.createChooser(intent, "分享邀请链接"));
+        startActivity(Intent.createChooser(intent, com.baixingai.voicedrop.ui.I18n.text(this, "分享邀请链接")));
     }
 
     private void startBook() {
@@ -448,7 +448,9 @@ public final class BookWritingActivity extends VoiceDropActivity {
                 && !sending && !submitted && (balance == null || balance >= PRICE);
         submit.setEnabled(enabled);
         double gap = balance == null ? 0 : Math.max(0, PRICE - balance);
-        submit.setText(sending ? "提交中…" : gap > 0 ? "算力不够 · 还差 " + format(gap) : "开始写书 · 320 算力");
+        submit.setText(sending ? com.baixingai.voicedrop.ui.I18n.text(this, "提交中…")
+                : gap > 0 ? com.baixingai.voicedrop.ui.I18n.format(this, "算力不够 · 还差 %s", format(gap))
+                : com.baixingai.voicedrop.ui.I18n.text(this, "开始写书 · 320 算力"));
         submit.setTextColor(0xffffffff);
         submit.setBackground(round(enabled ? Theme.ACCENT : Theme.FAINT, 8));
         submit.setElevation(enabled ? dp(5) : 0);
@@ -456,13 +458,13 @@ public final class BookWritingActivity extends VoiceDropActivity {
 
     private void showStatus(String message) {
         if (status == null) return;
-        status.setText(message == null ? "" : message);
+        status.setText(message == null ? "" : com.baixingai.voicedrop.ui.I18n.text(this, message));
         status.setVisibility(message == null || message.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private void showSubmitLoading() {
         hideSubmitLoading();
-        submitLoading = WechatShareLoadingDialog.show(this, "提交中...");
+        submitLoading = WechatShareLoadingDialog.show(this, com.baixingai.voicedrop.ui.I18n.text(this, "提交中..."));
     }
 
     private void hideSubmitLoading() {
@@ -521,7 +523,8 @@ public final class BookWritingActivity extends VoiceDropActivity {
     }
     private boolean hasSeedArticle() { return seedArticleTitle != null || seedArticleBody != null; }
     private String articleTitle() {
-        return seedArticleTitle == null || seedArticleTitle.trim().isEmpty() ? "无题" : seedArticleTitle.trim();
+        return seedArticleTitle == null || seedArticleTitle.trim().isEmpty()
+                ? com.baixingai.voicedrop.ui.I18n.text(this, "无题") : seedArticleTitle.trim();
     }
     private LinearLayout vertical() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private TextView text(String value, int size, int color, int style) {

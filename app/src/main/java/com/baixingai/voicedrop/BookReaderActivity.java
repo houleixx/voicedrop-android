@@ -30,6 +30,7 @@ import com.baixingai.voicedrop.data.WechatMiniProgramShare;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.ui.AliIconFont;
+import com.baixingai.voicedrop.ui.I18n;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
@@ -88,7 +89,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
         PageTitleBar titleBar = new PageTitleBar(this, getIntent().getStringExtra("displayTitle"),
                 this::finishWithPageTransition);
         FrameLayout moreAction = titleBar.addIconAction(
-                AliIconFont.MORE, Theme.SECONDARY, "更多", () -> {});
+                AliIconFont.MORE, Theme.SECONDARY, I18n.text(this, "更多"), () -> {});
         moreAction.setOnClickListener(this::showBookMenu);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 
@@ -116,12 +117,12 @@ public final class BookReaderActivity extends VoiceDropActivity {
                                                   WebResourceError error) {
                 if (request != null && request.isForMainFrame()) {
                     hideLoading();
-                    SimpleToast.show(BookReaderActivity.this, "书籍加载失败，请检查网络后重试");
+                    SimpleToast.show(BookReaderActivity.this, I18n.text(BookReaderActivity.this, "书籍加载失败，请检查网络后重试"));
                 }
             }
         });
         content.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        loadingState = new LoadingStateView(this, "正在加载书籍…");
+        loadingState = new LoadingStateView(this, I18n.text(this, "正在加载书籍…"));
         loadingState.setBackgroundColor(Theme.BG);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(-1, dp(180), Gravity.TOP);
         loadingParams.topMargin = dp(20);
@@ -236,9 +237,9 @@ public final class BookReaderActivity extends VoiceDropActivity {
                 if (resultCode >= 200 && resultCode < 300) {
                     isHidden = hidden;
                     new BookShelfCache(this, auth.libraryCacheIdentity()).clear();
-                    SimpleToast.show(this, hidden ? "已隐藏，书架上看不到了" : "已取消隐藏");
+                    SimpleToast.show(this, I18n.text(this, hidden ? "已隐藏，书架上看不到了" : "已取消隐藏"));
                 } else {
-                    SimpleToast.show(this, resultCode == 403 ? "这不是你的书，改不了" : "没改成，过会儿再试");
+                    SimpleToast.show(this, I18n.text(this, resultCode == 403 ? "这不是你的书，改不了" : "没改成，过会儿再试"));
                     if (resultCode == 403) loadOwnership();
                 }
             });
@@ -252,7 +253,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
         row.setPadding(dp(18), 0, dp(16), 0);
         row.setMinimumHeight(dp(48));
         TextView text = new TextView(this);
-        text.setText(label);
+        text.setText(I18n.text(this, label));
         text.setTextSize(17);
         text.setTextColor(Theme.INK);
         text.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
@@ -274,13 +275,13 @@ public final class BookReaderActivity extends VoiceDropActivity {
 
     private void showBookShareSheet() {
         List<ShareBottomSheet.Item> items = new ArrayList<>();
-        items.add(ShareBottomSheet.drawable("微信好友", R.drawable.ic_wechat,
+        items.add(ShareBottomSheet.drawable(I18n.text(this, "微信好友"), R.drawable.ic_wechat,
                 ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(false)));
-        items.add(ShareBottomSheet.remix("朋友圈", RemixIconGlyph.CAMERA_LENS_LINE,
+        items.add(ShareBottomSheet.remix(I18n.text(this, "朋友圈"), RemixIconGlyph.CAMERA_LENS_LINE,
                 ShareBottomSheet.WECHAT_GREEN, Color.WHITE, () -> shareBookToWechat(true)));
-        items.add(ShareBottomSheet.drawable("复制链接", R.drawable.ic_link_flat,
+        items.add(ShareBottomSheet.drawable(I18n.text(this, "复制链接"), R.drawable.ic_link_flat,
                 ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 23, this::copyBookLink));
-        items.add(ShareBottomSheet.drawable("其它分享", R.drawable.ic_share_forward,
+        items.add(ShareBottomSheet.drawable(I18n.text(this, "其它分享"), R.drawable.ic_share_forward,
                 ShareBottomSheet.NEUTRAL_BACKGROUND, Theme.SECONDARY, 24, this::shareBookWithSystem));
         ShareBottomSheet.show(this, items);
     }
@@ -306,16 +307,16 @@ public final class BookReaderActivity extends VoiceDropActivity {
     private void copyBookLink() {
         BookShareTarget.Target target = currentShareTarget();
         if (target == null) {
-            SimpleToast.show(this, "复制失败");
+            SimpleToast.show(this, I18n.text(this, "复制失败"));
             return;
         }
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) {
-            SimpleToast.show(this, "复制失败");
+            SimpleToast.show(this, I18n.text(this, "复制失败"));
             return;
         }
-        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接", target.url));
-        SimpleToast.show(this, "链接已复制");
+        clipboard.setPrimaryClip(ClipData.newPlainText(I18n.text(this, "VoiceDrop 书籍链接"), target.url));
+        SimpleToast.show(this, I18n.text(this, "链接已复制"));
     }
 
     private void shareBookToWechat(boolean timeline) {
@@ -327,7 +328,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
             showWechatShareResult(sendToWechat(timeline, target, null), target);
             return;
         }
-        SimpleToast.show(this, "正在准备微信分享…");
+        SimpleToast.show(this, I18n.text(this, "正在准备微信分享…"));
         shareIo.execute(() -> {
             Bitmap cover = loadBookCover(getIntent().getStringExtra("coverUrl"));
             runOnUiThread(() -> {
@@ -345,7 +346,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
 
     private WechatMiniProgramShare.Result sendToWechat(boolean timeline,
                                                         BookShareTarget.Target target, Bitmap cover) {
-        String description = target.chapter ? rootBookTitle() : "VoiceDrop 图书馆 · 点开即读";
+        String description = target.chapter ? rootBookTitle() : I18n.text(this, "VoiceDrop 图书馆 · 点开即读");
         if (timeline) return WechatMiniProgramShare.sendTimeline(
                 this, target.title, target.url, cover, description);
         String title = getIntent().getStringExtra("shareTitle");
@@ -369,7 +370,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_SUBJECT, target.title);
         send.putExtra(Intent.EXTRA_TEXT, text);
-        startActivity(Intent.createChooser(send, "分享这本书"));
+        startActivity(Intent.createChooser(send, I18n.text(this, "分享这本书")));
     }
 
     private Bitmap loadBookCover(String coverUrl) {
@@ -407,7 +408,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
     private String rootBookTitle() {
         String title = getIntent().getStringExtra("shareTitle");
         if (title == null || title.trim().isEmpty()) title = getIntent().getStringExtra("displayTitle");
-        if (title == null || title.trim().isEmpty()) title = "未命名";
+        if (title == null || title.trim().isEmpty()) title = I18n.text(this, "未命名");
         String author = getIntent().getStringExtra("author");
         return "《" + title.trim() + "》"
                 + (author == null || author.trim().isEmpty() ? "" : " — " + author.trim());
@@ -418,9 +419,9 @@ public final class BookReaderActivity extends VoiceDropActivity {
         if (result == WechatMiniProgramShare.Result.WECHAT_NOT_INSTALLED) {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null) {
-                clipboard.setPrimaryClip(ClipData.newPlainText("VoiceDrop 书籍链接",
+                clipboard.setPrimaryClip(ClipData.newPlainText(I18n.text(this, "VoiceDrop 书籍链接"),
                         target.title + "\n" + target.url));
-                SimpleToast.show(this, "未安装微信，链接已复制");
+                SimpleToast.show(this, I18n.text(this, "未安装微信，链接已复制"));
                 return;
             }
         }

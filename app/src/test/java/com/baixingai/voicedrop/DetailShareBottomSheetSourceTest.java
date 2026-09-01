@@ -77,12 +77,12 @@ public final class DetailShareBottomSheetSourceTest {
 
     @Test public void bookDetailIncludesCopyLinkInTheShareSheet() throws Exception {
         String source = read("BookReaderActivity.java");
-        assertTrue(source.contains("ShareBottomSheet.drawable(\"微信好友\""));
-        assertTrue(source.contains("ShareBottomSheet.remix(\"朋友圈\""));
-        assertTrue(source.contains("ShareBottomSheet.drawable(\"复制链接\""));
+        assertTrue(source.contains("ShareBottomSheet.drawable(I18n.text(this, \"微信好友\")"));
+        assertTrue(source.contains("ShareBottomSheet.remix(I18n.text(this, \"朋友圈\")"));
+        assertTrue(source.contains("ShareBottomSheet.drawable(I18n.text(this, \"复制链接\")"));
         assertTrue(source.contains("this::copyBookLink"));
-        assertTrue(source.contains("ShareBottomSheet.drawable(\"其它分享\""));
-        assertTrue(source.contains("ClipData.newPlainText(\"VoiceDrop 书籍链接\", target.url)"));
+        assertTrue(source.contains("ShareBottomSheet.drawable(I18n.text(this, \"其它分享\")"));
+        assertTrue(source.contains("ClipData.newPlainText(I18n.text(this, \"VoiceDrop 书籍链接\"), target.url)"));
     }
 
     private static String method(String source, String start, String end) {

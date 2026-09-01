@@ -48,6 +48,7 @@ import com.baixingai.voicedrop.audio.RecordingBackend;
 import com.baixingai.voicedrop.audio.RecordingQuality;
 import com.baixingai.voicedrop.audio.Uploader;
 import com.baixingai.voicedrop.core.ArticleBody;
+import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.core.ArticlePhotoInsert;
 import com.baixingai.voicedrop.core.RecordingName;
 import com.baixingai.voicedrop.core.RecordingWaveform;
@@ -78,6 +79,7 @@ import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BooksShelfPanel;
 import com.baixingai.voicedrop.ui.CommunityFeedView;
+import com.baixingai.voicedrop.ui.CommunityFeedPresentation;
 import com.baixingai.voicedrop.ui.CommandGestureGate;
 import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
@@ -882,6 +884,14 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected void exportArticle(Recording rec, ArticleDoc doc) {
     }
     protected void openCommunityPost(CommunityStore.Post post) {
+        BookShelfIndex.Book book = CommunityFeedPresentation.book(post);
+        if (book != null) {
+            io.execute(() -> {
+                try { community.engage(post.shareId, "view"); } catch (Exception ignored) {}
+            });
+            BookReaderActivity.open(this, book);
+            return;
+        }
         Intent intent = new Intent(this, CommunityDetailActivity.class);
         intent.putExtra(EXTRA_SHARE_ID, post.shareId);
         intent.putExtra(CommunityDetailActivity.EXTRA_POST_TITLE, post.title);

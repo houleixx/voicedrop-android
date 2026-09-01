@@ -1,5 +1,6 @@
 package com.baixingai.voicedrop.ui;
 
+import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.data.CommunityStore;
 
 import java.util.ArrayList;
@@ -54,5 +55,21 @@ public final class CommunityFeedPresentation {
         List<String> ids = new ArrayList<>();
         for (CommunityStore.Post post : posts) ids.add(post.shareId);
         return ids;
+    }
+
+    /**
+     * The recommendation feed also contains published books.  They do not have a
+     * community-post snapshot to open: their share id is the stable book route.
+     */
+    public static BookShelfIndex.Book book(CommunityStore.Post post) {
+        if (post == null || !"book".equals(post.kind) || post.shareId == null
+                || !post.shareId.startsWith("book-")) return null;
+        String slug = post.shareId.substring("book-".length());
+        if (!slug.matches("[A-Za-z0-9_-]+")) return null;
+        String title = post.title == null || post.title.isEmpty() ? slug : post.title;
+        return new BookShelfIndex.Book(slug, title, title,
+                post.preview == null ? "" : post.preview, "#8A7A5A", "#6E5F44",
+                post.coverPhotoKey != null && !post.coverPhotoKey.isEmpty(), Math.max(0, post.count),
+                post.author, 0L, 0L, false, false);
     }
 }

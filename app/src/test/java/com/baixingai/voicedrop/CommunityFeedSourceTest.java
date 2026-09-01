@@ -35,6 +35,20 @@ public class CommunityFeedSourceTest {
     }
 
     @Test
+    public void recommendationBooksOpenTheBookReaderInsteadOfPostDetail() throws Exception {
+        String recordings = read("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String community = read("src/main/java/com/baixingai/voicedrop/CommunityActivity.java");
+        String presentation = read("src/main/java/com/baixingai/voicedrop/ui/CommunityFeedPresentation.java");
+        assertTrue(presentation.contains("\"book\".equals(post.kind)"));
+        assertTrue(presentation.contains("post.shareId.startsWith(\"book-\")"));
+        assertTrue(presentation.contains("new BookShelfIndex.Book"));
+        assertTrue(recordings.contains("BookReaderActivity.open(this, book)"));
+        assertTrue(community.contains("BookReaderActivity.open(this, book)"));
+        assertTrue(recordings.contains("community.engage(post.shareId, \"view\")"));
+        assertTrue(community.contains("community.engage(post.shareId, \"view\")"));
+    }
+
+    @Test
     public void pullRefreshKeepsFeedTabsFixedAndPlacesSpinnerBelowThem() throws Exception {
         String feed = read("src/main/java/com/baixingai/voicedrop/ui/CommunityFeedView.java");
         String refresh = read("src/main/java/com/baixingai/voicedrop/ui/PullRefreshLayout.java");

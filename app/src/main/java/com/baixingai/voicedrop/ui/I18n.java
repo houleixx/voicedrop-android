@@ -862,7 +862,7 @@ public final class I18n {
         copy.put("可以补充这本书往哪儿写：比如“写成给孩子的绘本”“扩成一本科普书”“沿着文中第三点展开”。不填就由写书代理自己定。", "You can guide where the book goes, such as “make it a picture book for children,” “expand it into popular science,” or “develop the third point.” Leave blank and the book-writing agent decides.");
         copy.put("一句话说清这本书要讲明白的那一个问题或主张。想法越聚焦，书越好看；也可以贴一整篇文章当种子。", "State the one question or claim this book should make clear. A focused idea makes a better book. You can also paste a whole article as the seed.");
         copy.put("比如：写成给孩子的绘本。（可留空）", "For example: Make it a picture book for children. (Optional)");
-        copy.put("比如：为什么一切都在变乱？\n或：钱不脏，是我一直躲着它。", "For example: Why is everything becoming chaotic?");
+        copy.put("比如：为什么一切都在变乱？\n或：钱不脏，是我一直躲着它。", "For example: Why is everything becoming chaotic?\nOr: Money isn't dirty; I've been avoiding it.");
         copy.put("怎么写成", "How it's written");
         copy.put("拆大纲", "Outline");
         copy.put("AI 建筑师把中心思想拆成一环扣一环的章节", "An AI architect turns the central idea into connected chapters");

@@ -42,4 +42,14 @@ public final class HomePagerMemorySourceTest {
         assertTrue(source.contains("visualLeft - scrollOffset"));
         assertTrue(source.contains("tabScroll.setOnScrollChangeListener"));
     }
+
+    @Test
+    public void centersTheSelectedHomeTabWithinTheAvailableScrollRange() throws Exception {
+        String source = new String(Files.readAllBytes(
+                Path.of("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java")), StandardCharsets.UTF_8);
+        assertTrue(source.contains("protected void centerHomeTab(TextView tab)"));
+        assertTrue(source.contains("homeTabScroll.smoothScrollTo"));
+        assertTrue(source.contains("Math.max(0, Math.min(target, maxScroll))"));
+        assertTrue(source.contains("centerHomeTab(activeHomeTab())"));
+    }
 }

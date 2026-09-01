@@ -224,6 +224,8 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected TextView booksTabTitle;
     protected View homeTabUnderline;
     protected HorizontalScrollView homeTabScroll;
+    protected LinearLayout homeTabRow;
+    protected final HashMap<String, TextView> homeTagTabTitles = new HashMap<>();
     protected final List<String> homeTags = new ArrayList<>();
     protected String selectedTag;
     protected String defaultRecordTag;
@@ -1095,6 +1097,23 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected void updateUnderline(View underline, TextView mainTitle, TextView communityTabView, boolean isCommunityActive) {
         updateUnderline(underline, isCommunityActive ? communityTabView : mainTitle);
     }
+
+    /** Keeps the active home tab readable; edge tabs naturally stop at their scroll limit. */
+    protected void centerHomeTab(TextView tab) {
+        if (homeTabScroll == null || homeTabRow == null || tab == null) return;
+        homeTabScroll.post(() -> {
+            int viewportWidth = homeTabScroll.getWidth();
+            if (viewportWidth <= 0) return;
+            int target = tab.getLeft() + tab.getWidth() / 2 - viewportWidth / 2;
+            int maxScroll = Math.max(0, homeTabRow.getWidth() - viewportWidth);
+            homeTabScroll.smoothScrollTo(Math.max(0, Math.min(target, maxScroll)), 0);
+        });
+    }
+
+    protected TextView activeHomeTab() {
+        if (selectedTag != null) return homeTagTabTitles.get(selectedTag);
+        return booksTab ? booksTabTitle : communityTab ? communityTabTitle : recordingsTabTitle;
+    }
     protected void toast(String message) {
         main.post(() -> SimpleToast.show(this, message));
     }
@@ -1554,6 +1573,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.BOTTOM);
         titleRow.setPadding(dp(18), 0, dp(18), 0);
+        homeTabRow = titleRow;
         tabScroll.addView(titleRow, new HorizontalScrollView.LayoutParams(-2, -2));
 
         recordingsTabTitle = text("我的录音", 20, !communityTab && !booksTab && selectedTag == null ? Theme.INK : Theme.FAINT, Typeface.BOLD);
@@ -1583,7 +1603,9 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 selectedTag = tag;
                 if (homePager != null) homePager.setCurrentItem(homeTags.indexOf(tag) + 3, true);
                 updateHomeTabs();
+                centerHomeTab(activeHomeTab());
             });
+            homeTagTabTitles.put(tag, tagTitle);
             titleRow.addView(tagTitle, new LinearLayout.LayoutParams(-2, -2));
         }
 
@@ -1591,7 +1613,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
         homeTabUnderline.setBackground(round(Theme.RED, 1));
         page.addView(homeTabUnderline, new LinearLayout.LayoutParams(0, dp(3)));
         tabScroll.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> updateHomeTabs());
-        titleRow.post(this::updateHomeTabs);
+        titleRow.post(() -> {
+            updateHomeTabs();
+            centerHomeTab(activeHomeTab());
+        });
 
         View spacer = new View(this);
         spacer.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(10)));
@@ -1612,6 +1637,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 booksTab = position == 2;
                 selectedTag = position >= 3 && position - 3 < homeTags.size() ? homeTags.get(position - 3) : null;
                 updateHomeTabs();
+                centerHomeTab(activeHomeTab());
                 if (communityTab && (communityRefreshDirty || !communityLoadAttempted)) {
                     communityRefreshDirty = false;
                     communityLoadAttempted = true;
@@ -1629,6 +1655,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
             booksTab = false;
             selectedTag = null;
             homePager.setCurrentItem(0, true);
+            centerHomeTab(recordingsTabTitle);
         });
         communityTabTitle.setOnClickListener(v -> {
             communityTab = true;
@@ -1639,12 +1666,14 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 refreshHomePages();
             }
             homePager.setCurrentItem(1, true);
+            centerHomeTab(communityTabTitle);
         });
         booksTabTitle.setOnClickListener(v -> {
             communityTab = false;
             booksTab = true;
             selectedTag = null;
             homePager.setCurrentItem(2, true);
+            centerHomeTab(booksTabTitle);
         });
     }
 
@@ -3006,6 +3035,8 @@ public final class RecordingsActivity extends VoiceDropActivity {
         booksTabTitle = null;
         homeTabUnderline = null;
         homeTabScroll = null;
+        homeTabRow = null;
+        homeTagTabTitles.clear();
         communityFeedView = null;
         recordingsListsByPage.clear();
         emptyListTextByPage.clear();

@@ -41,7 +41,7 @@ public final class CommunityStore {
     public Feed feed() throws Exception {
         try {
             HttpClient.RequestOptions options = new HttpClient.RequestOptions().readTimeoutMs(5_000);
-            HttpClient.Response response = http.get(Api.recoBase() + "/feed", auth.bearer(), options);
+            HttpClient.Response response = http.get(Api.recoBase() + "/feed", auth.anonymousBearer(), options);
             if (response.ok()) {
                 Feed parsed = parseFeed(response.text());
                 if (!parsed.latest.isEmpty()) {
@@ -93,7 +93,7 @@ public final class CommunityStore {
             payloadPosts.put(obj);
         }
         JSONObject body = new JSONObject().put("posts", payloadPosts);
-        HttpClient.Response response = http.postJson(Api.recoBase() + "/rank", auth.bearer(),
+        HttpClient.Response response = http.postJson(Api.recoBase() + "/rank", auth.anonymousBearer(),
                 body.toString().getBytes("UTF-8"));
         if (!response.ok()) throw new IllegalStateException("rank HTTP " + response.code);
 
@@ -225,7 +225,7 @@ public final class CommunityStore {
             JSONObject body = new JSONObject();
             body.put("action", action);
             if (on != null) body.put("on", on);
-            http.postJson(url, auth.bearer(), body.toString().getBytes("UTF-8"));
+            http.postJson(url, auth.anonymousBearer(), body.toString().getBytes("UTF-8"));
         } catch (Exception ignored) {
         }
     }

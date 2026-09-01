@@ -18,9 +18,9 @@ public class CommunityStoreTest {
         if (!Files.exists(path)) path = Paths.get("app", path.toString());
         String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
 
-        assertTrue(source.contains("Api.recoBase() + \"/feed\", auth.bearer()"));
-        assertTrue(source.contains("Api.recoBase() + \"/rank\", auth.bearer()"));
-        assertTrue(source.contains("http.postJson(url, auth.bearer()"));
+        assertTrue(source.contains("Api.recoBase() + \"/feed\", auth.anonymousBearer()"));
+        assertTrue(source.contains("Api.recoBase() + \"/rank\", auth.anonymousBearer()"));
+        assertTrue(source.contains("http.postJson(url, auth.anonymousBearer()"));
     }
 
     @Test

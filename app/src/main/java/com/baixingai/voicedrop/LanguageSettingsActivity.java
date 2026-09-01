@@ -132,6 +132,9 @@ public final class LanguageSettingsActivity extends VoiceDropActivity {
 
     private void confirmLanguage() {
         if (selected == current) return;
+        // Finish this picker first so the locale recreation returns to Settings
+        // instead of recreating both screens at once.
+        finishWithPageTransition();
         com.baixingai.voicedrop.ui.I18n.applyLanguage(this, selected.languageTags());
     }
 

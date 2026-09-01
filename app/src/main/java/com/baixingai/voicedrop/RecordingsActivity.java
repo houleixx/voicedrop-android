@@ -223,6 +223,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected TextView communityTabTitle;
     protected TextView booksTabTitle;
     protected View homeTabUnderline;
+    protected HorizontalScrollView homeTabScroll;
     protected final List<String> homeTags = new ArrayList<>();
     protected String selectedTag;
     protected String defaultRecordTag;
@@ -1084,7 +1085,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
         float visualLeft = activeTab.getLeft() + activeTab.getTotalPaddingLeft()
                 + textLayout.getLineLeft(0) + glyphBounds.left;
         underline.setLayoutParams(new LinearLayout.LayoutParams(lineW, dp(3)));
-        underline.setTranslationX(visualLeft);
+        int scrollOffset = homeTabScroll != null && (activeTab == recordingsTabTitle
+                || activeTab == communityTabTitle || activeTab == booksTabTitle)
+                ? homeTabScroll.getScrollX() : 0;
+        underline.setTranslationX(visualLeft - scrollOffset);
         underline.setVisibility(View.VISIBLE);
     }
     /** Position underline under the active tab (mainTitle or communityTabView). */
@@ -1543,6 +1547,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         HorizontalScrollView tabScroll = new HorizontalScrollView(this);
         tabScroll.setHorizontalScrollBarEnabled(false);
         tabScroll.setFillViewport(false);
+        homeTabScroll = tabScroll;
         page.addView(tabScroll, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout titleRow = new LinearLayout(this);
@@ -1585,6 +1590,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         homeTabUnderline = new View(this);
         homeTabUnderline.setBackground(round(Theme.RED, 1));
         page.addView(homeTabUnderline, new LinearLayout.LayoutParams(0, dp(3)));
+        tabScroll.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> updateHomeTabs());
         titleRow.post(this::updateHomeTabs);
 
         View spacer = new View(this);
@@ -2999,6 +3005,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         communityTabTitle = null;
         booksTabTitle = null;
         homeTabUnderline = null;
+        homeTabScroll = null;
         communityFeedView = null;
         recordingsListsByPage.clear();
         emptyListTextByPage.clear();

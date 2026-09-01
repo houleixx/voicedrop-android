@@ -33,4 +33,13 @@ public final class HomePagerMemorySourceTest {
         assertTrue(source.contains("final int loadGeneration = recordingMetadataGeneration;"));
         assertTrue(source.contains("loadGeneration != recordingMetadataGeneration || isFinishing() || isDestroyed()"));
     }
+
+    @Test
+    public void movesTheHomeTabUnderlineWithItsHorizontalScrollContainer() throws Exception {
+        String source = new String(Files.readAllBytes(
+                Path.of("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java")), StandardCharsets.UTF_8);
+        assertTrue(source.contains("homeTabScroll.getScrollX()"));
+        assertTrue(source.contains("visualLeft - scrollOffset"));
+        assertTrue(source.contains("tabScroll.setOnScrollChangeListener"));
+    }
 }

@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class SettingsActivity extends Activity {
+public class SettingsActivity extends VoiceDropActivity {
     private interface CardBuilder {
         void build(LinearLayout card);
     }
@@ -212,9 +212,14 @@ public class SettingsActivity extends Activity {
         addCard(content, card -> {
             addCardRow(card, R.drawable.ic_settings_export, "导出数据", "所有录音和文章打包下载", this::exportAllData);
             addCardDivider(card);
+            addCardRow(card, R.drawable.ic_globe_flat, "语言", "选择 VoiceDrop 显示语言",
+                    this::openLanguageSettings);
+            addCardDivider(card);
             addCacheRow(card);
             addCardDivider(card);
-            addCardRow(card, R.drawable.ic_settings_update, "检查更新", "版本 " + appVersionName(), () -> AppUpdateManager.checkManually(this));
+            addCardRow(card, R.drawable.ic_settings_update, "检查更新",
+                    com.baixingai.voicedrop.ui.I18n.text(this, "版本 ") + appVersionName(),
+                    () -> AppUpdateManager.checkManually(this));
             addCardDivider(card);
             addCardRow(card, R.drawable.ic_settings_info, "关于", "隐私 · 公约 · 屏蔽 · 联系", this::openAbout);
         });
@@ -311,7 +316,7 @@ public class SettingsActivity extends Activity {
                     if (usageBalanceText == null || usageCapacityText == null) return;
                     usageBalanceText.setText(String.valueOf((int) Math.round(balance.suanli)));
                     usageBalanceText.setVisibility(View.VISIBLE);
-                    usageCapacityText.setText("约可成文 " + UsageStore.articleCapacity(balance.suanli) + " 篇");
+                    usageCapacityText.setText(com.baixingai.voicedrop.ui.I18n.text(this, "约可成文 ") + UsageStore.articleCapacity(balance.suanli) + com.baixingai.voicedrop.ui.I18n.text(this, " 篇"));
                 });
             } catch (Exception ignored) {
                 // Best-effort summary. The detail page reports load failures itself.
@@ -387,7 +392,7 @@ public class SettingsActivity extends Activity {
             toast("正在清除缓存…");
             return;
         }
-        if (cacheSizeText != null) cacheSizeText.setText("清理中…");
+        if (cacheSizeText != null) cacheSizeText.setText(com.baixingai.voicedrop.ui.I18n.text(this, "清理中…"));
         try {
             cacheIo.execute(() -> {
                 CacheManager.ClearResult result;
@@ -419,7 +424,7 @@ public class SettingsActivity extends Activity {
             if (cacheRefreshRunning) return;
             cacheRefreshRunning = true;
         }
-        if (cacheSizeText != null && !cacheClearInProgress.get()) cacheSizeText.setText("计算中…");
+        if (cacheSizeText != null && !cacheClearInProgress.get()) cacheSizeText.setText(com.baixingai.voicedrop.ui.I18n.text(this, "计算中…"));
         try {
             cacheIo.execute(this::drainCacheSizeRefreshes);
         } catch (RejectedExecutionException ignored) {
@@ -655,6 +660,13 @@ public class SettingsActivity extends Activity {
 
     private void openWritingStyle() {
         Intent intent = new Intent(this, WritingStyleActivity.class);
+        ActivityOptions options = ActivityOptions.makeCustomAnimation(
+                this, R.anim.slide_in_right, R.anim.slide_out_left);
+        startActivity(intent, options.toBundle());
+    }
+
+    private void openLanguageSettings() {
+        Intent intent = new Intent(this, LanguageSettingsActivity.class);
         ActivityOptions options = ActivityOptions.makeCustomAnimation(
                 this, R.anim.slide_in_right, R.anim.slide_out_left);
         startActivity(intent, options.toBundle());
@@ -942,7 +954,7 @@ public class SettingsActivity extends Activity {
             try {
                 List<Recording> recordings = library.load(new ArrayList<>());
                 if (recordings.isEmpty()) throw new IllegalArgumentException("没有录音可以导出");
-                runOnUiThread(() -> status.setText("正在打包 " + recordings.size() + " 条录音…"));
+                runOnUiThread(() -> status.setText(com.baixingai.voicedrop.ui.I18n.text(this, "正在打包 ") + recordings.size() + com.baixingai.voicedrop.ui.I18n.text(this, " 条录音…")));
                 File zip = exportManager.exportAll(recordings);
                 pendingExportZip = zip;
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -987,7 +999,7 @@ public class SettingsActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

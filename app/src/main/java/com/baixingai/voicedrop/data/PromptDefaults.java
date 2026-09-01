@@ -2,6 +2,7 @@ package com.baixingai.voicedrop.data;
 
 import com.baixingai.voicedrop.core.PromptNode;
 import com.baixingai.voicedrop.core.PromptTree;
+import com.baixingai.voicedrop.ui.I18n;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,13 +37,13 @@ final class PromptDefaults {
 
     private static PromptNode group(String id, String label) {
         PromptNode node = new PromptNode();
-        node.id = id; node.type = "group"; node.label = label; node.origin = "system";
+        node.id = id; node.type = "group"; node.label = I18n.text(null, label); node.origin = "system";
         return node;
     }
 
     private static PromptNode action(String id, String label, String prompt, String anchor, String kind) {
         PromptNode node = new PromptNode();
-        node.id = id; node.type = "action"; node.label = label; node.origin = "system";
+        node.id = id; node.type = "action"; node.label = I18n.text(null, label); node.origin = "system";
         node.prompt = prompt; node.kind = kind; node.appliesTo.add(anchor);
         return node;
     }

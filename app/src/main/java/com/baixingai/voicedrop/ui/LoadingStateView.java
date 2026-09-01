@@ -37,7 +37,7 @@ public final class LoadingStateView extends LinearLayout {
     }
 
     public void setMessage(String message) {
-        messageView.setText(message == null || message.isEmpty() ? "正在加载..." : message);
+        messageView.setText(I18n.text(getContext(), message == null || message.isEmpty() ? "正在加载..." : message));
     }
 
     private void tintSpinner(ProgressBar spinner) {

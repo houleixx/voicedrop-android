@@ -21,6 +21,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
@@ -30,6 +31,15 @@
         <meta-data
             android:name="UMENG_CHANNEL"
             android:value="${UMENG_CHANNEL}" />
+        <!-- Lets AppCompat persist per-app locales on Android 12L and earlier. -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
         <activity
             android:name=".RecordingsActivity"
             android:exported="true">
@@ -115,6 +125,10 @@
             android:theme="@style/AppTheme" />
         <activity
             android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        <activity
+            android:name=".LanguageSettingsActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         <activity

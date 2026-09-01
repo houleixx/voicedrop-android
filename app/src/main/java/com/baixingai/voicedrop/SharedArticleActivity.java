@@ -30,7 +30,7 @@ import com.baixingai.voicedrop.ui.Theme;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class SharedArticleActivity extends Activity {
+public final class SharedArticleActivity extends VoiceDropActivity {
     public static final String EXTRA_SHARED_JSON = "sharedJson";
     public static final String EXTRA_ARTICLE_INDEX = "articleIndex";
 

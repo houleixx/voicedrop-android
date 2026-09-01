@@ -15,9 +15,14 @@ public class RecordingDetailStyleSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
 
         assertTrue(source.contains("选风格"));
-        assertTrue(source.contains("String styleLabel = article.style == null ? \"选风格\" : \"v\" + article.style + \" 风格\""));
+        assertTrue(source.contains("String styleLabel = article.style == null"));
+        assertTrue(source.contains("I18n.text(this, \"风格\")"));
         assertTrue(source.contains("styleSwitch.setOnClickListener(v -> showStyleVersions(rec, article.style))"));
-        assertTrue(source.contains("IosDialog.showBottomSheet(this, \"换个风格重写\", form, 520"));
+        assertTrue(source.contains("IosDialog.showBottomSheetFixedContent(this, \"换个风格重写\", page, 520"));
+        assertTrue(source.contains("page.setBackgroundColor(Theme.BG)"));
+        assertTrue(source.contains("DialogWindowDefaults.hideNavigationBar(dialogRef[0].getWindow())"));
+        assertTrue(source.contains("page.addView(choicesScroll, new LinearLayout.LayoutParams(-1, 0, 1))"));
+        assertTrue(source.contains("page.addView(confirm, confirmLp)"));
         assertTrue(source.contains("final int[] selectedStyleVersion"));
         assertTrue(source.contains("new WritingStyleHistoryCache("));
         assertTrue(source.contains("JSONObject cachedStyleHistory = styleCache.read()"));

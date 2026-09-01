@@ -21,7 +21,7 @@ import com.baixingai.voicedrop.ui.Theme;
 import java.util.List;
 
 /** Dedicated local management page for community-blocked authors. */
-public final class BlockedUsersActivity extends Activity {
+public final class BlockedUsersActivity extends VoiceDropActivity {
     private BlockStore blockStore;
     private LinearLayout content;
 
@@ -180,7 +180,7 @@ public final class BlockedUsersActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

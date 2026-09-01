@@ -37,7 +37,7 @@ public final class PageTitleBar extends FrameLayout {
         addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
 
         TextView heading = new TextView(context);
-        heading.setText(title);
+        heading.setText(I18n.text(context, title));
         heading.setTextSize(24);
         heading.setTextColor(Theme.INK);
         heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -54,7 +54,7 @@ public final class PageTitleBar extends FrameLayout {
     /** Adds a trailing text action while retaining the shared title and back affordance. */
     public TextView addTextAction(String label, Runnable action) {
         TextView view = new TextView(getContext());
-        view.setText(label);
+        view.setText(I18n.text(getContext(), label));
         view.setTextSize(16);
         view.setTextColor(Theme.ACCENT);
         view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

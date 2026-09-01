@@ -31,7 +31,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Native write-book shelf, mirroring iOS BooksShelfView. */
-public final class BooksShelfActivity extends Activity {
+public final class BooksShelfActivity extends VoiceDropActivity {
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private BookCoverLoader coverLoader;
     private PullRefreshLayout refresher;
@@ -66,10 +66,11 @@ public final class BooksShelfActivity extends Activity {
 
     private void refreshForCurrentAccount() {
         String identity = auth.libraryCacheIdentity();
-        if (shelfCache.matches(identity)) return;
-        shelfCache = new BookShelfCache(this, identity);
-        books = BookShelfIndex.parse(shelfCache.read());
-        render();
+        if (!shelfCache.matches(identity)) {
+            shelfCache = new BookShelfCache(this, identity);
+            books = BookShelfIndex.parse(shelfCache.read());
+            render();
+        }
         load(true);
     }
 

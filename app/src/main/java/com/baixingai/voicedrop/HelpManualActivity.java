@@ -29,7 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class HelpManualActivity extends Activity {
+public final class HelpManualActivity extends VoiceDropActivity {
     static final String MANUAL_ASSET = "help_manual.md";
     static final String[] SECTION_LABELS = {
             "1 上手", "2 录音", "3 改稿", "4 发布", "5 社区", "6 文风", "7 账号", "8 FAQ"
@@ -295,7 +295,7 @@ public final class HelpManualActivity extends Activity {
 
     private TextView text(String value, int size, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(size);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

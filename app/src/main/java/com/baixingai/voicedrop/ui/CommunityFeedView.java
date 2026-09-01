@@ -393,7 +393,7 @@ public final class CommunityFeedView extends LinearLayout {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(getContext());
-        view.setText(value);
+        view.setText(I18n.text(getContext(), value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

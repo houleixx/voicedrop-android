@@ -162,7 +162,7 @@ import com.baixingai.voicedrop.data.MinedArticle;
 import com.baixingai.voicedrop.data.Recording;
 import com.baixingai.voicedrop.net.HttpClient;
 
-public final class RecordingDetailActivity extends Activity {
+public final class RecordingDetailActivity extends VoiceDropActivity {
     private static final int BLOCKING_LOADING_SCRIM = 0x33000000;
     private static final int PROCESSING_CARD_COLOR = 0xb8000000;
     private static final long PHOTO_MAKING_GRACE_MS = 900L;
@@ -688,9 +688,14 @@ public final class RecordingDetailActivity extends Activity {
     protected String formatCommunityDate(double ms) {
         try {
             java.util.Date date = new java.util.Date((long) ms);
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy年M月d日", java.util.Locale.getDefault());
+            boolean english = com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en");
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                    english ? "MMM d, yyyy" : "yyyy年M月d日",
+                    english ? java.util.Locale.US : java.util.Locale.getDefault());
             java.util.Date now = new java.util.Date();
-            java.text.SimpleDateFormat yearSdf = new java.text.SimpleDateFormat("M月d日", java.util.Locale.getDefault());
+            java.text.SimpleDateFormat yearSdf = new java.text.SimpleDateFormat(
+                    english ? "MMM d" : "M月d日",
+                    english ? java.util.Locale.US : java.util.Locale.getDefault());
             if (date.getYear() == now.getYear()) {
                 return yearSdf.format(date);
             }
@@ -715,7 +720,7 @@ public final class RecordingDetailActivity extends Activity {
     }
     protected TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);
@@ -726,6 +731,9 @@ public final class RecordingDetailActivity extends Activity {
     protected String formatArticleTitle(Recording rec) {
         RecordingName.Parsed parsed = RecordingName.parse(rec.stem());
         if (parsed == null) return rec.rowTitle();
+        if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")) {
+            return englishMonthDay(parsed) + parsedPeriod(rec);
+        }
         String month = (parsed.month != null ? parsed.month : 0) + "月";
         String day = (parsed.day != null ? parsed.day : 0) + "日";
         String period = parsedPeriod(rec);
@@ -734,23 +742,37 @@ public final class RecordingDetailActivity extends Activity {
     protected String formatArticleSubtitle(Recording rec) {
         RecordingName.Parsed parsed = RecordingName.parse(rec.stem());
         if (parsed == null) return "";
+        if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")) {
+            return englishMonthDay(parsed)
+                    + (parsed.hhmm == null || parsed.hhmm.isEmpty() ? "" : " " + parsed.hhmm);
+        }
         String month = (parsed.month != null ? parsed.month : 0) + "月";
         String day = (parsed.day != null ? parsed.day : 0) + "日";
         String time = parsed.hhmm != null ? parsed.hhmm : "";
         return month + day + (time.isEmpty() ? "" : " " + time);
+    }
+    protected String englishMonthDay(RecordingName.Parsed parsed) {
+        if (parsed == null || parsed.month == null || parsed.day == null) return "";
+        try {
+            String month = java.time.Month.of(parsed.month).getDisplayName(
+                    java.time.format.TextStyle.SHORT, java.util.Locale.US);
+            return month + " " + parsed.day;
+        } catch (Exception ignored) {
+            return parsed.month + "/" + parsed.day;
+        }
     }
     protected String parsedPeriod(Recording rec) {
         // Extract period from the filename (e.g. "Morning", "Afternoon")
         String[] p = rec.stem().split("-");
         for (String part : p) {
             switch (part) {
-                case "EarlyMorning": return "凌晨";
-                case "Morning": return "上午";
-                case "Noon": return "中午";
-                case "Afternoon": return "下午";
-                case "Evening": return "晚上";
-                case "Night": return "夜间";
-                case "LateNight": return "深夜";
+                case "EarlyMorning": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Early morning" : "凌晨";
+                case "Morning": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Morning" : "上午";
+                case "Noon": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Noon" : "中午";
+                case "Afternoon": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Afternoon" : "下午";
+                case "Evening": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Evening" : "晚上";
+                case "Night": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Night" : "夜间";
+                case "LateNight": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Late night" : "深夜";
             }
         }
         return "";
@@ -1227,7 +1249,7 @@ public final class RecordingDetailActivity extends Activity {
     }
 
     protected void showCommunityTermsGate(Runnable onAgree) {
-        TextView body = text(CommunityTerms.BODY, 15, Theme.INK, Typeface.NORMAL);
+        TextView body = text(CommunityTerms.body(this), 15, Theme.INK, Typeface.NORMAL);
         body.setLineSpacing(dp(6), 1.0f);
         body.setPadding(dp(22), dp(12), dp(22), dp(18));
         IosDialog.show(this, "社区公约", body, 360, "同意并发布", () -> {
@@ -1358,7 +1380,7 @@ public final class RecordingDetailActivity extends Activity {
     protected void toggleDictation(android.widget.EditText input, TextView[] dictationBtn) {
         if (dictationSession != null && dictationSession.isRunning()) {
             dictationSession.stop();
-            if (dictationBtn[0] != null) dictationBtn[0].setText("语音听写");
+            if (dictationBtn[0] != null) dictationBtn[0].setText(com.baixingai.voicedrop.ui.I18n.text(this, "语音听写"));
             return;
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1366,7 +1388,7 @@ public final class RecordingDetailActivity extends Activity {
             toast("请授权麦克风后再开始听写");
             return;
         }
-        if (dictationBtn[0] != null) dictationBtn[0].setText("停止听写");
+        if (dictationBtn[0] != null) dictationBtn[0].setText(com.baixingai.voicedrop.ui.I18n.text(this, "停止听写"));
         dictationSession = new AsrDictationSession(auth, new AsrDictationSession.Listener() {
             @Override public void onText(String text, boolean isFinal) {
                 main.post(() -> {
@@ -1383,7 +1405,7 @@ public final class RecordingDetailActivity extends Activity {
 
             @Override public void onError(String message) {
                 main.post(() -> {
-                    if (dictationBtn[0] != null) dictationBtn[0].setText("语音听写");
+                    if (dictationBtn[0] != null) dictationBtn[0].setText(com.baixingai.voicedrop.ui.I18n.text(RecordingDetailActivity.this, "语音听写"));
                     toast("听写失败：" + message);
                 });
             }
@@ -1406,19 +1428,36 @@ public final class RecordingDetailActivity extends Activity {
         WritingStyleHistoryCache styleCache = new WritingStyleHistoryCache(
                 this, auth.libraryCacheIdentity());
         JSONObject cachedStyleHistory = styleCache.read();
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(Theme.BG);
+        BouncyScrollView choicesScroll = new BouncyScrollView(this);
+        choicesScroll.setFillViewport(true);
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(14), dp(10), dp(14), dp(18));
+        form.setPadding(dp(14), dp(10), dp(14), dp(12));
+        choicesScroll.addView(form, new BouncyScrollView.LayoutParams(-1, -2));
+        page.addView(choicesScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        TextView confirm = text("选一个版本", 16, 0xffffffff, Typeface.BOLD);
+        confirm.setGravity(Gravity.CENTER);
+        confirm.setEnabled(false);
+        confirm.setAlpha(0.55f);
+        confirm.setBackground(round(Theme.ACCENT_SOFT, 12));
+        LinearLayout.LayoutParams confirmLp = new LinearLayout.LayoutParams(-1, dp(52));
+        confirmLp.setMargins(dp(14), dp(8), dp(14), dp(14));
+        page.addView(confirm, confirmLp);
         final int[] selectedStyleVersion = {currentStyleVersion == null ? -1 : currentStyleVersion};
         final IosDialog[] dialogRef = {null};
-        dialogRef[0] = IosDialog.showBottomSheet(this, "换个风格重写", form, 520,
+        dialogRef[0] = IosDialog.showBottomSheetFixedContent(this, "换个风格重写", page, 520,
                 null, null, null, null, true, true);
+        DialogWindowDefaults.hideNavigationBar(dialogRef[0].getWindow());
         if (cachedStyleHistory == null) {
             form.addView(new LoadingStateView(this, "正在加载写作风格..."),
                     new LinearLayout.LayoutParams(-1, dp(180)));
         } else {
             renderStyleRewriteChoices(form, rec, cachedStyleHistory, new HashMap<>(),
-                    currentStyleVersion, selectedStyleVersion, dialogRef[0], false);
+                    currentStyleVersion, selectedStyleVersion, dialogRef[0], confirm, false);
         }
         io.execute(() -> {
             Map<Integer, JSONObject> generatedVersions = new HashMap<>();
@@ -1459,7 +1498,7 @@ public final class RecordingDetailActivity extends Activity {
                     return;
                 }
                 renderStyleRewriteChoices(form, rec, visibleStyleHistory, visibleGeneratedVersions,
-                        currentStyleVersion, selectedStyleVersion, dialogRef[0],
+                        currentStyleVersion, selectedStyleVersion, dialogRef[0], confirm,
                         visibleArticleError == null);
                 if (visibleArticleError != null) toast("文章版本加载失败，请稍后重试");
                 else if (visibleStyleError != null) toast("刷新失败，已显示本地风格缓存");
@@ -1470,6 +1509,7 @@ public final class RecordingDetailActivity extends Activity {
     protected void renderStyleRewriteChoices(LinearLayout form, Recording rec, JSONObject history,
                                              Map<Integer, JSONObject> generatedVersions, Integer currentStyleVersion,
                                              int[] selectedStyleVersion, IosDialog dialog,
+                                             TextView confirm,
                                              boolean actionsReady) {
         form.removeAllViews();
         TextView title = text("选一个范文版本，把本文重写一遍，原文不变，可随时换回。", 14, Theme.SECONDARY, Typeface.NORMAL);
@@ -1481,6 +1521,8 @@ public final class RecordingDetailActivity extends Activity {
             TextView empty = text("暂无可用写作风格版本。", 14, Theme.FAINT, Typeface.NORMAL);
             empty.setGravity(Gravity.CENTER);
             form.addView(empty, new LinearLayout.LayoutParams(-1, dp(160)));
+            updateStyleRewriteConfirm(confirm, rec, selectedStyleVersion, generatedVersions, dialog,
+                    actionsReady);
             return;
         }
 
@@ -1494,18 +1536,24 @@ public final class RecordingDetailActivity extends Activity {
             row.setOnClickListener(v -> {
                 selectedStyleVersion[0] = version;
                 renderStyleRewriteChoices(form, rec, history, generatedVersions, currentStyleVersion,
-                        selectedStyleVersion, dialog, actionsReady);
+                        selectedStyleVersion, dialog, confirm, actionsReady);
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(76));
             lp.setMargins(0, i == versions.length() - 1 ? 0 : dp(8), 0, 0);
             form.addView(row, lp);
         }
 
+        updateStyleRewriteConfirm(confirm, rec, selectedStyleVersion, generatedVersions, dialog,
+                actionsReady);
+    }
+
+    protected void updateStyleRewriteConfirm(TextView confirm, Recording rec, int[] selectedStyleVersion,
+                                             Map<Integer, JSONObject> generatedVersions, IosDialog dialog,
+                                             boolean actionsReady) {
         String confirmLabel = actionsReady
                 ? styleRewriteButtonText(selectedStyleVersion[0], generatedVersions)
                 : "正在检查文章版本…";
-        TextView confirm = text(confirmLabel, 16, 0xffffffff, Typeface.BOLD);
-        confirm.setGravity(Gravity.CENTER);
+        confirm.setText(com.baixingai.voicedrop.ui.I18n.text(this, confirmLabel));
         boolean confirmEnabled = actionsReady && selectedStyleVersion[0] >= 0;
         confirm.setEnabled(confirmEnabled);
         confirm.setAlpha(confirmEnabled ? 1f : 0.55f);
@@ -1521,9 +1569,6 @@ public final class RecordingDetailActivity extends Activity {
             }
             requestStyleRewriteOrSwitch(rec, selectedStyleVersion[0], generatedVersions, dialog);
         });
-        LinearLayout.LayoutParams buttonLp = new LinearLayout.LayoutParams(-1, dp(58));
-        buttonLp.setMargins(0, dp(20), 0, 0);
-        form.addView(confirm, buttonLp);
     }
 
     protected LinearLayout styleRewriteRow(JSONObject item, int version, boolean selected, boolean current) {
@@ -1557,7 +1602,8 @@ public final class RecordingDetailActivity extends Activity {
         }
         copy.addView(nameRow);
         String date = item.optString("savedAt", item.optString("createdAt", ""));
-        TextView meta = text(style.length() + " 字" + (date.isEmpty() ? "" : " · " + shortStyleDate(date)),
+        TextView meta = text(style.length() + com.baixingai.voicedrop.ui.I18n.text(this, " 字")
+                        + (date.isEmpty() ? "" : " · " + shortStyleDate(date)),
                 13, Theme.FAINT, Typeface.NORMAL);
         meta.setPadding(0, dp(4), 0, 0);
         copy.addView(meta);
@@ -1571,6 +1617,11 @@ public final class RecordingDetailActivity extends Activity {
 
     protected String styleRewriteButtonText(int styleVersion, Map<Integer, JSONObject> generatedVersions) {
         if (styleVersion < 0) return "选一个版本";
+        if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")) {
+            return generatedVersions.containsKey(styleVersion)
+                    ? "Switch to v" + styleVersion + " style"
+                    : "Rewrite with v" + styleVersion;
+        }
         return generatedVersions.containsKey(styleVersion) ? "切换到 v" + styleVersion + " 风格" : "用 v" + styleVersion + " 重写本文";
     }
 
@@ -1712,12 +1763,24 @@ public final class RecordingDetailActivity extends Activity {
             if (trimmed.matches("\\d{10,13}")) {
                 long epoch = Long.parseLong(trimmed);
                 if (trimmed.length() == 10) epoch *= 1000L;
-                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("M月d日", java.util.Locale.getDefault());
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                        com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? "MMM d" : "M月d日",
+                        com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")
+                                ? java.util.Locale.US : java.util.Locale.getDefault());
                 return sdf.format(new java.util.Date(epoch));
             }
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})").matcher(trimmed);
-            if (m.find()) return Integer.parseInt(m.group(2)) + "月" + Integer.parseInt(m.group(3)) + "日";
-            if (trimmed.contains("月") && trimmed.contains("日")) return trimmed;
+            if (m.find()) return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")
+                    ? m.group(2) + "/" + m.group(3)
+                    : Integer.parseInt(m.group(2)) + "月" + Integer.parseInt(m.group(3)) + "日";
+            if (trimmed.contains("月") && trimmed.contains("日")) {
+                java.util.regex.Matcher chineseDate = java.util.regex.Pattern
+                        .compile("(\\d{1,2})月(\\d{1,2})日").matcher(trimmed);
+                if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") && chineseDate.find()) {
+                    return chineseDate.group(1) + "/" + chineseDate.group(2);
+                }
+                return trimmed;
+            }
         } catch (Exception ignored) {}
         return trimmed;
     }
@@ -2515,7 +2578,9 @@ public final class RecordingDetailActivity extends Activity {
         metaRow.setPadding(0, dp(8), 0, dp(20));
         TextView subtitle = text(formatArticleSubtitle(rec), 13, Theme.FAINT, Typeface.NORMAL);
         metaRow.addView(subtitle);
-        String styleLabel = article.style == null ? "选风格" : "v" + article.style + " 风格";
+        String styleLabel = article.style == null
+                ? com.baixingai.voicedrop.ui.I18n.text(this, "选风格")
+                : "v" + article.style + " " + com.baixingai.voicedrop.ui.I18n.text(this, "风格");
         TextView styleSwitch = text("  ✎  " + styleLabel + "  ›", 13, Theme.FAINT, Typeface.NORMAL);
         styleSwitch.setPadding(dp(8), 0, dp(8), 0);
         styleSwitch.setOnClickListener(v -> showStyleVersions(rec, article.style));
@@ -3240,7 +3305,7 @@ public final class RecordingDetailActivity extends Activity {
         inlineEditingSaving = true;
         inlineEditingInput.setEnabled(false);
         if (articleInlineEditDone != null) {
-            articleInlineEditDone.setText("保存中…");
+            articleInlineEditDone.setText(com.baixingai.voicedrop.ui.I18n.text(this, "保存中…"));
             articleInlineEditDone.setEnabled(false);
             articleInlineEditDone.setAlpha(0.55f);
         }
@@ -3253,7 +3318,7 @@ public final class RecordingDetailActivity extends Activity {
                     inlineEditingSaving = false;
                     inlineEditingInput.setEnabled(true);
                     if (articleInlineEditDone != null) {
-                        articleInlineEditDone.setText("完成");
+                        articleInlineEditDone.setText(com.baixingai.voicedrop.ui.I18n.text(this, "完成"));
                         articleInlineEditDone.setEnabled(true);
                         articleInlineEditDone.setAlpha(1f);
                     }

@@ -118,11 +118,12 @@ public final class BooksShelfPanel extends LinearLayout {
     /** Called by the hosting activity after login, logout, or an account import. */
     public void refreshForCurrentAccount() {
         String identity = auth.libraryCacheIdentity();
-        if (shelfCache.matches(identity)) return;
-        shelfCache = new BookShelfCache(getContext(), identity);
-        books = BookShelfIndex.parse(shelfCache.read());
-        initialLoadPending = books.isEmpty();
-        render();
+        if (!shelfCache.matches(identity)) {
+            shelfCache = new BookShelfCache(getContext(), identity);
+            books = BookShelfIndex.parse(shelfCache.read());
+            initialLoadPending = books.isEmpty();
+            render();
+        }
         load(true);
     }
 
@@ -309,7 +310,7 @@ public final class BooksShelfPanel extends LinearLayout {
 
     private TextView text(String value, int size, int color, int style, boolean serif) {
         TextView view = new TextView(getContext());
-        view.setText(value);
+        view.setText(I18n.text(getContext(), value));
         view.setTextSize(size);
         view.setTextColor(color);
         view.setIncludeFontPadding(false);

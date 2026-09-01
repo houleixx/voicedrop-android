@@ -212,7 +212,7 @@ public final class IosDialog extends Dialog {
 
     private static TextView deviceLinkText(Context ctx, String text, int sizeSp, int color) {
         TextView view = new TextView(ctx);
-        view.setText(text);
+        view.setText(I18n.text(ctx, text));
         view.setTextSize(sizeSp);
         view.setTextColor(color);
         view.setGravity(Gravity.CENTER);
@@ -339,7 +339,7 @@ public final class IosDialog extends Dialog {
                        boolean dismissOnOutside,
                        boolean includeDefaultCancelButton) {
         TextView messageView = new TextView(ctx);
-        messageView.setText(message);
+        messageView.setText(I18n.text(ctx, message));
         messageView.setTextSize(15);
         messageView.setTextColor(Theme.INK);
         messageView.setLineSpacing(dp(ctx, 4), 1.0f);
@@ -409,7 +409,9 @@ public final class IosDialog extends Dialog {
         // Card
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(bottomSheet ? bottomSheetCard(ctx) : roundCard(ctx));
+        card.setBackground(bottomSheet
+                ? (wrapContentInScrollView ? bottomSheetCard(ctx) : bottomSheetFixedContentCard(ctx))
+                : roundCard(ctx));
         card.setPadding(0, 0, 0,
                 bottomSheet && wrapContentInScrollView ? dp(ctx, 20) : 0);
         card.setClickable(true);
@@ -423,7 +425,7 @@ public final class IosDialog extends Dialog {
         if (title != null && !title.isEmpty()) {
             FrameLayout header = new FrameLayout(ctx);
             TextView titleView = new TextView(ctx);
-            titleView.setText(title);
+            titleView.setText(I18n.text(ctx, title));
             titleView.setTextSize(18);
             titleView.setTextColor(Theme.INK);
             titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -557,7 +559,7 @@ public final class IosDialog extends Dialog {
 
     private static TextView makeButton(Context ctx, String label, int color, View.OnClickListener onClick) {
         TextView btn = new TextView(ctx);
-        btn.setText(label);
+        btn.setText(I18n.text(ctx, label));
         btn.setTextSize(17);
         btn.setTextColor(color);
         btn.setGravity(Gravity.CENTER);
@@ -598,6 +600,13 @@ public final class IosDialog extends Dialog {
                 0, 0,
                 0, 0
         });
+        return d;
+    }
+
+    /** Fixed-content sheets own their footer, so keep their title and content on the app page surface. */
+    private static GradientDrawable bottomSheetFixedContentCard(Context ctx) {
+        GradientDrawable d = bottomSheetCard(ctx);
+        d.setColor(Theme.BG);
         return d;
     }
 

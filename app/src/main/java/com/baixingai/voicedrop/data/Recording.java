@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop.data;
 
 import com.baixingai.voicedrop.core.RecordingName;
+import com.baixingai.voicedrop.ui.I18n;
 
 import java.util.List;
 
@@ -53,7 +54,7 @@ public final class Recording {
         RecordingName.Parsed parsed = RecordingName.parse(stem());
         if (parsed == null) return stem();
 
-        // Build human-readable label like iOS: "周三下午" or "浦东新区"
+        // Build a localized human-readable label like "Wednesday afternoon" or a place name.
         StringBuilder sb = new StringBuilder();
         // Day of week (Chinese)
         String weekdayZh = weekdayToChinese(parsed.sessionTs);
@@ -83,7 +84,9 @@ public final class Recording {
             int day = Integer.parseInt(sessionTs.substring(8, 10));
             java.time.LocalDate date = java.time.LocalDate.of(
                     Integer.parseInt(sessionTs.substring(0, 4)), month, day);
-            String[] days = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+            String[] days = I18n.locale().getLanguage().equals("en")
+                    ? new String[]{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+                    : new String[]{"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
             return days[date.getDayOfWeek().getValue() % 7];
         } catch (Exception e) {
             return null;
@@ -97,13 +100,13 @@ public final class Recording {
         if (parts.length > 7) {
             String period = parts[7];
             switch (period) {
-                case "EarlyMorning": return "清晨";
-                case "Morning": return "上午";
-                case "Noon": return "中午";
-                case "Afternoon": return "下午";
-                case "Evening": return "傍晚";
-                case "Night": return "晚上";
-                case "LateNight": return "深夜";
+                case "EarlyMorning": return I18n.locale().getLanguage().equals("en") ? "early morning" : "清晨";
+                case "Morning": return I18n.locale().getLanguage().equals("en") ? "morning" : "上午";
+                case "Noon": return I18n.locale().getLanguage().equals("en") ? "noon" : "中午";
+                case "Afternoon": return I18n.locale().getLanguage().equals("en") ? "afternoon" : "下午";
+                case "Evening": return I18n.locale().getLanguage().equals("en") ? "evening" : "傍晚";
+                case "Night": return I18n.locale().getLanguage().equals("en") ? "night" : "晚上";
+                case "LateNight": return I18n.locale().getLanguage().equals("en") ? "late night" : "深夜";
             }
         }
         return null;

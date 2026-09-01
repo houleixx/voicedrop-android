@@ -1,5 +1,5 @@
 <resources>
-    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -15,7 +15,7 @@
     </style>
 
     <!-- WeChat returns through an empty callback Activity; keep the previous page visible beneath its dialogs. -->
-    <style name="WechatEntryTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="WechatEntryTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowIsTranslucent">true</item>

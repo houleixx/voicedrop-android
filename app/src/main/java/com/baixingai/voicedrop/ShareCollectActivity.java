@@ -57,7 +57,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /** Receives Android system shares and mirrors the iOS/HarmonyOS share flow. */
-public final class ShareCollectActivity extends Activity {
+public final class ShareCollectActivity extends VoiceDropActivity {
     private enum IncomingState { SAVING, DONE, FAILED }
 
     private static final class IncomingItem {
@@ -767,7 +767,7 @@ public final class ShareCollectActivity extends Activity {
     private Button button(String value, int textColor, int backgroundColor, int sp, int style) {
         Button button = new Button(this);
         button.setAllCaps(false);
-        button.setText(value);
+        button.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         button.setTextColor(textColor);
         button.setTextSize(sp);
         button.setTypeface(Typeface.DEFAULT, style);
@@ -777,7 +777,7 @@ public final class ShareCollectActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value == null ? "" : value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value == null ? "" : value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

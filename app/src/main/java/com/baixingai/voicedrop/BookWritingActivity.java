@@ -42,7 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Native Android counterpart of iOS BookWritingSheet. */
-public final class BookWritingActivity extends Activity {
+public final class BookWritingActivity extends VoiceDropActivity {
     static final String API = "https://lab.jianshuo.dev/api/book";
     static final int SHELF_ICON_RES_ID = R.drawable.ic_about_books_vertical;
     static final int POWER_ICON_RES_ID = R.drawable.ic_settings_bolt;
@@ -526,7 +526,7 @@ public final class BookWritingActivity extends Activity {
     private LinearLayout vertical() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private TextView text(String value, int size, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(size);
         view.setTextColor(color);
         view.setIncludeFontPadding(false);

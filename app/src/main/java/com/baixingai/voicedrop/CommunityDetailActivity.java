@@ -121,7 +121,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.time.ZonedDateTime;
 
-public final class CommunityDetailActivity extends Activity {
+public final class CommunityDetailActivity extends VoiceDropActivity {
     /** Engagement requests must outlive the detail Activity that started them. */
     protected static final ExecutorService COMMUNITY_LIKE_IO = Executors.newSingleThreadExecutor();
     public static final String EXTRA_COMMUNITY_DATA_CHANGED = "communityDataChanged";
@@ -749,7 +749,7 @@ public final class CommunityDetailActivity extends Activity {
     // MARK: - Community Terms Gate
 
     protected void showCommunityTermsGate(Runnable onAgree) {
-        TextView body = text(CommunityTerms.BODY, 15, Theme.INK, Typeface.NORMAL);
+        TextView body = text(CommunityTerms.body(this), 15, Theme.INK, Typeface.NORMAL);
         body.setLineSpacing(dp(6), 1.0f);
         body.setPadding(dp(22), dp(12), dp(22), dp(18));
         IosDialog.show(this, "社区公约", body, 360, "同意并发布", () -> {
@@ -765,7 +765,7 @@ public final class CommunityDetailActivity extends Activity {
     }
     protected TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);
@@ -776,6 +776,9 @@ public final class CommunityDetailActivity extends Activity {
     protected String formatArticleTitle(Recording rec) {
         RecordingName.Parsed parsed = RecordingName.parse(rec.stem());
         if (parsed == null) return rec.rowTitle();
+        if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")) {
+            return englishMonthDay(parsed) + parsedPeriod(rec);
+        }
         String month = (parsed.month != null ? parsed.month : 0) + "月";
         String day = (parsed.day != null ? parsed.day : 0) + "日";
         String period = parsedPeriod(rec);
@@ -784,23 +787,37 @@ public final class CommunityDetailActivity extends Activity {
     protected String formatArticleSubtitle(Recording rec) {
         RecordingName.Parsed parsed = RecordingName.parse(rec.stem());
         if (parsed == null) return "";
+        if (com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en")) {
+            return englishMonthDay(parsed)
+                    + (parsed.hhmm == null || parsed.hhmm.isEmpty() ? "" : " " + parsed.hhmm);
+        }
         String month = (parsed.month != null ? parsed.month : 0) + "月";
         String day = (parsed.day != null ? parsed.day : 0) + "日";
         String time = parsed.hhmm != null ? parsed.hhmm : "";
         return month + day + (time.isEmpty() ? "" : " " + time);
+    }
+    protected String englishMonthDay(RecordingName.Parsed parsed) {
+        if (parsed == null || parsed.month == null || parsed.day == null) return "";
+        try {
+            String month = java.time.Month.of(parsed.month).getDisplayName(
+                    java.time.format.TextStyle.SHORT, java.util.Locale.US);
+            return month + " " + parsed.day;
+        } catch (Exception ignored) {
+            return parsed.month + "/" + parsed.day;
+        }
     }
     protected String parsedPeriod(Recording rec) {
         // Extract period from the filename (e.g. "Morning", "Afternoon")
         String[] p = rec.stem().split("-");
         for (String part : p) {
             switch (part) {
-                case "EarlyMorning": return "凌晨";
-                case "Morning": return "上午";
-                case "Noon": return "中午";
-                case "Afternoon": return "下午";
-                case "Evening": return "晚上";
-                case "Night": return "夜间";
-                case "LateNight": return "深夜";
+                case "EarlyMorning": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Early morning" : "凌晨";
+                case "Morning": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Morning" : "上午";
+                case "Noon": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Noon" : "中午";
+                case "Afternoon": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Afternoon" : "下午";
+                case "Evening": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Evening" : "晚上";
+                case "Night": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Night" : "夜间";
+                case "LateNight": return com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en") ? " Late night" : "深夜";
             }
         }
         return "";
@@ -1378,7 +1395,7 @@ public final class CommunityDetailActivity extends Activity {
                             importButton.setBackground(round(Theme.SECONDARY, 12));
                             importIcon.setImageResource(R.drawable.ic_check_flat);
                             importIcon.setColorFilter(Color.WHITE);
-                            importLabel.setText("已收下");
+                            importLabel.setText(com.baixingai.voicedrop.ui.I18n.text(this, "已收下"));
                             toast("已加入你的提示词");
                         } else {
                             toast(error);
@@ -1723,9 +1740,14 @@ public final class CommunityDetailActivity extends Activity {
     protected String formatCommunityDate(double ms) {
         try {
             java.util.Date date = new java.util.Date((long) ms);
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy年M月d日", java.util.Locale.getDefault());
+            boolean english = com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en");
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                    english ? "MMM d, yyyy" : "yyyy年M月d日",
+                    english ? java.util.Locale.US : java.util.Locale.getDefault());
             java.util.Date now = new java.util.Date();
-            java.text.SimpleDateFormat yearSdf = new java.text.SimpleDateFormat("M月d日", java.util.Locale.getDefault());
+            java.text.SimpleDateFormat yearSdf = new java.text.SimpleDateFormat(
+                    english ? "MMM d" : "M月d日",
+                    english ? java.util.Locale.US : java.util.Locale.getDefault());
             if (date.getYear() == now.getYear()) {
                 return yearSdf.format(date);
             }

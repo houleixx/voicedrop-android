@@ -23,7 +23,7 @@ import com.baixingai.voicedrop.ui.Theme;
 
 import java.util.concurrent.Executors;
 
-public final class FeedbackActivity extends Activity {
+public final class FeedbackActivity extends VoiceDropActivity {
     private EditText draft;
     private TextView send;
     private TextView status;
@@ -85,7 +85,7 @@ public final class FeedbackActivity extends Activity {
         status.setPadding(dp(2), dp(12), dp(2), dp(14));
         content.addView(status);
         send = text("发送反馈", 16, 0xffffffff, Typeface.BOLD);
-        send.setText("发送");
+        send.setText(com.baixingai.voicedrop.ui.I18n.text(this, "发送"));
         send.setGravity(Gravity.CENTER);
         send.setClickable(true);
         send.setFocusable(true);
@@ -99,7 +99,7 @@ public final class FeedbackActivity extends Activity {
         String value = draft.getText().toString().trim();
         if (value.isEmpty()) { showStatus("请先写下反馈内容", Theme.RED); return; }
         if (value.length() > 2000) { showStatus("反馈内容不能超过 2000 字", Theme.RED); return; }
-        send.setEnabled(false); send.setText("发送中…"); status.setText("");
+        send.setEnabled(false); send.setText(com.baixingai.voicedrop.ui.I18n.text(this, "发送中…")); status.setText("");
         String feedback = value;
         Executors.newSingleThreadExecutor().execute(() -> {
             boolean ok = false;
@@ -118,7 +118,7 @@ public final class FeedbackActivity extends Activity {
                     return;
                 }
                 send.setEnabled(true);
-                send.setText("重试");
+                send.setText(com.baixingai.voicedrop.ui.I18n.text(this, "重试"));
                 showStatus("发送失败，请检查网络后重试", Theme.RED);
             });
         });
@@ -148,7 +148,7 @@ public final class FeedbackActivity extends Activity {
     }
 
     private TextView text(String value, int size, int color, int style) {
-        TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(color);
+        TextView view = new TextView(this); view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value)); view.setTextSize(size); view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style); return view;
     }
     private GradientDrawable round(int color, int radius, int stroke) {

@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class PromptEditActivity extends Activity {
+public final class PromptEditActivity extends VoiceDropActivity {
     private static final int DIVIDER = 0xffefe7d9;
     private static final int TILE_NEUTRAL = 0xfff2eee7;
     private static final int INPUT_STROKE = 0xffe5ded2;
@@ -181,7 +181,7 @@ public final class PromptEditActivity extends Activity {
 
     private void updateSaveState() {
         if (saving) {
-            saveButton.setText("保存中…");
+            saveButton.setText(com.baixingai.voicedrop.ui.I18n.text(this, "保存中…"));
             saveButton.setTextColor(Theme.SECONDARY);
             saveButton.setBackground(rounded(0xffe5ded2, 12));
             return;
@@ -233,7 +233,7 @@ public final class PromptEditActivity extends Activity {
 
     private EditText cardInput(String value, boolean multiline) {
         EditText v = new EditText(this);
-        v.setText(value);
+        v.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         v.setTextSize(16);
         v.setTextColor(Theme.INK);
         v.setHintTextColor(0xffc9c6c1);
@@ -521,7 +521,7 @@ public final class PromptEditActivity extends Activity {
     private LinearLayout vertical() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.VERTICAL); return v; }
     private LinearLayout horizontal() { LinearLayout v = new LinearLayout(this); v.setOrientation(LinearLayout.HORIZONTAL); return v; }
     private TextView text(String value, int sp, int style, int color) {
-        TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
+        TextView v = new TextView(this); v.setText(com.baixingai.voicedrop.ui.I18n.text(this, value)); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
     }
     private TextView squareButton(String value, boolean accent) {
         TextView v = text(value, 22, Typeface.NORMAL, accent ? Color.WHITE : Theme.INK);

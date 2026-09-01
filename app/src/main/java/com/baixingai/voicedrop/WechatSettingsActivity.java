@@ -25,7 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Connects a VoiceDrop data space to a WeChat Official Account. */
-public class WechatSettingsActivity extends Activity {
+public class WechatSettingsActivity extends VoiceDropActivity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private LinearLayout connectionContent;
     private FrameLayout iconSlot;
@@ -146,7 +146,7 @@ public class WechatSettingsActivity extends Activity {
     @Override protected void onResume() { super.onResume(); refreshStatus(); }
 
     private void refreshStatus() {
-        status.setText("正在检查绑定状态…");
+        status.setText(com.baixingai.voicedrop.ui.I18n.text(this, "正在检查绑定状态…"));
         io.execute(() -> {
             try {
                 HttpClient.Response response = new HttpClient().get(
@@ -171,9 +171,9 @@ public class WechatSettingsActivity extends Activity {
             stateIcon.setBackground(null);
             stateIcon.setVisibility(TextView.VISIBLE);
             successIcon.setVisibility(ImageView.GONE);
-            status.setText("未连接微信公众号");
-            detail.setText("连接后，VoiceDrop 可以将文章保存到你的公众号草稿箱。不会自动群发。");
-            primary.setText("连接微信公众号");
+            status.setText(com.baixingai.voicedrop.ui.I18n.text(this, "未连接微信公众号"));
+            detail.setText(com.baixingai.voicedrop.ui.I18n.text(this, "连接后，VoiceDrop 可以将文章保存到你的公众号草稿箱。不会自动群发。"));
+            primary.setText(com.baixingai.voicedrop.ui.I18n.text(this, "连接微信公众号"));
             primary.setTextSize(18);
             primary.setTextColor(0xffffffff);
             primary.setBackground(round(0xffdf5d49, 10));
@@ -184,11 +184,11 @@ public class WechatSettingsActivity extends Activity {
         String name = body == null ? "微信公众号" : body.optString("account_name", "微信公众号");
         stateIcon.setVisibility(TextView.GONE);
         successIcon.setVisibility(ImageView.VISIBLE);
-        status.setText("已连接微信公众号");
-        detail.setText("授权成功，现在可以将文章保存或更新到公众号草稿箱。 ");
+        status.setText(com.baixingai.voicedrop.ui.I18n.text(this, "已连接微信公众号"));
+        detail.setText(com.baixingai.voicedrop.ui.I18n.text(this, "授权成功，现在可以将文章保存或更新到公众号草稿箱。 "));
         accountName.setText(name);
         accountCard.setVisibility(LinearLayout.VISIBLE);
-        primary.setText("取消连接");
+        primary.setText(com.baixingai.voicedrop.ui.I18n.text(this, "取消连接"));
         primary.setTextSize(16);
         primary.setTextColor(Theme.SECONDARY);
         primary.setBackground(strokedRound(Theme.BG, 10, 0xffded6ca));
@@ -202,7 +202,7 @@ public class WechatSettingsActivity extends Activity {
 
     private void disconnect() {
         primary.setEnabled(false);
-        primary.setText("正在取消连接…");
+        primary.setText(com.baixingai.voicedrop.ui.I18n.text(this, "正在取消连接…"));
         io.execute(() -> {
             try {
                 HttpClient.Response response = new HttpClient().postJson(
@@ -230,7 +230,7 @@ public class WechatSettingsActivity extends Activity {
     }
 
     private TextView text(String value, int sp, int color, int style) {
-        TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
+        TextView v = new TextView(this); v.setText(com.baixingai.voicedrop.ui.I18n.text(this, value)); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v;
     }
     private GradientDrawable round(int color, int radius) { GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d; }
     private GradientDrawable strokedRound(int color, int radius, int stroke) { GradientDrawable d = round(color, radius); d.setStroke(dp(1), stroke); return d; }

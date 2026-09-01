@@ -281,7 +281,7 @@ public final class AppUpdateManager {
         box.setPadding(dp(activity, 20), dp(activity, 12), dp(activity, 20), dp(activity, 24));
         box.setLayoutParams(new ScrollView.LayoutParams(-1, -1));
 
-        text.setText("正在连接下载…");
+        text.setText(com.baixingai.voicedrop.ui.I18n.text(activity, "正在连接下载…"));
         text.setTextSize(15);
         text.setTextColor(Theme.INK);
         text.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
@@ -311,11 +311,11 @@ public final class AppUpdateManager {
             int percent = (int) Math.min(100L, downloaded * 100L / total);
             bar.setIndeterminate(false);
             bar.setProgress(percent);
-            text.setText("已下载 " + formatBytes(downloaded) + " / " + formatBytes(total)
+            text.setText(com.baixingai.voicedrop.ui.I18n.text(text.getContext(), "已下载 ") + formatBytes(downloaded) + " / " + formatBytes(total)
                     + "（" + percent + "%）");
         } else {
             bar.setIndeterminate(true);
-            text.setText("已下载 " + formatBytes(downloaded));
+            text.setText(com.baixingai.voicedrop.ui.I18n.text(text.getContext(), "已下载 ") + formatBytes(downloaded));
         }
     }
 

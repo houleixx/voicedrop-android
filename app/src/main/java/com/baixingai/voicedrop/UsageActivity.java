@@ -29,7 +29,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class UsageActivity extends Activity {
+public final class UsageActivity extends VoiceDropActivity {
     private UsageStore usageStore;
     private LinearLayout content;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -354,7 +354,7 @@ public final class UsageActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

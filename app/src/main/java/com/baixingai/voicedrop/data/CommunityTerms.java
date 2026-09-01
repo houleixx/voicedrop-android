@@ -3,6 +3,8 @@ package com.baixingai.voicedrop.data;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.baixingai.voicedrop.ui.I18n;
+
 /**
  * Community EULA / 社区公约. Matches iOS {@code CommunityTerms}: agreed flag
  * stored in SharedPreferences, shown before a user's first community post.
@@ -19,6 +21,17 @@ public final class CommunityTerms {
             + "• 你可以随时举报不当内容、屏蔽不想看到的用户。\n\n"
             + "继续即表示你已阅读并同意本社区公约与最终用户许可协议（EULA）。如需联系或投诉内容，请发邮件至 "
             + SUPPORT_EMAIL + "。";
+
+    public static String body(Context context) {
+        if (!I18n.locale().getLanguage().equals("en")) return BODY;
+        return "By posting to VD Community, you agree to the following Community Guidelines:\n\n"
+                + "• You are responsible for content you post and have the right to post it.\n"
+                + "• Objectionable content is strictly prohibited, including pornography or explicit sexual content, graphic violence, hate or discrimination, harassment or bullying, illegal content, and self-harm. VoiceDrop has zero tolerance for abusive content and behavior.\n"
+                + "• Reported violations are removed immediately and handled within 24 hours. Repeated or serious violations may result in account removal.\n"
+                + "• You can report inappropriate content or block people you do not want to see at any time.\n\n"
+                + "By continuing, you confirm that you have read and agree to these Community Guidelines and the End User License Agreement (EULA). For support or content complaints, email "
+                + SUPPORT_EMAIL + ".";
+    }
 
     private final SharedPreferences prefs;
 

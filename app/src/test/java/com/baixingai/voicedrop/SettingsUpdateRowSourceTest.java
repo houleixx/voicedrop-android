@@ -17,7 +17,8 @@ public class SettingsUpdateRowSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
         String settings = methodBody(source, "private void rebuildPrimarySettings");
 
-        assertTrue(settings.contains("addCardRow(card, R.drawable.ic_settings_update, \"检查更新\", \"版本 \" + appVersionName()"));
+        assertTrue(settings.contains("addCardRow(card, R.drawable.ic_settings_update, \"检查更新\","));
+        assertTrue(settings.contains("I18n.text(this, \"版本 \") + appVersionName()"));
         assertFalse(settings.contains("addCardRowWithValue(card, R.drawable.ic_settings_update"));
         assertTrue(settings.contains("addCardRow(card, R.drawable.ic_settings_info, \"关于\", \"隐私 · 公约 · 屏蔽 · 联系\""));
         assertFalse(settings.contains("隐私 · 公约 · 屏蔽 · 联系 · 版本"));
@@ -57,7 +58,8 @@ public class SettingsUpdateRowSourceTest {
         assertTrue(primary.contains("usageRow.addView(usageBalanceText"));
         assertTrue(load.contains("UsageStore.Balance balance = usageStore.balance()"));
         assertTrue(load.contains("String.valueOf((int) Math.round(balance.suanli))"));
-        assertTrue(load.contains("\"约可成文 \" + UsageStore.articleCapacity(balance.suanli) + \" 篇\""));
+        assertTrue(load.contains("I18n.text(this, \"约可成文 \")"));
+        assertTrue(load.contains("I18n.text(this, \" 篇\")"));
     }
 
     @Test

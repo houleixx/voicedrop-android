@@ -44,11 +44,13 @@ public final class BookShelfIndexTest {
 
     @Test public void parsesOwnerOnlyHiddenMarker() {
         java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
-                "{\"slug\":\"private-draft\",\"hidden\":true}," +
+                "{\"slug\":\"private-draft\",\"hidden\":true,\"mine\":true}," +
                 "{\"slug\":\"public-book\"}]}");
 
         assertEquals(2, books.size());
         assertTrue(books.get(0).hidden);
+        assertTrue(books.get(0).mine);
         assertFalse(books.get(1).hidden);
+        assertFalse(books.get(1).mine);
     }
 }

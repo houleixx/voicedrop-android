@@ -48,7 +48,7 @@ public class RecordingStopResponsivenessSourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String saving = methodBody(source, "protected void showRecordingSavingState()");
 
-        assertTrue(saving.contains("recordingStopLabel.setText(\"正在保存…\")"));
+        assertTrue(saving.contains("recordingStopLabel.setText(com.baixingai.voicedrop.ui.I18n.text(this, \"正在保存…\"))"));
         assertTrue(saving.contains("recordingStopColumn.setEnabled(false)"));
         assertTrue(saving.contains("recordingStopButton.setEnabled(false)"));
         assertTrue(saving.contains("recordingStopLabel.setEnabled(false)"));

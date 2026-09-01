@@ -42,7 +42,7 @@ public final class SimpleToast {
         float density = activity.getResources().getDisplayMetrics().density;
 
         TextView tv = new TextView(activity);
-        tv.setText(message);
+        tv.setText(I18n.text(activity, message));
         tv.setTextColor(Color.WHITE);
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         GradientDrawable bg = new GradientDrawable();

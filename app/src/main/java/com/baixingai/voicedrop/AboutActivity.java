@@ -22,7 +22,7 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
-public final class AboutActivity extends Activity {
+public final class AboutActivity extends VoiceDropActivity {
     private static final int REQUEST_FEEDBACK = 1001;
     static final int[] ABOUT_ROW_ICON_RES_IDS = {
             R.drawable.ic_about_privacy,
@@ -85,7 +85,7 @@ public final class AboutActivity extends Activity {
         addSettingRow(content, R.drawable.ic_settings_info, "使用手册", "怎么录、怎么改、怎么发", () -> open(HelpManualActivity.class));
         addSettingRow(content, R.drawable.ic_about_support, "意见反馈", "提改进意见，直达开发者", this::openFeedback);
         addSettingRow(content, R.drawable.ic_about_privacy, "隐私政策", null, this::openPrivacyPolicy);
-        addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.BODY));
+        addSettingRow(content, R.drawable.ic_about_terms, "社区公约", null, () -> IosDialog.show(this, "社区公约", CommunityTerms.body(this)));
         addSettingRow(content, R.drawable.ic_about_blocked, "已屏蔽用户", blockStore.blockedList().size() + " 人", this::openBlockedUsers);
         addSettingRow(content, R.drawable.ic_about_support, "联系我们 / 内容投诉", CommunityTerms.SUPPORT_EMAIL, this::contactSupport);
 
@@ -200,7 +200,7 @@ public final class AboutActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

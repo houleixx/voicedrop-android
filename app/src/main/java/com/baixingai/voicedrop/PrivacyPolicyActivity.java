@@ -28,7 +28,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 
-public final class PrivacyPolicyActivity extends Activity {
+public final class PrivacyPolicyActivity extends VoiceDropActivity {
     private WebView webView;
     private FrameLayout webContainer;
     private ProgressBar progress;
@@ -92,7 +92,7 @@ public final class PrivacyPolicyActivity extends Activity {
         top.addView(backTouch, new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.LEFT | Gravity.CENTER_VERTICAL));
 
         TextView title = new TextView(this);
-        title.setText("隐私政策");
+        title.setText(com.baixingai.voicedrop.ui.I18n.text(this, "隐私政策"));
         title.setTextSize(20);
         title.setTextColor(Theme.INK);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -149,14 +149,14 @@ public final class PrivacyPolicyActivity extends Activity {
         error.setPadding(dp(24), dp(24), dp(24), dp(24));
 
         TextView message = new TextView(this);
-        message.setText("隐私政策加载失败");
+        message.setText(com.baixingai.voicedrop.ui.I18n.text(this, "隐私政策加载失败"));
         message.setTextSize(16);
         message.setTextColor(Theme.SECONDARY);
         message.setGravity(Gravity.CENTER);
         error.addView(message);
 
         TextView retry = new TextView(this);
-        retry.setText("重新加载");
+        retry.setText(com.baixingai.voicedrop.ui.I18n.text(this, "重新加载"));
         retry.setTextSize(16);
         retry.setTextColor(Theme.RED);
         retry.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

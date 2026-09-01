@@ -33,6 +33,11 @@ public final class BookShelfCache {
         return preferences.getString(key, "");
     }
 
+    /** Discard a stale shelf after a reader changes a book's server-side visibility. */
+    public void clear() {
+        preferences.edit().remove(key).apply();
+    }
+
     public void store(String raw) {
         if (raw == null || raw.isEmpty()) return;
         preferences.edit().putString(key, raw).apply();

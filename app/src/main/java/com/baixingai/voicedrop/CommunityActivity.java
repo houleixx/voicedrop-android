@@ -87,7 +87,7 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public final class CommunityActivity extends Activity {
+public final class CommunityActivity extends VoiceDropActivity {
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
     private static final int REQUEST_COMMUNITY_DETAIL = 31;
@@ -680,7 +680,7 @@ public final class CommunityActivity extends Activity {
     // MARK: - Community Terms Gate
 
     protected void showCommunityTermsGate(Runnable onAgree) {
-        TextView body = text(CommunityTerms.BODY, 15, Theme.INK, Typeface.NORMAL);
+        TextView body = text(CommunityTerms.body(this), 15, Theme.INK, Typeface.NORMAL);
         body.setLineSpacing(dp(6), 1.0f);
         body.setPadding(dp(22), dp(12), dp(22), dp(18));
         IosDialog.show(this, "社区公约", body, 360, "同意并发布", () -> {
@@ -696,7 +696,7 @@ public final class CommunityActivity extends Activity {
     }
     protected TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

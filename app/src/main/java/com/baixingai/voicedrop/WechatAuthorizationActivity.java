@@ -50,7 +50,7 @@ import java.util.concurrent.Executors;
 import org.json.JSONObject;
 
 /** WebView wrapper for the third-party-platform QR authorization page. */
-public final class WechatAuthorizationActivity extends Activity {
+public final class WechatAuthorizationActivity extends VoiceDropActivity {
     private static final int WRITE_IMAGE = 41;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private WebView webView;
@@ -116,8 +116,12 @@ public final class WechatAuthorizationActivity extends Activity {
     }
 
     private void requestAuthorizationPage(boolean reauthorization) {
-        title.setText(reauthorization ? "重新授权公众号" : "授权公众号");
-        hint.setText((reauthorization ? "重新授权会更新当前公众号的授权信息。\n\n" : "")
+        title.setText(com.baixingai.voicedrop.ui.I18n.text(this, reauthorization ? "重新授权公众号" : "授权公众号"));
+        boolean english = com.baixingai.voicedrop.ui.I18n.locale().getLanguage().equals("en");
+        hint.setText(english
+                ? (reauthorization ? "Reauthorization updates the current Official Account authorization.\n\n" : "")
+                + "On the WeChat authorization QR page:\n1. Tap Screenshot QR code to save the page.\n2. Open WeChat Scanner, tap Album, and select the saved QR code.\n\nKeep this page open during authorization. Return to VoiceDrop after you see “Authorization successful.”"
+                : (reauthorization ? "重新授权会更新当前公众号的授权信息。\n\n" : "")
                 + "进入微信授权二维码页后：\n1. 点右上角「截图二维码」，保存当前页面\n2. 打开微信「扫一扫」后，点击页面上的「相册」，选择刚才保存的二维码\n\n授权过程中请勿关闭此页面；看到“授权成功”后，再返回 VoiceDrop。");
         io.execute(() -> {
             try {

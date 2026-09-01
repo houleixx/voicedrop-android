@@ -19,7 +19,12 @@ public final class BookReaderNavigationContractTest {
         assertTrue(shelf.contains("BookReaderActivity.open((Activity) getContext(), book)"));
         assertTrue(reader.contains("AliIconFont.MORE, Theme.SECONDARY, \"更多\""));
         assertTrue(reader.contains("moreAction.setOnClickListener(this::showBookMenu)"));
+        assertTrue(reader.contains("if (isMine)"));
         assertTrue(reader.contains("bookMenuRow(\"修改这本书\", RemixIconGlyph.EDIT"));
+        assertTrue(reader.contains("isHidden ? \"取消隐藏\" : \"隐藏本书\""));
+        assertTrue(reader.contains("/books/\" + slug + \"/hidden"));
+        assertTrue(reader.contains("(\"{\\\"hidden\\\":\" + hidden + \"}\")"));
+        assertTrue(reader.contains("new BookShelfCache(this, auth.libraryCacheIdentity()).clear()"));
         assertTrue(reader.contains("bookMenuRow(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
         String bookMenu = reader.substring(reader.indexOf("private void showBookMenu(View anchor)"),
                 reader.indexOf("private void showBookShareSheet()"));

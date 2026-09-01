@@ -59,7 +59,7 @@ public final class WechatShareLoadingDialog extends Dialog {
         card.addView(spinner, new LinearLayout.LayoutParams(dp(context, 32), dp(context, 32)));
 
         TextView messageView = new TextView(context);
-        messageView.setText(message);
+        messageView.setText(I18n.text(context, message));
         messageView.setTextColor(Color.WHITE);
         messageView.setTextSize(14);
         messageView.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);

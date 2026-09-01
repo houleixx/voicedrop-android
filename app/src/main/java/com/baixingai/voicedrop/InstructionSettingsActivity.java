@@ -53,7 +53,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class InstructionSettingsActivity extends Activity {
+public final class InstructionSettingsActivity extends VoiceDropActivity {
     private static final int DIVIDER = 0xfff2ede5;
     private static final int TILE_NEUTRAL = 0xfff2eee7;
     private static final int IMPORT_BORDER = 0xffd8b08a;
@@ -550,10 +550,10 @@ public final class InstructionSettingsActivity extends Activity {
 
         importButton.setOnClickListener(v -> {
             importButton.setEnabled(false);
-            importButton.setText("导入中…");
+            importButton.setText(com.baixingai.voicedrop.ui.I18n.text(this, "导入中…"));
             importMarketItem(item, dismissSheet, () -> {
                 importButton.setEnabled(true);
-                importButton.setText("加入我的提示词");
+                importButton.setText(com.baixingai.voicedrop.ui.I18n.text(this, "加入我的提示词"));
             });
         });
         io.execute(() -> {
@@ -804,7 +804,7 @@ public final class InstructionSettingsActivity extends Activity {
         closeOpenSwipeRow();
         sorting = true;
         drag.begin(store.items());
-        intro.setText("长按提示词并拖动排序；拖到分组行可收进该组。");
+        intro.setText(com.baixingai.voicedrop.ui.I18n.text(this, "长按提示词并拖动排序；拖到分组行可收进该组。"));
         showSortSaveAction(false);
         if (rerender) render(drag.draft());
     }
@@ -930,7 +930,7 @@ public final class InstructionSettingsActivity extends Activity {
                     setImportButton(importButton, false);
                     return;
                 }
-                preview.setText("正在读取提示词…");
+                preview.setText(com.baixingai.voicedrop.ui.I18n.text(InstructionSettingsActivity.this, "正在读取提示词…"));
                 preview.setVisibility(View.VISIBLE);
                 setImportButton(importButton, false);
                 loadImportPreview(merged, previous, preview, importButton);
@@ -966,8 +966,8 @@ public final class InstructionSettingsActivity extends Activity {
             PromptStore.Preview result = store.preview(code);
             runOnUiThread(() -> {
                 if (!code.equals(previous[0])) return;
-                if (result == null) { preview.setText("分享码无效或已停止分享"); return; }
-                preview.setText("将导入「" + result.label + "」");
+                if (result == null) { preview.setText(com.baixingai.voicedrop.ui.I18n.text(this, "分享码无效或已停止分享")); return; }
+                preview.setText(com.baixingai.voicedrop.ui.I18n.text(this, "将导入「") + result.label + "」");
                 setImportButton(importButton, true);
             });
         });
@@ -1149,7 +1149,7 @@ public final class InstructionSettingsActivity extends Activity {
     private LinearLayout vertical() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private LinearLayout horizontal() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.HORIZONTAL); return view; }
     private View divider(int left) { View view = new View(this); view.setBackgroundColor(DIVIDER); LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(1)); p.leftMargin = dp(left); view.setLayoutParams(p); return view; }
-    private TextView text(String value, int sp, int style, int color) { TextView v = new TextView(this); v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v; }
+    private TextView text(String value, int sp, int style, int color) { TextView v = new TextView(this); v.setText(com.baixingai.voicedrop.ui.I18n.text(this, value)); v.setTextSize(sp); v.setTextColor(color); v.setTypeface(Typeface.DEFAULT, style); return v; }
     private TextView squareButton(String value, boolean accent) { TextView v = text(value, 22, Typeface.NORMAL, accent ? Color.WHITE : Theme.INK); v.setGravity(Gravity.CENTER); v.setIncludeFontPadding(false); v.setBackground(rounded(accent ? Theme.ACCENT : Color.WHITE, 12)); v.setElevation(dp(2)); return v; }
     private void addIconWithSpacing(LinearLayout parent, ImageView icon, int size) { LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(size), dp(size)); iconLp.rightMargin = dp(12); parent.addView(icon, iconLp); }
     private ImageView iconTile(int iconResId, boolean accent) { ImageView v = new ImageView(this); v.setImageResource(iconResId); v.setColorFilter(accent ? Theme.ACCENT : Theme.SECONDARY); v.setScaleType(ImageView.ScaleType.CENTER); v.setPadding(dp(8), dp(8), dp(8), dp(8)); v.setBackground(rounded(accent ? Theme.ACCENT_SOFT : TILE_NEUTRAL, 10)); return v; }

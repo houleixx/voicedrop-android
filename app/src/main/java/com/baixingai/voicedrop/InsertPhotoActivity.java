@@ -53,7 +53,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class InsertPhotoActivity extends Activity {
+public final class InsertPhotoActivity extends VoiceDropActivity {
     public static final String EXTRA_PHOTO_PATHS = "photoPaths";
     public static final String EXTRA_CAPTURE_TIMES = "captureTimes";
     private static final int REQ_CAMERA_PERMISSION = 31;
@@ -613,7 +613,7 @@ public final class InsertPhotoActivity extends Activity {
 
     private TextView topText(String value, int sp, int color, int style) {
         TextView text = new TextView(this);
-        text.setText(value);
+        text.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         text.setTextSize(sp);
         text.setTextColor(color);
         text.setTypeface(Typeface.DEFAULT, style);

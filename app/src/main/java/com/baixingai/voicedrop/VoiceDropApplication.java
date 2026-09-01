@@ -9,6 +9,7 @@ import com.baixingai.voicedrop.data.PrivacyConsent;
 import com.baixingai.voicedrop.data.ReferralManager;
 import com.baixingai.voicedrop.net.ApiRoute;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
+import com.baixingai.voicedrop.ui.I18n;
 import com.kongzue.dialogx.DialogX;
 import com.kongzue.dialogx.style.IOSStyle;
 import com.umeng.analytics.MobclickAgent;
@@ -21,6 +22,7 @@ public class VoiceDropApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        I18n.syncLanguage(this);
         DialogX.init(this);
         DialogX.globalStyle = IOSStyle.style();
         DialogX.globalTheme = DialogX.THEME.LIGHT;

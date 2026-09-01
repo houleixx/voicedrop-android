@@ -36,7 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Lists every writing-style version and edits one version in a bottom sheet. */
-public final class WritingStyleActivity extends Activity {
+public final class WritingStyleActivity extends VoiceDropActivity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private SettingsStore store;
     private WritingStyleHistoryCache cache;
@@ -288,7 +288,7 @@ public final class WritingStyleActivity extends Activity {
                 return;
             }
             action.setEnabled(false);
-            action.setText("保存中…");
+            action.setText(com.baixingai.voicedrop.ui.I18n.text(this, "保存中…"));
             io.execute(() -> {
                 try {
                     if (next == WritingStylePresentation.Action.SET_DEFAULT) {
@@ -389,7 +389,7 @@ public final class WritingStyleActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

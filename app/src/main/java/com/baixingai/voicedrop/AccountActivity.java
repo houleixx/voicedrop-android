@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class AccountActivity extends Activity {
+public final class AccountActivity extends VoiceDropActivity {
     private AuthStore auth;
     private LibraryStore library;
     private LinearLayout content;
@@ -477,7 +477,7 @@ public final class AccountActivity extends Activity {
 
     private TextView text(String value, int sp, int color, int style) {
         TextView view = new TextView(this);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(this, value));
         view.setTextSize(sp);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

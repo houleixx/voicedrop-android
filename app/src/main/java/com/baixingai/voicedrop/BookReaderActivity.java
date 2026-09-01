@@ -24,7 +24,10 @@ import android.widget.PopupWindow;
 import android.widget.TextView;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.core.BookShareTarget;
+import com.baixingai.voicedrop.data.AuthStore;
+import com.baixingai.voicedrop.data.BookShelfCache;
 import com.baixingai.voicedrop.data.WechatMiniProgramShare;
+import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.LoadingStateView;
@@ -38,13 +41,14 @@ import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** In-app web reader for a published VoiceDrop book. */
-public final class BookReaderActivity extends Activity {
+public final class BookReaderActivity extends VoiceDropActivity {
     private static final String MATCH_NATIVE_BACKGROUND_SCRIPT =
             "(function(){var id='voicedrop-native-background';"
                     + "var style=document.getElementById(id);"
@@ -55,8 +59,11 @@ public final class BookReaderActivity extends Activity {
     private LoadingStateView loadingState;
     private BookReviseBottomSheet reviseSheet;
     private final ExecutorService shareIo = Executors.newSingleThreadExecutor();
+    private final ExecutorService bookIo = Executors.newSingleThreadExecutor();
     private String currentPageUrl;
     private String currentPageTitle;
+    private boolean isMine;
+    private boolean isHidden;
 
     /** Opens with the same leftward page transition used by the rest of the app. */
     public static void open(Activity source, BookShelfIndex.Book book) {
@@ -125,6 +132,7 @@ public final class BookReaderActivity extends Activity {
         String slug = getIntent().getStringExtra("slug");
         if (slug != null && slug.matches("[A-Za-z0-9_-]+")) {
             web.loadUrl(Api.publicWebBase() + "/books/" + slug + "/");
+            loadOwnership();
         }
     }
 
@@ -146,17 +154,22 @@ public final class BookReaderActivity extends Activity {
         menu.setElevation(dp(8));
         final PopupWindow[] popupRef = {null};
 
-        LinearLayout reviseRow = bookMenuRow("修改这本书", RemixIconGlyph.EDIT, Theme.ACCENT);
-        reviseRow.setOnClickListener(ignored -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            openBookRevision();
-        });
-        menu.addView(reviseRow);
-        View divider = new View(this);
-        divider.setBackgroundColor(0xffe0d8cc);
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
-        dividerParams.setMargins(dp(16), 0, dp(16), 0);
-        menu.addView(divider, dividerParams);
+        if (isMine) {
+            LinearLayout hideRow = bookMenuRow(isHidden ? "取消隐藏" : "隐藏本书",
+                    RemixIconGlyph.LOCK, Theme.ACCENT);
+            hideRow.setOnClickListener(ignored -> {
+                if (popupRef[0] != null) popupRef[0].dismiss();
+                setHidden(!isHidden);
+            });
+            menu.addView(hideRow);
+            LinearLayout reviseRow = bookMenuRow("修改这本书", RemixIconGlyph.EDIT, Theme.ACCENT);
+            reviseRow.setOnClickListener(ignored -> {
+                if (popupRef[0] != null) popupRef[0].dismiss();
+                openBookRevision();
+            });
+            menu.addView(reviseRow);
+            addMenuDivider(menu);
+        }
 
         LinearLayout shareRow = bookMenuRow("分享", RemixIconGlyph.SHARE_FORWARD, Theme.SECONDARY);
         shareRow.setOnClickListener(ignored -> {
@@ -174,6 +187,62 @@ public final class BookReaderActivity extends Activity {
                 PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth) - dp(5),
                 dp(10));
         popupRef[0] = popup;
+    }
+
+    private void addMenuDivider(LinearLayout menu) {
+        View divider = new View(this);
+        divider.setBackgroundColor(0xffe0d8cc);
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
+        dividerParams.setMargins(dp(16), 0, dp(16), 0);
+        menu.addView(divider, dividerParams);
+    }
+
+    /** The reader must use the server answer: a cached shelf can be stale after login changes. */
+    private void loadOwnership() {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
+        AuthStore auth = new AuthStore(this);
+        bookIo.execute(() -> {
+            try {
+                HttpClient.Response response = new HttpClient().get(
+                        Api.publicWebBase() + "/books/" + slug + "/hidden", auth.bearer(),
+                        new HttpClient.RequestOptions().readTimeoutMs(15_000)
+                                .header("Cache-Control", "no-cache"));
+                if (!response.ok()) return;
+                org.json.JSONObject result = new org.json.JSONObject(response.text());
+                boolean mine = result.optBoolean("mine", false);
+                boolean hidden = result.optBoolean("hidden", false);
+                runOnUiThread(() -> { isMine = mine; isHidden = hidden; });
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private void setHidden(boolean hidden) {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return;
+        AuthStore auth = new AuthStore(this);
+        bookIo.execute(() -> {
+            int code = 0;
+            try {
+                HttpClient.Response response = new HttpClient().postJson(
+                        Api.publicWebBase() + "/books/" + slug + "/hidden", auth.bearer(),
+                        ("{\"hidden\":" + hidden + "}").getBytes(StandardCharsets.UTF_8),
+                        new HttpClient.RequestOptions().readTimeoutMs(20_000));
+                code = response.code;
+            } catch (Exception ignored) { }
+            int resultCode = code;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (resultCode >= 200 && resultCode < 300) {
+                    isHidden = hidden;
+                    new BookShelfCache(this, auth.libraryCacheIdentity()).clear();
+                    SimpleToast.show(this, hidden ? "已隐藏，书架上看不到了" : "已取消隐藏");
+                } else {
+                    SimpleToast.show(this, resultCode == 403 ? "这不是你的书，改不了" : "没改成，过会儿再试");
+                    if (resultCode == 403) loadOwnership();
+                }
+            });
+        });
     }
 
     private LinearLayout bookMenuRow(String label, String glyph, int iconColor) {
@@ -376,6 +445,7 @@ public final class BookReaderActivity extends Activity {
         if (reviseSheet != null) reviseSheet.dismiss();
         if (web != null) web.destroy();
         shareIo.shutdownNow();
+        bookIo.shutdownNow();
         super.onDestroy();
     }
 }

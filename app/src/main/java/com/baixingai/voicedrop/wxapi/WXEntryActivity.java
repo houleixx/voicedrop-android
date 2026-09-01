@@ -17,11 +17,12 @@ import com.tencent.mm.opensdk.modelbase.BaseReq;
 import com.tencent.mm.opensdk.modelbase.BaseResp;
 import com.tencent.mm.opensdk.modelmsg.SendAuth;
 import com.tencent.mm.opensdk.openapi.IWXAPIEventHandler;
+import com.baixingai.voicedrop.VoiceDropActivity;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public final class WXEntryActivity extends Activity implements IWXAPIEventHandler {
+public final class WXEntryActivity extends VoiceDropActivity implements IWXAPIEventHandler {
     private static final String TAG = "WechatLogin";
     private final ExecutorService io = Executors.newSingleThreadExecutor();
 

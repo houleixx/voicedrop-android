@@ -352,7 +352,7 @@ public final class BookReviseBottomSheet {
     private void showDenied(String message) {
         running = false;
         scroll.setVisibility(View.GONE);
-        deniedMessage.setText(message);
+        deniedMessage.setText(com.baixingai.voicedrop.ui.I18n.text(activity, message));
         denied.setVisibility(View.VISIBLE);
         composer.setVisibility(View.GONE);
         input.setEnabled(false);
@@ -399,7 +399,7 @@ public final class BookReviseBottomSheet {
 
     private TextView text(String value, int size, int color, int style) {
         TextView view = new TextView(activity);
-        view.setText(value);
+        view.setText(com.baixingai.voicedrop.ui.I18n.text(activity, value));
         view.setTextSize(size);
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);

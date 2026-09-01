@@ -133,7 +133,6 @@ public final class LanguageSettingsActivity extends VoiceDropActivity {
     private void confirmLanguage() {
         if (selected == current) return;
         com.baixingai.voicedrop.ui.I18n.applyLanguage(this, selected.languageTags());
-        finishWithPageTransition();
     }
 
     private View divider() {

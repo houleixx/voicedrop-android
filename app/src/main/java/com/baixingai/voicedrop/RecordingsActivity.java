@@ -181,6 +181,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected String emptyListText;
     protected final HashMap<String, LinearLayout> recordingsListsByPage = new HashMap<>();
     protected final HashMap<String, String> emptyListTextByPage = new HashMap<>();
+    // ViewPager destroys offscreen pages. Keep enough information to release their
+    // list and panel references at the same time, instead of retaining whole pages.
+    protected final HashMap<View, String> homeRecordingPageKeys = new HashMap<>();
+    protected final HashMap<View, Integer> homePagePositions = new HashMap<>();
     protected static final String COMMAND_NUMBER_BADGE_TAG = "command-number-badge";
     private final HoldToTalkTranscript holdEditTranscript = new HoldToTalkTranscript();
     protected boolean holdEditCanceled;
@@ -427,6 +431,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
     @Override
     protected void onDestroy() {
         commandHandoffGeneration++;
+        recordingMetadataGeneration++;
         commandGestureGate.cancel();
         super.onDestroy();
         main.removeCallbacks(timerTick);
@@ -1588,7 +1593,9 @@ public final class RecordingsActivity extends VoiceDropActivity {
 
         homePager = new LockedViewPager(this);
         homePager.setId(View.generateViewId());
-        homePager.setOffscreenPageLimit(Math.max(3, homeTags.size() + 3));
+        // The previous value kept every tab alive, including all of their cover
+        // bitmaps. Retain only the selected page and its immediate neighbours.
+        homePager.setOffscreenPageLimit(1);
         homePagerAdapter = new HomePagerAdapter();
         homePager.setAdapter(homePagerAdapter);
         page.addView(homePager, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -2248,8 +2255,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
 
         @Override public Object instantiateItem(ViewGroup container, int position) {
             View page;
+            String recordingPageKey = null;
             if (position == 0) {
                 page = buildRecordingsTabPage();
+                recordingPageKey = recordingsPageKey(null);
             } else if (position == 1) {
                 page = buildCommunityTabPage();
             } else if (position == 2) {
@@ -2257,13 +2266,29 @@ public final class RecordingsActivity extends VoiceDropActivity {
             } else {
                 String tag = position - 3 < homeTags.size() ? homeTags.get(position - 3) : "";
                 page = buildTagTabPage(tag);
+                recordingPageKey = recordingsPageKey(tag);
             }
+            homePagePositions.put(page, position);
+            if (recordingPageKey != null) homeRecordingPageKeys.put(page, recordingPageKey);
             container.addView(page, new ViewGroup.LayoutParams(-1, -1));
             return page;
         }
 
         @Override public void destroyItem(ViewGroup container, int position, Object object) {
-            container.removeView((View) object);
+            View page = (View) object;
+            String recordingPageKey = homeRecordingPageKeys.remove(page);
+            if (recordingPageKey != null) {
+                LinearLayout list = recordingsListsByPage.remove(recordingPageKey);
+                emptyListTextByPage.remove(recordingPageKey);
+                if (recordingsList == list) {
+                    recordingsList = null;
+                    emptyListText = null;
+                }
+            }
+            Integer instantiatedPosition = homePagePositions.remove(page);
+            if (instantiatedPosition != null && instantiatedPosition == 1) communityFeedView = null;
+            if (instantiatedPosition != null && instantiatedPosition == 2) booksShelfPanel = null;
+            container.removeView(page);
         }
 
         @Override public int getItemPosition(Object object) {
@@ -2525,6 +2550,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
      */
     protected void maybeLoadRowCover(Recording rec, FrameLayout iconWrap, View fallbackIcon) {
         if (rec == null || !rec.hasArticles || iconWrap == null || fallbackIcon == null) return;
+        final int loadGeneration = recordingMetadataGeneration;
         String dedicatedKey = rec.coverJpgKey();
         String cachedFallbackKey = rec.coverPhotoKey;
         coverIo.execute(() -> {
@@ -2564,6 +2590,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
             Bitmap loaded = bitmap;
             boolean isDedicated = dedicated;
             main.post(() -> {
+                if (loadGeneration != recordingMetadataGeneration || isFinishing() || isDestroyed()) return;
                 int index = iconWrap.indexOfChild(fallbackIcon);
                 if (index < 0) return;
                 iconWrap.removeView(fallbackIcon);
@@ -2975,6 +3002,8 @@ public final class RecordingsActivity extends VoiceDropActivity {
         communityFeedView = null;
         recordingsListsByPage.clear();
         emptyListTextByPage.clear();
+        homeRecordingPageKeys.clear();
+        homePagePositions.clear();
     }
 
     protected void buildHomeShell(AudioRecorder.Take take, List<CapturedPhoto> photos) {

@@ -853,6 +853,7 @@ public final class I18n {
         copy.put("照片编码失败", "Couldn't encode photo");
         copy.put("无法创建缓存目录", "Couldn't create cache directory");
         copy.put("开始写书 · 320 算力", "Start writing · 320 credits");
+        copy.put("开始写书 · %s 算力", "Start writing · %s credits");
         copy.put("《%s》已作为种子", "“%s” is used as the seed");
         copy.put("修改《%s》", "Edit “%s”");
         copy.put("提交后就可以关 App · 10–30 分钟写完，出现在「写书」书架", "After submitting, you can close the app. Your book takes 10–30 minutes and appears on the Write a book shelf.");

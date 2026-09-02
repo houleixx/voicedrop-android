@@ -33,7 +33,9 @@ public final class BookWritingVisualContractTest {
         assertTrue(page.contains("submittedTitle.setGravity(Gravity.CENTER)"));
         assertTrue(page.contains("WechatShareLoadingDialog.show(this, com.baixingai.voicedrop.ui.I18n.text(this, \"提交中...\"))"));
         assertTrue(page.indexOf("hideSubmitLoading();\n        sending = false") > 0);
-        assertTrue(page.contains("if (loadedBalance != null && loadedBalance < PRICE)"));
+        assertTrue(page.contains("Prices.refreshIfNeeded(this, new HttpClient()).book"));
+        assertTrue(page.contains("if (loadedBalance != null && loadedBalance < loadedPrice)"));
+        assertTrue(page.contains("开始写书 · %s 算力"));
         assertTrue(page.contains("I18n.format(this, \"还差 %s 算力，两条来路：\", format(gap))"));
         assertTrue(page.indexOf(".balance().suanli") < page.indexOf("new ReferralManager(this).inviteLink()"));
     }

@@ -30,6 +30,7 @@ import com.baixingai.voicedrop.core.BookWritingResult;
 import com.baixingai.voicedrop.core.BookWritingSeed;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.ReferralManager;
+import com.baixingai.voicedrop.data.Prices;
 import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.PageTitleBar;
@@ -46,7 +47,6 @@ public final class BookWritingActivity extends VoiceDropActivity {
     static final String API = "https://lab.jianshuo.dev/api/book";
     static final int SHELF_ICON_RES_ID = R.drawable.ic_about_books_vertical;
     static final int POWER_ICON_RES_ID = R.drawable.ic_settings_bolt;
-    private static final int PRICE = 320;
     private static final int META = 0xffa89e8e;
     private static final int SECTION = 0xffa79f93;
     private static final int AMBER = 0xffc98a2e;
@@ -66,6 +66,8 @@ public final class BookWritingActivity extends VoiceDropActivity {
     private boolean submitted;
     private Double balance;
     private ReferralManager.InviteLink invite;
+    /** Display/local-gating price; the server's 402 need_suanli stays authoritative. */
+    private int price = Prices.FALLBACK.book;
 
     /** Opens with the same horizontal page transition used by detail screens. */
     public static void open(Activity source) {
@@ -84,6 +86,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        price = Prices.current(this).book;
         seedArticleTitle = getIntent().getStringExtra("book_seed_article_title");
         seedArticleBody = getIntent().getStringExtra("book_seed_article_body");
         SystemBarDefaults.applyLightActivity(getWindow(), Theme.BG, true);
@@ -123,7 +126,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setBackground(topStrokeBackground(Theme.BG, Theme.BORDER_CHROME));
         SystemBarDefaults.applyBottomInsets(bottom, dp(18), dp(12), dp(18), dp(10));
-        submit = text("开始写书 · 320 算力", 16, 0xffffffff, Typeface.BOLD);
+        submit = text(com.baixingai.voicedrop.ui.I18n.format(this, "开始写书 · %s 算力", price), 16, 0xffffffff, Typeface.BOLD);
         submit.setGravity(Gravity.CENTER);
         submit.setOnClickListener(v -> startBook());
         bottom.addView(submit, new LinearLayout.LayoutParams(-1, dp(50)));
@@ -139,7 +142,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
         content.removeAllViews();
         content.setGravity(Gravity.NO_GRAVITY);
         content.addView(priceHero(), matchWrap());
-        if (balance != null && balance < PRICE) content.addView(earnSection(), topMargin(dp(18)));
+        if (balance != null && balance < price) content.addView(earnSection(), topMargin(dp(18)));
         content.addView(seedSection(preservedSeed), topMargin(dp(18)));
         content.addView(pipelineSection(), topMargin(dp(18)));
         status = text("", 13, Theme.RED, Typeface.NORMAL);
@@ -164,7 +167,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
         LinearLayout.LayoutParams powerIconParams = new LinearLayout.LayoutParams(dp(24), dp(40));
         powerIconParams.bottomMargin = dp(1);
         priceLine.addView(powerIcon, powerIconParams);
-        TextView price = text("320", 34, Theme.INK, Typeface.BOLD);
+        TextView price = text(String.valueOf(this.price), 34, Theme.INK, Typeface.BOLD);
         LinearLayout.LayoutParams priceParams = new LinearLayout.LayoutParams(-2, -2);
         priceParams.leftMargin = dp(4);
         priceLine.addView(price, priceParams);
@@ -185,7 +188,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
             loading.setGravity(Gravity.RIGHT);
             right.addView(loading);
         } else {
-            TextView value = text(format(balance), 24, balance >= PRICE ? Theme.GREEN : Theme.RED, Typeface.BOLD);
+            TextView value = text(format(balance), 24, balance >= this.price ? Theme.GREEN : Theme.RED, Typeface.BOLD);
             value.setGravity(Gravity.RIGHT);
             right.addView(value);
             TextView label = text("你现在的算力", 13, META, Typeface.NORMAL);
@@ -294,7 +297,7 @@ public final class BookWritingActivity extends VoiceDropActivity {
         LinearLayout card = vertical();
         card.setPadding(dp(16), dp(15), dp(16), dp(16));
         card.setBackground(roundWithStroke(Theme.CARD, 8, Theme.BORDER_CHROME, 1));
-        double gap = Math.max(0, PRICE - balance);
+        double gap = Math.max(0, price - balance);
         card.addView(text(com.baixingai.voicedrop.ui.I18n.format(this, "还差 %s 算力，两条来路：", format(gap)), 14, Theme.INK, Typeface.BOLD));
         int feed = invite == null ? 0 : invite.suanliFeedAuthor;
         int invited = invite == null ? 0 : invite.suanliInviter;
@@ -348,15 +351,17 @@ public final class BookWritingActivity extends VoiceDropActivity {
 
     private void loadWritingContext() {
         io.execute(() -> {
+            int loadedPrice = Prices.refreshIfNeeded(this, new HttpClient()).book;
             Double loadedBalance = null;
             ReferralManager.InviteLink link = null;
             try { loadedBalance = new UsageStore(new AuthStore(this), new HttpClient()).balance().suanli; } catch (Exception ignored) {}
-            if (loadedBalance != null && loadedBalance < PRICE) {
+            if (loadedBalance != null && loadedBalance < loadedPrice) {
                 try { link = new ReferralManager(this).inviteLink(); } catch (Exception ignored) {}
             }
             Double finalBalance = loadedBalance;
             ReferralManager.InviteLink finalLink = link;
             runOnUiThread(() -> {
+                price = loadedPrice;
                 balance = finalBalance;
                 invite = finalLink;
                 String old = seed == null ? "" : seed.getText().toString();
@@ -445,12 +450,12 @@ public final class BookWritingActivity extends VoiceDropActivity {
     private void updateSubmitState() {
         if (submit == null) return;
         boolean enabled = seed != null && BookWritingSeed.canSubmit(seed.getText().toString(), hasSeedArticle())
-                && !sending && !submitted && (balance == null || balance >= PRICE);
+                && !sending && !submitted && (balance == null || balance >= price);
         submit.setEnabled(enabled);
-        double gap = balance == null ? 0 : Math.max(0, PRICE - balance);
+        double gap = balance == null ? 0 : Math.max(0, price - balance);
         submit.setText(sending ? com.baixingai.voicedrop.ui.I18n.text(this, "提交中…")
                 : gap > 0 ? com.baixingai.voicedrop.ui.I18n.format(this, "算力不够 · 还差 %s", format(gap))
-                : com.baixingai.voicedrop.ui.I18n.text(this, "开始写书 · 320 算力"));
+                : com.baixingai.voicedrop.ui.I18n.format(this, "开始写书 · %s 算力", price));
         submit.setTextColor(0xffffffff);
         submit.setBackground(round(enabled ? Theme.ACCENT : Theme.FAINT, 8));
         submit.setElevation(enabled ? dp(5) : 0);

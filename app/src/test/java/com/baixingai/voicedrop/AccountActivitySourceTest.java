@@ -33,7 +33,8 @@ public class AccountActivitySourceTest {
         assertTrue(source.indexOf("card.addView(wechatAuthRow()")
                 < source.indexOf("card.addView(existingAccountRow(), existingLp)"));
         assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2))"));
-        assertTrue(source.contains("existingLp.setMargins(0, dp(3), 0, 0)"));
+        assertTrue(source.contains("card.addView(dividerWide(dp(8), dp(8)));"));
+        assertFalse(source.contains("existingLp.setMargins(0, dp(3), 0, 0)"));
         assertTrue(source.contains("new LinearLayout.LayoutParams(-1, dp(28))"));
         assertTrue(source.contains("row.setMinimumHeight(dp(28))"));
         String existingRow = source.substring(source.indexOf("private View existingAccountRow()"),
@@ -55,6 +56,15 @@ public class AccountActivitySourceTest {
         assertTrue(row.contains("text(\"同步设备 · 参与社区\", 13, Theme.SECONDARY, Typeface.NORMAL)"));
         assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2))"));
         assertFalse(row.contains("actionText(\"用微信登录（同步设备 · 参与社区）\")"));
+    }
+
+    @Test
+    public void wechatIconAlignsWithTheSignInTitle() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/AccountActivity.java");
+
+        assertTrue(source.contains("wechatIconParams.gravity = Gravity.TOP;"));
+        assertTrue(source.contains("wechatIconParams.topMargin = dp(3);"));
+        assertFalse(source.contains("row.addView(wechatIcon(Theme.RED), new LinearLayout.LayoutParams(dp(18), dp(18)))"));
     }
 
     @Test

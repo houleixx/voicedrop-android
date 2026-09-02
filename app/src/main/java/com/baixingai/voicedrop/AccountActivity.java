@@ -166,7 +166,7 @@ public final class AccountActivity extends VoiceDropActivity {
 
         card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout.LayoutParams existingLp = new LinearLayout.LayoutParams(-1, dp(28));
-        existingLp.setMargins(0, dp(3), 0, 0);
+        card.addView(dividerWide(dp(8), dp(8)));
         card.addView(existingAccountRow(), existingLp);
         return card;
     }
@@ -211,7 +211,11 @@ public final class AccountActivity extends VoiceDropActivity {
             });
             row.addView(signOut, new LinearLayout.LayoutParams(dp(92), -1));
         } else {
-            row.addView(wechatIcon(Theme.RED), new LinearLayout.LayoutParams(dp(18), dp(18)));
+            ImageView wechatIcon = wechatIcon(Theme.RED);
+            LinearLayout.LayoutParams wechatIconParams = new LinearLayout.LayoutParams(dp(18), dp(18));
+            wechatIconParams.gravity = Gravity.TOP;
+            wechatIconParams.topMargin = dp(3);
+            row.addView(wechatIcon, wechatIconParams);
             LinearLayout labels = new LinearLayout(this);
             labels.setOrientation(LinearLayout.VERTICAL);
             TextView login = actionText("用微信登录");

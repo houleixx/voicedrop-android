@@ -29,12 +29,15 @@ public final class BookReviseApiContractTest {
         assertTrue(revise.contains("composer.setVisibility(View.GONE)"));
         assertTrue(revise.contains("sendParams.gravity = Gravity.BOTTOM"));
         assertTrue(revise.contains("row.setBaselineAligned(false)"));
+        assertTrue(revise.contains("hint.setGravity(Gravity.START)"));
+        assertTrue(revise.contains("I18n.format(activity, \"每次修改 %d 算力 · 提交后可以关掉，改完这里会留下修改说明\", DISPLAY_PRICE)"));
         assertTrue(revise.contains("DialogWindowDefaults.hideNavigationBar(dialog.getWindow())"));
         assertTrue(revise.contains("sendIcon.setIcon(RemixIconGlyph.ARROW_UP_LINE)"));
         assertTrue(dialog.contains("bottomSheet && wrapContentInScrollView ? dp(ctx, 20) : 0"));
         assertTrue(revise.contains("event.getActionMasked() == MotionEvent.ACTION_MOVE"));
         assertTrue(revise.contains("hideKeyboard();"));
         assertTrue(revise.contains("loading.setTranslationY(-dp(180))"));
+        assertTrue(revise.contains("loading.setIndeterminateTintList(ColorStateList.valueOf(Theme.RED))"));
         assertTrue(revise.contains("deniedContent.setTranslationY(-dp(180))"));
         assertTrue(revise.contains("deniedIcon.setIcon(RemixIconGlyph.LOCK)"));
         assertTrue(!revise.contains("🔒"));

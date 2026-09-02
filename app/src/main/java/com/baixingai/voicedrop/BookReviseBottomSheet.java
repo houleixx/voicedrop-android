@@ -2,6 +2,7 @@ package com.baixingai.voicedrop;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
@@ -25,6 +26,7 @@ import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.DialogWindowDefaults;
+import com.baixingai.voicedrop.ui.I18n;
 import com.baixingai.voicedrop.ui.RemixIconGlyph;
 import com.baixingai.voicedrop.ui.RemixIconView;
 import com.baixingai.voicedrop.ui.Theme;
@@ -107,6 +109,7 @@ public final class BookReviseBottomSheet {
         content.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
 
         loading = new ProgressBar(activity);
+        loading.setIndeterminateTintList(ColorStateList.valueOf(Theme.RED));
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(
                 dp(36), dp(36), Gravity.CENTER);
         loading.setTranslationY(-dp(180));
@@ -183,7 +186,7 @@ public final class BookReviseBottomSheet {
         bar.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
         hint = text("", 12, Theme.SECONDARY, Typeface.NORMAL);
-        hint.setGravity(Gravity.CENTER);
+        hint.setGravity(Gravity.START);
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, -2);
         hintParams.topMargin = dp(7);
         bar.addView(hint, hintParams);
@@ -374,8 +377,8 @@ public final class BookReviseBottomSheet {
             send.setAlpha(canSend ? 1f : 0.75f);
         }
         if (hint != null) hint.setText(running
-                ? "有一个修改正在进行，等它改完再提下一个"
-                : "每次修改 " + DISPLAY_PRICE + " 算力 · 提交后可以关掉，改完这里会留下修改说明");
+                ? I18n.text(activity, "有一个修改正在进行，等它改完再提下一个")
+                : I18n.format(activity, "每次修改 %d 算力 · 提交后可以关掉，改完这里会留下修改说明", DISPLAY_PRICE));
     }
 
     private void track(String event) {

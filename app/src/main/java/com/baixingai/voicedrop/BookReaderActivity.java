@@ -163,6 +163,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
                 setHidden(!isHidden);
             });
             menu.addView(hideRow);
+            addMenuDivider(menu);
             LinearLayout reviseRow = bookMenuRow("修改这本书", RemixIconGlyph.EDIT, Theme.ACCENT);
             reviseRow.setOnClickListener(ignored -> {
                 if (popupRef[0] != null) popupRef[0].dismiss();

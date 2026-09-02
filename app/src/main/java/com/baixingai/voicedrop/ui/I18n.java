@@ -1003,6 +1003,7 @@ public final class I18n {
         copy.put("书写好了，上架在「写书」书架。", "Book is ready and on your Write a book shelf.");
         copy.put("改好了。", "Revision complete.");
         copy.put("有一个修改正在进行，等它改完再提下一个", "A revision is already in progress. Submit another after it finishes.");
+        copy.put("每次修改 %d 算力 · 提交后可以关掉，改完这里会留下修改说明", "Each revision costs %d credits · you can close the app after submitting; the revision summary stays here when done");
         copy.put("每次修改 ", "Each revision costs ");
         copy.put(" 算力 · 提交后可以关掉，改完这里会留下修改说明", " credits · you can close the app after submitting; the revision summary stays here when done");
         copy.put("M月d日 HH:mm", "MMM d HH:mm");

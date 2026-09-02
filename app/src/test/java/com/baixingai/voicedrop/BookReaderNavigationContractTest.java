@@ -28,6 +28,8 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("bookMenuRow(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
         String bookMenu = reader.substring(reader.indexOf("private void showBookMenu(View anchor)"),
                 reader.indexOf("private void showBookShareSheet()"));
+        assertTrue(bookMenu.contains("menu.addView(hideRow);\n            addMenuDivider(menu);"));
+        assertTrue(bookMenu.contains("menu.addView(reviseRow);\n            addMenuDivider(menu);"));
         assertTrue(!bookMenu.contains("微信好友"));
         assertTrue(!bookMenu.contains("朋友圈"));
         assertTrue(reader.contains("BookReviseBottomSheet.show"));

@@ -16,7 +16,6 @@ public final class BookWritingSettingsEntryTest {
         assertFalse(settings.contains("addSection(content, \"实验功能\")"));
         assertFalse(settings.contains("\"写书\""));
         assertFalse(settings.contains("openBookWriting"));
-        assertFalse(settings.contains("BooksShelfActivity.class"));
         assertFalse(about.contains("\"写书\""));
     }
 

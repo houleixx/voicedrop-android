@@ -90,6 +90,11 @@ public final class BookReaderActivity extends VoiceDropActivity {
                 this::finishWithPageTransition);
         FrameLayout moreAction = titleBar.addIconAction(
                 AliIconFont.MORE, Theme.SECONDARY, I18n.text(this, "更多"), () -> {});
+        // The shared title bar has a 16dp end inset; shift its 38dp visible card 5dp
+        // within the 48dp touch target so its visual edge matches other detail toolbars.
+        FrameLayout.LayoutParams moreParams = (FrameLayout.LayoutParams) moreAction.getLayoutParams();
+        moreParams.rightMargin = -dp(5);
+        moreAction.setLayoutParams(moreParams);
         moreAction.setOnClickListener(this::showBookMenu);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 

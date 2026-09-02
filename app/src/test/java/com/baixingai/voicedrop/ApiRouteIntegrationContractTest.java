@@ -27,7 +27,7 @@ public final class ApiRouteIntegrationContractTest {
     }
 
     @Test public void publicBookRequestsAreDynamicButShareAndLabUrlsStayFixed() throws Exception {
-        String shelf = read("BooksShelfActivity.java") + read("ui/BooksShelfPanel.java");
+        String shelf = read("ui/BooksShelfPanel.java");
         String reader = read("BookReaderActivity.java");
         String writer = read("BookWritingActivity.java") + read("BookReviseBottomSheet.java");
 

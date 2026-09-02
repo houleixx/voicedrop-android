@@ -18,6 +18,7 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("this::finishWithPageTransition"));
         assertTrue(shelf.contains("BookReaderActivity.open((Activity) getContext(), book)"));
         assertTrue(reader.contains("AliIconFont.MORE, Theme.SECONDARY, I18n.text(this, \"更多\")"));
+        assertTrue(reader.contains("moreParams.rightMargin = -dp(5)"));
         assertTrue(reader.contains("moreAction.setOnClickListener(this::showBookMenu)"));
         assertTrue(reader.contains("if (isMine)"));
         assertTrue(reader.contains("bookMenuRow(\"修改这本书\", RemixIconGlyph.EDIT"));

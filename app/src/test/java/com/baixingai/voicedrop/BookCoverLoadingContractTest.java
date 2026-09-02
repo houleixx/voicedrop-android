@@ -12,24 +12,19 @@ import static org.junit.Assert.assertTrue;
 
 /** Regression guard for covers disappearing permanently after a weak-network failure. */
 public final class BookCoverLoadingContractTest {
-    @Test public void bothShelvesKeepTypographyBelowAnOptionalImage() throws Exception {
+    @Test public void shelfKeepsTypographyBelowAnOptionalImage() throws Exception {
         String panel = read("ui/BooksShelfPanel.java");
-        String activity = read("BooksShelfActivity.java");
 
         assertTrue(panel.contains("addBookTypography(cover, book)"));
-        assertTrue(activity.contains("addBookTypography(cover, book)"));
-        assertFalse(activity.contains("cover.removeAllViews()"));
+        assertFalse(panel.contains("cover.removeAllViews()"));
     }
 
-    @Test public void bothShelvesUsePersistentVersionedLoaderAndCancelIt() throws Exception {
+    @Test public void shelfUsesPersistentVersionedLoaderAndCancelsIt() throws Exception {
         String panel = read("ui/BooksShelfPanel.java");
-        String activity = read("BooksShelfActivity.java");
         String loader = read("data/BookCoverLoader.java");
 
         assertTrue(panel.contains("coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image)"));
-        assertTrue(activity.contains("coverLoader.load(book, book.coverUrl(Api.publicWebBase()), image)"));
         assertTrue(panel.contains("coverLoader.cancelAll()"));
-        assertTrue(activity.contains("coverLoader.cancelAll()"));
         assertTrue(loader.contains("getFilesDir()"));
         assertTrue(loader.contains("BookCoverPolicy.cacheKey(book.slug, book.coverAt)"));
         assertTrue(loader.contains("no-cache"));
@@ -37,16 +32,13 @@ public final class BookCoverLoadingContractTest {
 
     @Test public void retriesAreScheduledWithoutStarvingTheIndexExecutor() throws Exception {
         String panel = read("ui/BooksShelfPanel.java");
-        String activity = read("BooksShelfActivity.java");
         String loader = read("data/BookCoverLoader.java");
 
         assertTrue(panel.contains("new BookCoverLoader(context)"));
-        assertTrue(activity.contains("new BookCoverLoader(this)"));
         assertTrue(loader.contains("ScheduledExecutorService"));
         assertTrue(loader.contains("schedule("));
         assertFalse(loader.contains("Thread.sleep"));
         assertTrue(panel.contains("coverLoader.shutdown()"));
-        assertTrue(activity.contains("coverLoader.shutdown()"));
     }
 
     private static String read(String name) throws Exception {

@@ -15,6 +15,7 @@ public final class SettingsLanguageSourceTest {
                 Path.of("src/main/java/com/baixingai/voicedrop/LanguageSettingsActivity.java")), StandardCharsets.UTF_8);
         assertTrue(source.contains("AppCompatDelegate.getApplicationLocales()"));
         assertTrue(source.contains("I18n.applyLanguage(this, selected.languageTags())"));
+        assertTrue(source.contains("confirmParams.rightMargin = 0"));
         assertTrue(source.indexOf("finishWithPageTransition();")
                 < source.indexOf("I18n.applyLanguage(this, selected.languageTags())"));
     }

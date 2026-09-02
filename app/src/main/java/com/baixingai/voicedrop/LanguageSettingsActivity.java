@@ -50,7 +50,7 @@ public final class LanguageSettingsActivity extends VoiceDropActivity {
         FrameLayout.LayoutParams confirmParams = (FrameLayout.LayoutParams) confirm.getLayoutParams();
         confirmParams.width = dp(72);
         confirmParams.height = dp(40);
-        confirmParams.rightMargin = dp(4);
+        confirmParams.rightMargin = 0;
         confirm.setLayoutParams(confirmParams);
         page.addView(titleBar, new LinearLayout.LayoutParams(-1, -2));
 

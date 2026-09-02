@@ -10,17 +10,13 @@ import java.nio.file.Paths;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** Source-level guard for the two independently rendered book-shelf entry points. */
+/** Source-level guard for the home book-shelf panel. */
 public final class BookShelfAuthenticationContractTest {
-    @Test public void bothShelfRequestsUseTheCurrentBearerAndRejectStaleAccountResponses() throws Exception {
-        String activity = read("BooksShelfActivity.java");
+    @Test public void shelfRequestsUseTheCurrentBearerAndRejectStaleAccountResponses() throws Exception {
         String panel = read("ui/BooksShelfPanel.java");
 
-        assertTrue(activity.contains("String bearer = auth.bearer()"));
         assertTrue(panel.contains("String bearer = auth.bearer()"));
-        assertTrue(activity.contains("/books/?format=json\", bearer"));
         assertTrue(panel.contains("/books/?format=json\", bearer"));
-        assertTrue(activity.contains("requestCache.matches(auth.libraryCacheIdentity())"));
         assertTrue(panel.contains("requestCache.matches(auth.libraryCacheIdentity())"));
     }
 
@@ -34,13 +30,10 @@ public final class BookShelfAuthenticationContractTest {
         assertTrue(key.contains("MessageDigest.getInstance(\"SHA-256\")"));
     }
 
-    @Test public void bothShelfCoversRenderTheHiddenBadgeAboveCoverArt() throws Exception {
-        String activity = read("BooksShelfActivity.java");
+    @Test public void shelfCoversRenderTheHiddenBadgeAboveCoverArt() throws Exception {
         String panel = read("ui/BooksShelfPanel.java");
 
-        assertTrue(activity.contains("if (book.hidden) addHiddenBadge(cover)"));
         assertTrue(panel.contains("if (book.hidden) addHiddenBadge(cover)"));
-        assertTrue(activity.contains("text(\"隐藏\", 10"));
         assertTrue(panel.contains("text(\"隐藏\", 10"));
     }
 

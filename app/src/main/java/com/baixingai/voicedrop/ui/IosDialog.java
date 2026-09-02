@@ -438,7 +438,7 @@ public final class IosDialog extends Dialog {
                 close.setTextSize(28);
                 close.setTextColor(Theme.SECONDARY);
                 close.setGravity(Gravity.CENTER);
-                close.setContentDescription("关闭");
+                close.setContentDescription(I18n.text(ctx, "关闭"));
                 close.setOnClickListener(v -> dismiss());
                 FrameLayout.LayoutParams closeLp = new FrameLayout.LayoutParams(dp(ctx, 44), dp(ctx, 44),
                         Gravity.RIGHT | Gravity.TOP);

@@ -331,8 +331,10 @@ public final class InstructionSettingsActivity extends VoiceDropActivity {
         title.setMaxLines(1);
         title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title);
-        String author = item.author == null || item.author.isEmpty() ? "匿名" : item.author;
-        TextView subline = text(author + " · 导入 " + item.importCount, 13, Typeface.NORMAL, Theme.SECONDARY);
+        String author = item.author == null || item.author.isEmpty()
+                ? com.baixingai.voicedrop.ui.I18n.text(this, "匿名") : item.author;
+        TextView subline = text(author + com.baixingai.voicedrop.ui.I18n.text(this, " · 导入 ")
+                + item.importCount, 13, Typeface.NORMAL, Theme.SECONDARY);
         subline.setMaxLines(1);
         subline.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(subline, margins(-1, -2, 0, 2, 0, 0));
@@ -629,7 +631,9 @@ public final class InstructionSettingsActivity extends VoiceDropActivity {
             copy.addView(title);
             TextView origin = originBadge(row.node);
             if (origin != null) copy.addView(origin, margins(-2, -2, 6, 0, 0, 0));
-            TextView meta = text("分组 · " + row.childCount + " 项", 12, Typeface.NORMAL, Theme.SECONDARY);
+            TextView meta = text(com.baixingai.voicedrop.ui.I18n.text(this, "分组 · ")
+                    + row.childCount + com.baixingai.voicedrop.ui.I18n.text(this, " 项"),
+                    12, Typeface.NORMAL, Theme.SECONDARY);
             LinearLayout.LayoutParams metaParams = margins(-2, -2, 6, 0, 0, 0);
             copy.addView(meta, metaParams);
             line.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));

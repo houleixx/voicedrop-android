@@ -166,7 +166,7 @@ public final class AccountActivity extends VoiceDropActivity {
 
         card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout.LayoutParams existingLp = new LinearLayout.LayoutParams(-1, dp(28));
-        card.addView(dividerWide(dp(8), dp(8)));
+        card.addView(dividerWide(auth.isWechatAuthenticated() ? dp(10) : dp(8), dp(12)));
         card.addView(existingAccountRow(), existingLp);
         return card;
     }
@@ -273,9 +273,9 @@ public final class AccountActivity extends VoiceDropActivity {
 
     private View dataCard(int recordingCount, int minedCount, boolean loaded) {
         LinearLayout card = card();
-        card.addView(dataRow("录音", loaded ? recordingCount + " 条" : "加载中…", false));
+        card.addView(dataRow("录音", loaded ? com.baixingai.voicedrop.ui.I18n.format(this, "%d 条", recordingCount) : "加载中…", false));
         card.addView(divider());
-        card.addView(dataRow("成文", loaded ? minedCount + " 篇" : "加载中…", false));
+        card.addView(dataRow("成文", loaded ? com.baixingai.voicedrop.ui.I18n.format(this, "%d 篇", minedCount) : "加载中…", false));
         return card;
     }
 

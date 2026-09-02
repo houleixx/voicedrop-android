@@ -33,7 +33,7 @@ public class AccountActivitySourceTest {
         assertTrue(source.indexOf("card.addView(wechatAuthRow()")
                 < source.indexOf("card.addView(existingAccountRow(), existingLp)"));
         assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2))"));
-        assertTrue(source.contains("card.addView(dividerWide(dp(8), dp(8)));"));
+        assertTrue(source.contains("card.addView(dividerWide(auth.isWechatAuthenticated() ? dp(10) : dp(8), dp(12)));"));
         assertFalse(source.contains("existingLp.setMargins(0, dp(3), 0, 0)"));
         assertTrue(source.contains("new LinearLayout.LayoutParams(-1, dp(28))"));
         assertTrue(source.contains("row.setMinimumHeight(dp(28))"));

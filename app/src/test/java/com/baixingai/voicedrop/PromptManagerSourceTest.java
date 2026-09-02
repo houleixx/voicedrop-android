@@ -48,6 +48,20 @@ public class PromptManagerSourceTest {
         assertTrue(manager.contains("outlined(Color.WHITE, 12, Theme.BORDER_CHROME, 1, 0, 0)"));
     }
 
+    @Test public void managerLocalizesDynamicGroupMetadata() throws Exception {
+        String manager = source("InstructionSettingsActivity.java");
+        assertTrue(manager.contains("I18n.text(this, \"分组 · \")"));
+        assertTrue(manager.contains("I18n.text(this, \" 项\")"));
+        assertFalse(manager.contains("\"分组 · \" + row.childCount + \" 项\""));
+    }
+
+    @Test public void managerLocalizesCommunityPromptImportMetadata() throws Exception {
+        String manager = source("InstructionSettingsActivity.java");
+        assertTrue(manager.contains("I18n.text(this, \" · 导入 \")"));
+        assertTrue(manager.contains("I18n.text(this, \"匿名\")"));
+        assertFalse(manager.contains("author + \" · 导入 \" + item.importCount"));
+    }
+
     @Test public void longPressStartsDragAndReorderSaveShowsLoading() throws Exception {
         String manager = source("InstructionSettingsActivity.java");
         assertTrue(manager.contains("if (!sorting) enterSort(false)"));

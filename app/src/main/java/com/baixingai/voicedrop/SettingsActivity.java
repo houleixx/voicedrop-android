@@ -29,6 +29,7 @@ import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BouncyScrollView;
+import com.baixingai.voicedrop.ui.I18n;
 import com.baixingai.voicedrop.ui.IosSwitch;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.RemixIconGlyph;
@@ -893,14 +894,12 @@ public class SettingsActivity extends VoiceDropActivity {
         input.setTextSize(17);
         input.setTextColor(Theme.INK);
         input.setHintTextColor(Theme.FAINT);
-        input.setHint("你的名字");
+        input.setHint(I18n.text(this, "你的名字"));
         input.setBackground(round(0xfff7f2ec, 14));
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
         form.addView(input, new LinearLayout.LayoutParams(-1, dp(54)));
 
         TextView hint = text("这个名字会出现在文章署名，以及挖文章时对你的称呼。随时可改。", 13, Theme.SECONDARY, Typeface.NORMAL);
-        hint.setSingleLine(true);
-        hint.setEllipsize(TextUtils.TruncateAt.END);
         hint.setPadding(0, dp(10), 0, 0);
         form.addView(hint, new LinearLayout.LayoutParams(-1, -2));
 
@@ -915,7 +914,7 @@ public class SettingsActivity extends VoiceDropActivity {
             }
         });
 
-        IosDialog dialog = IosDialog.showBottomSheet(this, "名字", form, 110,
+        IosDialog dialog = IosDialog.showBottomSheet(this, "名字", form, 132,
                 "完成", () -> io.execute(() -> {
                     try {
                         String typedName = input.getText().toString().trim();

@@ -21,7 +21,7 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 
-import java.text.SimpleDateFormat;
+import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -166,14 +166,17 @@ public final class UsageActivity extends VoiceDropActivity {
         row.setGravity(Gravity.BOTTOM);
         row.setPadding(0, dp(6), 0, 0);
         row.addView(text(String.valueOf((int) Math.round(balance.suanli)), 42, 0xffffffff, Typeface.BOLD));
-        TextView capacity = text("≈ " + UsageStore.articleCapacity(balance.suanli) + " 篇", 14, 0xffe2b871, Typeface.BOLD);
+        TextView capacity = text(com.baixingai.voicedrop.ui.I18n.format(this, "≈ %d 篇",
+                UsageStore.articleCapacity(balance.suanli)), 14, 0xffe2b871, Typeface.BOLD);
         LinearLayout.LayoutParams capLp = new LinearLayout.LayoutParams(-2, -2);
         capLp.setMargins(dp(8), 0, 0, dp(7));
         row.addView(capacity, capLp);
         card.addView(row);
 
         String foot = loaded
-                ? "累计获赠 " + (int) Math.round(balance.suanli + balance.spentSuanli) + " · 已用 " + (int) Math.round(balance.spentSuanli)
+                ? com.baixingai.voicedrop.ui.I18n.format(this, "累计获赠 %d · 已用 %d",
+                (int) Math.round(balance.suanli + balance.spentSuanli),
+                (int) Math.round(balance.spentSuanli))
                 : "加载中…";
         TextView footer = text(foot, 13, 0xffc9bfae, Typeface.NORMAL);
         footer.setPadding(0, dp(14), 0, 0);
@@ -227,7 +230,8 @@ public final class UsageActivity extends VoiceDropActivity {
             labels.setGravity(Gravity.CENTER_VERTICAL);
             labels.addView(text(rowData.reason, 15, Theme.INK, Typeface.NORMAL));
             if (rowData.count > 1) {
-                TextView count = text(rowData.count + " 笔", 12, Theme.FAINT, Typeface.NORMAL);
+                TextView count = text(com.baixingai.voicedrop.ui.I18n.format(this, "%d 笔", rowData.count),
+                        12, Theme.FAINT, Typeface.NORMAL);
                 LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(-2, -2);
                 countLp.setMargins(dp(6), 0, 0, 0);
                 labels.addView(count, countLp);
@@ -313,7 +317,8 @@ public final class UsageActivity extends VoiceDropActivity {
     }
 
     private String timeText(UsageStore.Entry e) {
-        return new SimpleDateFormat("yyyy年M月d日 HH:mm", Locale.CHINA).format(new Date(e.ts));
+        return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT,
+                com.baixingai.voicedrop.ui.I18n.locale()).format(new Date(e.ts));
     }
 
     private void addSection(LinearLayout parent, String label) {

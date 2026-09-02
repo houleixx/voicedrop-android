@@ -66,12 +66,13 @@ public class SettingsActivitySourceTest {
     }
 
     @Test
-    public void profileNameHintUsesSingleLineEllipsis() throws Exception {
+    public void profileNameHintWrapsInsteadOfBeingEllipsized() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
         String method = methodBody(source, "private void showNameEditor");
 
-        assertTrue(method.contains("hint.setSingleLine(true)"));
-        assertTrue(method.contains("hint.setEllipsize(TextUtils.TruncateAt.END)"));
+        assertFalse(method.contains("hint.setSingleLine(true)"));
+        assertFalse(method.contains("hint.setEllipsize(TextUtils.TruncateAt.END)"));
+        assertTrue(method.contains("input.setHint(I18n.text(this, \"你的名字\"))"));
     }
 
     @Test
@@ -79,7 +80,7 @@ public class SettingsActivitySourceTest {
         String source = readSource("src/main/java/com/baixingai/voicedrop/SettingsActivity.java");
         String method = methodBody(source, "private void showNameEditor");
 
-        assertTrue(method.contains("IosDialog.showBottomSheet(this, \"名字\", form, 110"));
+        assertTrue(method.contains("IosDialog.showBottomSheet(this, \"名字\", form, 132"));
         assertTrue(method.contains("input.requestFocus()"));
         assertTrue(method.contains("SOFT_INPUT_STATE_ALWAYS_VISIBLE"));
         assertTrue(method.contains("keyboard.showSoftInput(input"));

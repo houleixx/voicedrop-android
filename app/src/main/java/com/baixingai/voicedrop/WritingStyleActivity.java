@@ -186,7 +186,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
         card.setBackground(cardBackground(currentDefault));
         card.setClickable(true);
         card.setFocusable(true);
-        card.setContentDescription("v" + version + (currentDefault ? "，当前默认" : ""));
+        card.setContentDescription("v" + version + (currentDefault
+                ? com.baixingai.voicedrop.ui.I18n.text(this, "，当前默认") : ""));
         card.setOnClickListener(view -> showEditor(version, style, currentDefault));
 
         TextView versionTile = text("v" + version, 15,
@@ -222,7 +223,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
             badge.setBackground(round(Theme.ACCENT_SOFT, 9));
             trailing.addView(badge, new LinearLayout.LayoutParams(dp(48), dp(28)));
         } else {
-            TextView count = text(style.trim().length() + " 字", 12, Theme.FAINT, Typeface.BOLD);
+            TextView count = text(com.baixingai.voicedrop.ui.I18n.format(this, "%d 字",
+                    style.trim().length()), 12, Theme.FAINT, Typeface.BOLD);
             count.setGravity(Gravity.RIGHT);
             trailing.addView(count, new LinearLayout.LayoutParams(-2, dp(28)));
         }
@@ -243,7 +245,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
         form.setPadding(dp(18), dp(12), dp(18), dp(12));
 
         TextView explanation = text(existingVersion
-                        ? "正在基于 v" + version + " 编辑。修改后会保存为新版本，并自动设为默认。"
+                        ? com.baixingai.voicedrop.ui.I18n.format(this,
+                        "正在基于 v%d 编辑。修改后会保存为新版本，并自动设为默认。", version)
                         : "写下希望文章遵循的语气、结构和表达习惯。保存后会成为默认风格。",
                 13, Theme.SECONDARY, Typeface.NORMAL);
         explanation.setLineSpacing(0, 1.18f);
@@ -254,7 +257,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
         input.setTextSize(16);
         input.setTextColor(Theme.INK);
         input.setHintTextColor(Theme.FAINT);
-        input.setHint("例如：短句、口语化，保留现场细节，结尾自然收束。");
+        input.setHint(com.baixingai.voicedrop.ui.I18n.text(this,
+                "例如：短句、口语化，保留现场细节，结尾自然收束。"));
         input.setBackground(round(0xfff7f2ec, 14));
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
         input.setText(original);
@@ -316,7 +320,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
         });
 
         dialog[0] = IosDialog.showBottomSheet(this,
-                existingVersion ? "v" + version + " 写作风格" : "新建写作风格",
+                existingVersion ? com.baixingai.voicedrop.ui.I18n.format(this, "v%d 写作风格", version)
+                        : "新建写作风格",
                 form, 466, null, null, null, null, true, false);
         input.setOnFocusChangeListener((view, focused) -> {
             if (!focused) return;
@@ -329,7 +334,8 @@ public final class WritingStyleActivity extends VoiceDropActivity {
                                     boolean currentDefault, String original, String edited) {
         WritingStylePresentation.Action action = WritingStylePresentation.action(
                 existingVersion, currentDefault, original, edited);
-        button.setText(WritingStylePresentation.actionLabel(action));
+        button.setText(com.baixingai.voicedrop.ui.I18n.text(this,
+                WritingStylePresentation.actionLabel(action)));
         boolean enabled = action != WritingStylePresentation.Action.CURRENT_DEFAULT
                 && !edited.trim().isEmpty();
         button.setEnabled(enabled);

@@ -87,11 +87,16 @@ public final class I18n {
         copy.put("「%@」标签下还没有文章。", "No articles under \"%@\" yet.");
         copy.put("/月", "/month");
         copy.put("%lld 篇", "%lld articles");
+        copy.put("%d 篇", "%d articles");
         copy.put("%lld 篇回应", "%lld replies");
         copy.put("%lld 条", "%lld items");
+        copy.put("%d 条", "%d items");
         copy.put("%lld 字", "%lld characters");
+        copy.put("%d 字", "%d characters");
         copy.put("%lld 字 · %@", "%lld characters · %@");
+        copy.put("%d 笔", "%d entries");
         copy.put("≈ %lld 篇", "≈ %lld articles");
+        copy.put("≈ %d 篇", "≈ %d articles");
         copy.put("4 位", "4 digits");
         copy.put("6 位代码", "6-digit code");
         copy.put("按住 说话 回答", "Hold to Speak · Answer");
@@ -100,6 +105,8 @@ public final class I18n {
         copy.put("包月订阅即将上线", "Monthly plan coming soon");
         copy.put("包月算力", "Monthly credits");
         copy.put("包月算力还在开发中，敬请期待。现在的算力来自注册与活动赠送，足够日常使用。", "Monthly credits are still in the works — stay tuned. For now, credits come from sign-up and event bonuses, plenty for daily use.");
+        copy.put("投币奖励", "Coin rewards");
+        copy.put("收到投币", "Coins received");
         copy.put("保存", "Save");
         copy.put("保存失败", "Save failed");
         copy.put("保存失败，请重试", "Save failed, please try again");
@@ -204,6 +211,7 @@ public final class I18n {
         copy.put("拷贝", "Copy");
         copy.put("老设备上弹出的 4 位验证码", "The 4-digit code shown on your old device");
         copy.put("累计获赠 %lld · 已用 %lld", "Total granted %lld · Used %lld");
+        copy.put("累计获赠 %d · 已用 %d", "Total granted %d · Used %d");
         copy.put("连接断开，请重新发起", "Connection lost — please start again");
         copy.put("联系我们 / 内容投诉", "Contact us / Report content");
         copy.put("令牌无效", "Invalid token");
@@ -376,6 +384,11 @@ public final class I18n {
         copy.put("语音识别响应解析失败：%@", "Failed to parse speech recognition response: %@");
         copy.put("语音修改", "Voice edits");
         copy.put("语音转写", "Speech transcription");
+        copy.put("修书", "Book revisions");
+        copy.put("AI 采访", "AI interviews");
+        copy.put("文风蒸馏", "Style distillation");
+        copy.put("图片编辑", "Image editing");
+        copy.put("小红书分享", "Xiaohongshu sharing");
         copy.put("原文", "Original");
         copy.put("约 1 分钟完成", "Takes about 1 minute");
         copy.put("约可成文 %lld 篇", "Enough for about %lld articles");
@@ -522,6 +535,7 @@ public final class I18n {
         copy.put("确认执行这条指令？", "Run this command?");
         copy.put("社区文章", "Community article");
         copy.put("匿名作者", "Anonymous author");
+        copy.put("匿名", "Anonymous");
         copy.put("重新生成文章？", "Regenerate article?");
         copy.put("会用相同的写作风格重新挖这篇文章，原文不变。", "This regenerates the article with the same writing style. The original remains unchanged.");
         copy.put("已请求重新生成", "Regeneration requested");
@@ -560,6 +574,7 @@ public final class I18n {
         copy.put("发布到 VD 社区需要先用微信登录，登录后才能发布。是否现在登录？", "Sign in with WeChat before posting to VD Community. Sign in now?");
         copy.put("微信登录", "Sign in with WeChat");
         copy.put("用微信登录", "Sign in with WeChat");
+        copy.put("已用微信登录", "Signed in with WeChat");
         copy.put("无法打开微信，请确认已安装微信", "Couldn't open WeChat. Please make sure it is installed.");
         copy.put("处理中...", "Processing...");
         copy.put("已从 VD 社区隐藏", "Hidden from VD Community");
@@ -1017,6 +1032,7 @@ public final class I18n {
         copy.put("，当前默认", ", current default");
         copy.put("默认", "Default");
         copy.put("正在基于 v", "Editing based on v");
+        copy.put("正在基于 v%d 编辑。修改后会保存为新版本，并自动设为默认。", "Editing version v%d. Saving creates a new version and sets it as default.");
         copy.put(" 编辑。修改后会保存为新版本，并自动设为默认。", ". Saving creates a new version and sets it as default.");
         copy.put("写下希望文章遵循的语气、结构和表达习惯。保存后会成为默认风格。", "Describe the tone, structure, and expression you want articles to follow. Saving makes it the default style.");
         copy.put("例如：短句、口语化，保留现场细节，结尾自然收束。", "For example: short conversational sentences, preserve scene details, and end naturally.");
@@ -1025,6 +1041,7 @@ public final class I18n {
         copy.put("新版本已保存并设为默认", "New version saved and set as default");
         copy.put("写作风格保存失败：", "Couldn't save writing style: ");
         copy.put(" 写作风格", " writing style");
+        copy.put("v%d 写作风格", "Writing style v%d");
         copy.put("新建写作风格", "New writing style");
         copy.put("文字", "Text");
         copy.put("图片", "Images");
@@ -1046,8 +1063,8 @@ public final class I18n {
         copy.put("微信登录失败：", "WeChat sign-in failed: ");
         copy.put("该微信已关联另一个云端空间", "This WeChat account is linked to another cloud storage");
         copy.put("是否切换到微信已绑定的云端空间？当前空间会保存在本机，退出微信登录后会恢复当前空间。", "Switch to the cloud storage linked to WeChat? Your current storage remains on this device and returns when you sign out of WeChat.");
-        copy.put("切换到微信空间", "Switch to WeChat storage");
-        copy.put("保留当前空间", "Keep current storage");
+        copy.put("切换到微信空间", "Switch storage");
+        copy.put("保留当前空间", "Keep current");
         copy.put("微信登录失败：无效会话", "WeChat sign-in failed: invalid session");
         copy.put("已登录微信，请重新选择文章分享", "Signed in with WeChat. Choose the article to share again.");
         copy.put("已登录微信", "Signed in with WeChat");

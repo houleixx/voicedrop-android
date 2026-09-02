@@ -32,7 +32,7 @@ public class AccountActivitySourceTest {
         assertFalse(source.contains("shield.setBackground(round(Theme.INK, 12))"));
         assertTrue(source.indexOf("card.addView(wechatAuthRow()")
                 < source.indexOf("card.addView(existingAccountRow(), existingLp)"));
-        assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, dp(28)))"));
+        assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2))"));
         assertTrue(source.contains("existingLp.setMargins(0, dp(3), 0, 0)"));
         assertTrue(source.contains("new LinearLayout.LayoutParams(-1, dp(28))"));
         assertTrue(source.contains("row.setMinimumHeight(dp(28))"));
@@ -43,6 +43,18 @@ public class AccountActivitySourceTest {
         assertTrue(existingRow.contains("new LinearLayout.LayoutParams(dp(18), dp(18))"));
         assertFalse(existingRow.contains("setBackground"));
         assertFalse(source.contains("card.addView(dividerWide(dp(16), dp(16)));\n\n        TextView importButton"));
+    }
+
+    @Test
+    public void wechatSignInUsesSeparateTitleAndSupportingText() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/AccountActivity.java");
+        String row = source.substring(source.indexOf("private View wechatAuthRow()"),
+                source.indexOf("private ImageView wechatIcon"));
+
+        assertTrue(row.contains("actionText(\"用微信登录\")"));
+        assertTrue(row.contains("text(\"同步设备 · 参与社区\", 13, Theme.SECONDARY, Typeface.NORMAL)"));
+        assertTrue(source.contains("card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2))"));
+        assertFalse(row.contains("actionText(\"用微信登录（同步设备 · 参与社区）\")"));
     }
 
     @Test

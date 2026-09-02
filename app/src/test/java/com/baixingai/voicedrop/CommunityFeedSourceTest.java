@@ -35,6 +35,12 @@ public class CommunityFeedSourceTest {
     }
 
     @Test
+    public void communitySearchHintUsesTheLocalizedString() throws Exception {
+        String source = read("src/main/java/com/baixingai/voicedrop/ui/CommunityFeedView.java");
+        assertTrue(source.contains("input.setHint(I18n.text(getContext(), \"搜索标题、作者或内容\"))"));
+    }
+
+    @Test
     public void recommendationBooksOpenTheBookReaderInsteadOfPostDetail() throws Exception {
         String recordings = read("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String community = read("src/main/java/com/baixingai/voicedrop/CommunityActivity.java");

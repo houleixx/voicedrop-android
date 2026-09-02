@@ -123,7 +123,7 @@ public final class CommunityFeedView extends LinearLayout {
         input.setTextSize(14);
         input.setTextColor(Theme.INK);
         input.setHintTextColor(Theme.SECONDARY);
-        input.setHint("搜索标题、作者或内容");
+        input.setHint(I18n.text(getContext(), "搜索标题、作者或内容"));
         input.setPadding(dp(12), 0, dp(12), 0);
         GradientDrawable inputBackground = new GradientDrawable();
         inputBackground.setColor(Theme.CARD);

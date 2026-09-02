@@ -559,6 +559,7 @@ public final class I18n {
         copy.put("需要微信登录", "WeChat sign-in required");
         copy.put("发布到 VD 社区需要先用微信登录，登录后才能发布。是否现在登录？", "Sign in with WeChat before posting to VD Community. Sign in now?");
         copy.put("微信登录", "Sign in with WeChat");
+        copy.put("用微信登录", "Sign in with WeChat");
         copy.put("无法打开微信，请确认已安装微信", "Couldn't open WeChat. Please make sure it is installed.");
         copy.put("处理中...", "Processing...");
         copy.put("已从 VD 社区隐藏", "Hidden from VD Community");
@@ -641,6 +642,7 @@ public final class I18n {
         // Account, credits, and WeChat setup.
         copy.put("已退出微信登录，已恢复原账号", "Signed out of WeChat and restored your original account");
         copy.put("用微信登录（同步设备 · 参与社区）", "Sign in with WeChat (sync devices · join Community)");
+        copy.put("同步设备 · 参与社区", "Sync devices · join Community");
         copy.put(" 条", " items");
         copy.put("云端空间", "Cloud storage");
         copy.put("已启用", "Enabled");

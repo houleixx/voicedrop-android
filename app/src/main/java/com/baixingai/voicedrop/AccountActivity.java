@@ -164,7 +164,7 @@ public final class AccountActivity extends VoiceDropActivity {
         card.addView(keyField("访问令牌", maskedToken(), true, auth.anonymousBearer()));
         card.addView(dividerWide(dp(16), dp(10)));
 
-        card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, dp(28)));
+        card.addView(wechatAuthRow(), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout.LayoutParams existingLp = new LinearLayout.LayoutParams(-1, dp(28));
         existingLp.setMargins(0, dp(3), 0, 0);
         card.addView(existingAccountRow(), existingLp);
@@ -212,11 +212,18 @@ public final class AccountActivity extends VoiceDropActivity {
             row.addView(signOut, new LinearLayout.LayoutParams(dp(92), -1));
         } else {
             row.addView(wechatIcon(Theme.RED), new LinearLayout.LayoutParams(dp(18), dp(18)));
-            TextView login = actionText("用微信登录（同步设备 · 参与社区）");
+            LinearLayout labels = new LinearLayout(this);
+            labels.setOrientation(LinearLayout.VERTICAL);
+            TextView login = actionText("用微信登录");
             login.setOnClickListener(v -> startWechatLogin());
-            LinearLayout.LayoutParams loginLp = new LinearLayout.LayoutParams(0, -1, 1);
-            loginLp.setMargins(dp(9), 0, 0, 0);
-            row.addView(login, loginLp);
+            labels.addView(login, new LinearLayout.LayoutParams(-1, -2));
+            TextView detail = text("同步设备 · 参与社区", 13, Theme.SECONDARY, Typeface.NORMAL);
+            LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, -2);
+            detailLp.topMargin = dp(2);
+            labels.addView(detail, detailLp);
+            LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
+            labelsLp.setMargins(dp(9), dp(2), 0, dp(2));
+            row.addView(labels, labelsLp);
             row.setOnClickListener(v -> startWechatLogin());
         }
         return row;

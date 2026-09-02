@@ -20,8 +20,10 @@ import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
+
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.baixingai.voicedrop.BookReaderActivity;
 import com.baixingai.voicedrop.BookWritingActivity;
@@ -40,17 +42,15 @@ import java.util.concurrent.Executors;
 /** Physical two-column book shelf, kept visually aligned with iOS BooksShelfView. */
 public final class BooksShelfPanel extends LinearLayout {
     private static final int CREAM = 0xfff7f1df;
-    /** Rendering every cover at once can decode hundreds of megabytes on a real library. */
-    private static final int BOOKS_PER_PAGE = 12;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final BookCoverLoader coverLoader;
     private final PullRefreshLayout refresher;
-    private final LinearLayout shelves;
+    private final RecyclerView shelves;
+    private final ShelfAdapter shelfAdapter;
     private final AuthStore auth;
     private BookShelfCache shelfCache;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
     private boolean initialLoadPending;
-    private int visibleBookCount = BOOKS_PER_PAGE;
 
     public BooksShelfPanel(Context context) {
         super(context);
@@ -61,16 +61,15 @@ public final class BooksShelfPanel extends LinearLayout {
         coverLoader = new BookCoverLoader(context);
 
         refresher = new PullRefreshLayout(context);
-        ScrollView scroll = new ScrollView(context);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        shelves = new LinearLayout(context);
-        shelves.setOrientation(VERTICAL);
+        shelves = new RecyclerView(context);
+        shelves.setLayoutManager(new LinearLayoutManager(context));
         shelves.setClipChildren(false);
+        shelves.setClipToPadding(false);
         shelves.setPadding(dp(20), dp(6), dp(20), dp(20));
-        scroll.addView(shelves, new ScrollView.LayoutParams(-1, -2));
-        refresher.addView(scroll, new PullRefreshLayout.LayoutParams(-1, -1));
-        refresher.setRefreshTarget(scroll, 0);
+        shelfAdapter = new ShelfAdapter();
+        shelves.setAdapter(shelfAdapter);
+        refresher.addView(shelves, new PullRefreshLayout.LayoutParams(-1, -1));
+        refresher.setRefreshTarget(shelves, 0);
         refresher.setColorSchemeColors(Theme.RED);
         refresher.setOnRefreshListener(() -> load(false));
         addView(refresher, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -132,46 +131,7 @@ public final class BooksShelfPanel extends LinearLayout {
 
     private void render() {
         coverLoader.cancelAll();
-        shelves.removeAllViews();
-        if (BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())) {
-            TextView loading = text("正在整理书架…", 14, Theme.SECONDARY, Typeface.NORMAL, false);
-            loading.setGravity(Gravity.CENTER);
-            shelves.addView(loading, new LinearLayout.LayoutParams(-1, dp(220)));
-            return;
-        }
-        List<Object> cells = new ArrayList<>();
-        cells.add("write");
-        cells.addAll(books.subList(0, Math.min(visibleBookCount, books.size())));
-        for (int index = 0; index < cells.size(); index += 2) {
-            LinearLayout row = new LinearLayout(getContext());
-            row.setOrientation(HORIZONTAL);
-            row.setGravity(Gravity.TOP);
-            row.setClipChildren(false);
-            row.addView(cell(cells.get(index)), weightedCellParams(0));
-            if (index + 1 < cells.size()) {
-                row.addView(cell(cells.get(index + 1)), weightedCellParams(dp(22)));
-            } else {
-                View empty = new View(getContext());
-                row.addView(empty, weightedCellParams(dp(22)));
-            }
-            shelves.addView(row, new LinearLayout.LayoutParams(-1, -2));
-            shelves.addView(shelfBar(), shelfParams());
-        }
-        if (visibleBookCount < books.size()) addMoreBooksAction();
-    }
-
-    private void addMoreBooksAction() {
-        TextView more = text("显示更多图书", 14, Theme.CARD, Typeface.BOLD, false);
-        more.setGravity(Gravity.CENTER);
-        more.setPadding(dp(16), dp(12), dp(16), dp(12));
-        more.setBackground(round(Theme.ACCENT, 12));
-        more.setOnClickListener(v -> {
-            visibleBookCount = Math.min(books.size(), visibleBookCount + BOOKS_PER_PAGE);
-            render();
-        });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(46));
-        params.setMargins(dp(4), 0, dp(4), dp(28));
-        shelves.addView(more, params);
+        shelfAdapter.notifyDataSetChanged();
     }
 
     private LinearLayout.LayoutParams weightedCellParams(int leftMargin) {
@@ -180,10 +140,64 @@ public final class BooksShelfPanel extends LinearLayout {
         return params;
     }
 
-    private View cell(Object value) {
-        return value instanceof BookShelfIndex.Book
-                ? bookCell((BookShelfIndex.Book) value)
-                : writeCell();
+    /** RecyclerView gives the shelf iOS-style lazy rows: only nearby covers get a view or load. */
+    private final class ShelfAdapter extends RecyclerView.Adapter<ShelfRowHolder> {
+        private static final int TYPE_LOADING = 0;
+        private static final int TYPE_SHELF_ROW = 1;
+
+        @Override public int getItemViewType(int position) {
+            return BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())
+                    ? TYPE_LOADING : TYPE_SHELF_ROW;
+        }
+
+        @Override public ShelfRowHolder onCreateViewHolder(android.view.ViewGroup parent,
+                                                            int viewType) {
+            if (viewType == TYPE_LOADING) {
+                TextView loading = text("正在整理书架…", 14, Theme.SECONDARY, Typeface.NORMAL, false);
+                loading.setGravity(Gravity.CENTER);
+                loading.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(220)));
+                return new ShelfRowHolder(loading);
+            }
+            LinearLayout item = new LinearLayout(getContext());
+            item.setOrientation(VERTICAL);
+            item.setClipChildren(false);
+            item.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            return new ShelfRowHolder(item);
+        }
+
+        @Override public void onBindViewHolder(ShelfRowHolder holder, int position) {
+            if (getItemViewType(position) != TYPE_SHELF_ROW) return;
+            LinearLayout item = (LinearLayout) holder.itemView;
+            item.removeAllViews();
+            int firstCell = position * 2;
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(HORIZONTAL);
+            row.setGravity(Gravity.TOP);
+            row.setClipChildren(false);
+            row.addView(cellAt(firstCell), weightedCellParams(0));
+            if (firstCell + 1 <= books.size()) {
+                row.addView(cellAt(firstCell + 1), weightedCellParams(dp(22)));
+            } else {
+                row.addView(new View(getContext()), weightedCellParams(dp(22)));
+            }
+            item.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            item.addView(shelfBar(), shelfParams());
+        }
+
+        @Override public int getItemCount() {
+            if (BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())) {
+                return 1;
+            }
+            return (books.size() + 2) / 2;
+        }
+    }
+
+    private View cellAt(int index) {
+        return index == 0 ? writeCell() : bookCell(books.get(index - 1));
+    }
+
+    private static final class ShelfRowHolder extends RecyclerView.ViewHolder {
+        ShelfRowHolder(View itemView) { super(itemView); }
     }
 
     private View writeCell() {

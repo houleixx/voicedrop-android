@@ -8,13 +8,19 @@ import java.nio.file.Path;
 
 import static org.junit.Assert.assertTrue;
 
-/** Prevents the shelf from decoding an entire library's original-resolution covers at once. */
+/** Prevents the shelf from creating or decoding an entire library's covers at once. */
 public final class BookShelfMemorySourceTest {
-    @Test public void shelfPagesBookCellsBeforeStartingCoverLoads() throws Exception {
+    @Test public void shelfUsesRecyclerViewToCreateBookRowsOnlyAsTheyScrollIntoView() throws Exception {
         String source = read("src/main/java/com/baixingai/voicedrop/ui/BooksShelfPanel.java");
-        assertTrue(source.contains("private static final int BOOKS_PER_PAGE = 12;"));
-        assertTrue(source.contains("books.subList(0, Math.min(visibleBookCount, books.size()))"));
-        assertTrue(source.contains("visibleBookCount + BOOKS_PER_PAGE"));
+        assertTrue(source.contains("import androidx.recyclerview.widget.RecyclerView;"));
+        assertTrue(source.contains("new LinearLayoutManager(context)"));
+        assertTrue(source.contains("private final ShelfAdapter shelfAdapter;"));
+        assertTrue(source.contains("private final class ShelfAdapter extends RecyclerView.Adapter"));
+        assertTrue(source.contains("return (books.size() + 2) / 2;"));
+        assertTrue(source.contains("onBindViewHolder"));
+        assertTrue(!source.contains("BOOKS_PER_PAGE"));
+        assertTrue(!source.contains("addMoreBooksAction"));
+        assertTrue(!source.contains("显示更多图书"));
     }
 
     @Test public void coverLoaderSamplesImagesToTheirDisplayScale() throws Exception {

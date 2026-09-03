@@ -1,6 +1,7 @@
 package com.baixingai.voicedrop;
 
 import android.app.Activity;
+import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -11,7 +12,13 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.content.ContentValues;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.WebResourceError;
@@ -43,6 +50,10 @@ import com.baixingai.voicedrop.ui.Theme;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +61,7 @@ import java.util.concurrent.Executors;
 
 /** In-app web reader for a published VoiceDrop book. */
 public final class BookReaderActivity extends VoiceDropActivity {
+    private static final int REQUEST_WRITE_DOWNLOADS = 301;
     private static final String MATCH_NATIVE_BACKGROUND_SCRIPT =
             "(function(){var id='voicedrop-native-background';"
                     + "var style=document.getElementById(id);"
@@ -65,6 +77,8 @@ public final class BookReaderActivity extends VoiceDropActivity {
     private String currentPageTitle;
     private boolean isMine;
     private boolean isHidden;
+    private boolean bookPdfDownloading;
+    private String pendingPdfDownloadSlug;
 
     /** Opens with the same leftward page transition used by the rest of the app. */
     public static void open(Activity source, BookShelfIndex.Book book) {
@@ -103,7 +117,23 @@ public final class BookReaderActivity extends VoiceDropActivity {
         web.setBackgroundColor(Theme.BG);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        // WebView does not save attachment responses itself. The in-page PDF link is
+        // therefore routed to the same native downloader as the toolbar menu.
+        web.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (url != null && url.startsWith("https://jianshuo.dev/agent/books/pdf/")) {
+                downloadBookPdf();
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String destination = request == null || request.getUrl() == null ? "" : request.getUrl().toString();
+                if (destination.startsWith("https://jianshuo.dev/agent/books/pdf/")) {
+                    downloadBookPdf();
+                    return true;
+                }
+                return false;
+            }
+
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 showLoading();
             }
@@ -178,6 +208,14 @@ public final class BookReaderActivity extends VoiceDropActivity {
             addMenuDivider(menu);
         }
 
+        LinearLayout downloadRow = bookMenuRow("下载 PDF", RemixIconGlyph.DOWNLOAD, Theme.ACCENT);
+        downloadRow.setOnClickListener(ignored -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            downloadBookPdf();
+        });
+        menu.addView(downloadRow);
+        addMenuDivider(menu);
+
         LinearLayout shareRow = bookMenuRow("分享", RemixIconGlyph.SHARE_FORWARD, Theme.SECONDARY);
         shareRow.setOnClickListener(ignored -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
@@ -194,6 +232,130 @@ public final class BookReaderActivity extends VoiceDropActivity {
                 PopupMenuPosition.rightAlignedXOffset(anchor.getWidth(), popupWidth) - dp(5),
                 dp(10));
         popupRef[0] = popup;
+    }
+
+    /** Downloads the public PDF endpoint instead of asking WebView to handle an attachment. */
+    private void downloadBookPdf() {
+        String slug = getIntent().getStringExtra("slug");
+        if (slug == null || !slug.matches("[a-z0-9][a-z0-9-]{0,62}")) {
+            SimpleToast.show(this, I18n.text(this, "这本书暂时不能下载"));
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            pendingPdfDownloadSlug = slug;
+            requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_WRITE_DOWNLOADS);
+            return;
+        }
+        if (bookPdfDownloading) return;
+        bookPdfDownloading = true;
+        SimpleToast.show(this, I18n.text(this, "正在生成 PDF，首次下载约需一分钟"));
+        String requestedSlug = slug;
+        bookIo.execute(() -> {
+            boolean saved = false;
+            try {
+                fetchBookPdf(requestedSlug);
+                saved = true;
+            } catch (Exception ignored) { }
+            boolean result = saved;
+            runOnUiThread(() -> {
+                bookPdfDownloading = false;
+                if (isFinishing() || isDestroyed()) return;
+                // fetchBookPdf returns only after MediaStore has published the file.
+                // Do not launch a viewer here: this menu action promises a download.
+                if (!result) {
+                    SimpleToast.show(this, I18n.text(this, "下载失败，请检查网络后重试"));
+                    return;
+                }
+                SimpleToast.show(this, I18n.text(this, "PDF 已保存到下载/VoiceDrop"));
+            });
+        });
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_WRITE_DOWNLOADS) return;
+        String slug = pendingPdfDownloadSlug;
+        pendingPdfDownloadSlug = null;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && slug != null) {
+            downloadBookPdf();
+        } else {
+            SimpleToast.show(this, I18n.text(this, "需要存储权限才能保存 PDF"));
+        }
+    }
+
+    private void fetchBookPdf(String slug) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(
+                "https://jianshuo.dev/agent/books/pdf/" + slug).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(20_000);
+        // 首次请求必须等待 Worker 渲染整本书，不能沿用普通 API 的 120 秒上限。
+        connection.setReadTimeout(180_000);
+        connection.setRequestProperty("X-VD-Platform", "android");
+        try {
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) throw new IllegalStateException("PDF download failed: " + code);
+            saveBookPdf(connection.getInputStream());
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    /** Persists PDFs in the user-visible Downloads/VoiceDrop directory. */
+    private void saveBookPdf(InputStream input) throws Exception {
+        String fileName = safePdfFileName();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Downloads.MIME_TYPE, "application/pdf");
+            values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/VoiceDrop");
+            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new IllegalStateException("cannot create download");
+            try (InputStream source = input; OutputStream destination = getContentResolver().openOutputStream(uri)) {
+                if (destination == null) throw new IllegalStateException("cannot open download");
+                copyPdf(source, destination);
+            } catch (Exception error) {
+                getContentResolver().delete(uri, null, null);
+                throw error;
+            }
+            ContentValues published = new ContentValues();
+            published.put(MediaStore.Downloads.IS_PENDING, 0);
+            getContentResolver().update(uri, published, null, null);
+            return;
+        }
+
+        File directory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoiceDrop");
+        if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("download directory unavailable");
+        File target = new File(directory, fileName);
+        File temporary = new File(directory, fileName + ".part");
+        try (InputStream source = input; OutputStream destination = new FileOutputStream(temporary)) {
+            copyPdf(source, destination);
+            if (temporary.length() == 0L) throw new IllegalStateException("empty PDF");
+            if (target.exists() && !target.delete()) throw new IllegalStateException("old PDF cannot be replaced");
+            if (!temporary.renameTo(target)) throw new IllegalStateException("PDF cannot be finalized");
+        } finally {
+            if (temporary.exists()) temporary.delete();
+        }
+    }
+
+    private void copyPdf(InputStream input, OutputStream output) throws Exception {
+        byte[] buffer = new byte[8192];
+        int read;
+        long total = 0L;
+        while ((read = input.read(buffer)) >= 0) {
+            output.write(buffer, 0, read);
+            total += read;
+        }
+        if (total == 0L) throw new IllegalStateException("empty PDF");
+    }
+
+    private String safePdfFileName() {
+        String title = getIntent().getStringExtra("shareTitle");
+        if (title == null || title.trim().isEmpty()) title = getIntent().getStringExtra("displayTitle");
+        if (title == null || title.trim().isEmpty()) title = getIntent().getStringExtra("slug");
+        String cleaned = title == null ? "book" : title.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        return (cleaned.isEmpty() ? "book" : cleaned) + ".pdf";
     }
 
     private void addMenuDivider(LinearLayout menu) {

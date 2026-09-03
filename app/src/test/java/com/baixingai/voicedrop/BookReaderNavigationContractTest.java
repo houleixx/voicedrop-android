@@ -27,6 +27,17 @@ public final class BookReaderNavigationContractTest {
         assertTrue(reader.contains("(\"{\\\"hidden\\\":\" + hidden + \"}\")"));
         assertTrue(reader.contains("new BookShelfCache(this, auth.libraryCacheIdentity()).clear()"));
         assertTrue(reader.contains("bookMenuRow(\"分享\", RemixIconGlyph.SHARE_FORWARD"));
+        assertTrue(reader.contains("bookMenuRow(\"下载 PDF\", RemixIconGlyph.DOWNLOAD"));
+        assertTrue(reader.contains("web.setDownloadListener"));
+        assertTrue(reader.contains("shouldOverrideUrlLoading(WebView view, WebResourceRequest request)"));
+        assertTrue(reader.contains("destination.startsWith(\"https://jianshuo.dev/agent/books/pdf/\")"));
+        assertTrue(reader.contains("https://jianshuo.dev/agent/books/pdf/"));
+        assertTrue(reader.contains("connection.setReadTimeout(180_000)"));
+        assertTrue(reader.contains("MediaStore.Downloads.EXTERNAL_CONTENT_URI"));
+        assertTrue(reader.contains("Environment.DIRECTORY_DOWNLOADS + \"/VoiceDrop\""));
+        assertTrue(reader.contains("Manifest.permission.WRITE_EXTERNAL_STORAGE"));
+        assertTrue(reader.contains("PDF 已保存到下载/VoiceDrop"));
+        assertTrue(!reader.contains("new Intent(Intent.ACTION_VIEW)"));
         String bookMenu = reader.substring(reader.indexOf("private void showBookMenu(View anchor)"),
                 reader.indexOf("private void showBookShareSheet()"));
         assertTrue(bookMenu.contains("menu.addView(hideRow);\n            addMenuDivider(menu);"));

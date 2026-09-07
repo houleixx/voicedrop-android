@@ -20,7 +20,14 @@ public final class WechatSubscriptionStore {
     public Status status() throws Exception {
         HttpClient.Response response = http.get(Api.agentBase() + "/wechat-pay/status", auth.bearer());
         if (!response.ok()) throw failure("subscription status", response);
-        return Status.fromJson(new JSONObject(response.text()));
+        JSONObject current = null;
+        try {
+            HttpClient.Response shared = http.get(Api.agentBase() + "/subscription/status", auth.bearer());
+            if (shared.ok()) current = new JSONObject(shared.text());
+        } catch (Exception ignored) {
+            // Existing contracts remain manageable while the purchase guard is unavailable.
+        }
+        return Status.fromJson(new JSONObject(response.text()), current);
     }
 
     /** Creates a server-side contract and its short-lived WeChat signing handoff. */
@@ -57,9 +64,11 @@ public final class WechatSubscriptionStore {
         public final String paymentIssue;
         public final double subscriptionSuanli;
         public final double monthlySuanli;
+        public final boolean purchaseStatusKnown;
+        public final boolean appleActive;
 
         Status(boolean active, boolean enabled, boolean canCancel, String status, String planId, long expiresAt, long scheduledChargeAt, String paymentIssue,
-               double subscriptionSuanli, double monthlySuanli) {
+               double subscriptionSuanli, double monthlySuanli, boolean purchaseStatusKnown, boolean appleActive) {
             this.active = active;
             this.enabled = enabled;
             this.canCancel = canCancel;
@@ -70,19 +79,41 @@ public final class WechatSubscriptionStore {
             this.paymentIssue = paymentIssue;
             this.subscriptionSuanli = subscriptionSuanli;
             this.monthlySuanli = monthlySuanli;
+            this.purchaseStatusKnown = purchaseStatusKnown;
+            this.appleActive = appleActive;
         }
 
         public boolean pending() { return "pending".equals(status); }
         public boolean cancelled() { return "cancelled".equals(status); }
         public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
+        public boolean canSubscribe() {
+            return purchaseStatusKnown && !appleActive && !canCancel && !"active".equals(status)
+                    && (enabled || pending());
+        }
+
+        public String actionLabel() {
+            if (canCancel) return "解除自动续费";
+            if (appleActive) return "已通过 Apple 订阅";
+            if (!purchaseStatusKnown) return "订阅状态暂不可用";
+            if (pending()) return "继续微信签约";
+            return cancelled() ? "重新开通" : "微信支付订阅";
+        }
 
         static Status fromJson(JSONObject body) {
+            return fromJson(body, null);
+        }
+
+        static Status fromJson(JSONObject body, JSONObject current) {
+            boolean known = current != null && current.has("active") && !current.optBoolean("degraded", false)
+                    && (!current.optBoolean("active") || "apple".equals(current.optString("provider"))
+                    || "wechat".equals(current.optString("provider")));
             // 与 iOS 的 config/iap.json 语义一致：服务端没有明确给开启开关时，不展示售卖入口。
             return new Status(body.optBoolean("active", false), body.optBoolean("enabled", false), body.optBoolean("can_cancel", false), nullable(body, "status"),
                     nullable(body, "plan_id"), body.optLong("expires_date", 0),
                     body.optLong("scheduled_charge_at", 0),
                     nullable(body, "payment_issue"), body.optDouble("sub_suanli", 0),
-                    body.optDouble("monthly_suanli", 200));
+                    body.optDouble("monthly_suanli", 200), known,
+                    known && current.optBoolean("active") && "apple".equals(current.optString("provider")));
         }
     }
 
@@ -128,6 +159,7 @@ public final class WechatSubscriptionStore {
     }
 
     private static String nullable(JSONObject body, String name) {
+        if (body.isNull(name)) return null;
         String value = body.optString(name, "").trim();
         return value.isEmpty() ? null : value;
     }

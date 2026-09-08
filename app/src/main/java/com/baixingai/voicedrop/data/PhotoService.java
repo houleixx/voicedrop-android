@@ -34,6 +34,11 @@ public final class PhotoService {
 
     private PhotoService() {}
 
+    /** User refresh retries optional transforms without evicting successful images. */
+    public static void retryFailedThumbnails() {
+        missingThumbs.clear();
+    }
+
     /** Drops decoded images and per-process thumbnail misses after a user cache clear. */
     public static void clearMemoryCache() {
         cache.evictAll();
@@ -110,6 +115,11 @@ public final class PhotoService {
      * must be invisible to users, so remember it for this run and load the selected-route
      * original instead. Inline article callers use image(), not this method.
      */
+    public static Bitmap cachedThumbnail(String fullKey) {
+        if (fullKey == null || fullKey.isEmpty()) return null;
+        return cache.get(fullKey + "#w512");
+    }
+
     public static Bitmap thumbnail(String fullKey) throws Exception {
         if (fullKey == null || fullKey.isEmpty()) return null;
         String cacheKey = fullKey + "#w512";

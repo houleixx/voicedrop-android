@@ -248,8 +248,9 @@ public class RecordingsActivitySourceTest {
                 < load.indexOf("dedicated = bitmap != null"));
         assertTrue(load.indexOf("if (bitmap == null)")
                 < load.indexOf("ArticleBody.firstPhotoKey"));
-        assertTrue(load.contains("int width = isDedicated ? dp(40) : dp(44)"));
-        assertTrue(load.contains("int height = isDedicated ? dp(60) : dp(44)"));
+        String display = methodBody(source, "protected View displayRowCover");
+        assertTrue(display.contains("int width = dedicated ? dp(40) : dp(44)"));
+        assertTrue(display.contains("int height = dedicated ? dp(60) : dp(44)"));
 
         String beforeUiSuccess = load.substring(0, load.indexOf("main.post(() ->"));
         assertFalse(beforeUiSuccess.contains("getLayoutParams().height"));

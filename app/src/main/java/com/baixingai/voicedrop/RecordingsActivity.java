@@ -118,8 +118,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
     public static final String EXTRA_SHARE_ID = "shareId";
     private static final int REQUEST_COMMUNITY_DETAIL = 31;
     private static final String ROW_STATUS_LABEL_TAG = "recording_row_status_label";
-    private static final Set<String> MISSING_DEDICATED_COVERS =
-            Collections.synchronizedSet(new HashSet<>());
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final ExecutorService io = Executors.newSingleThreadExecutor();
     protected final ExecutorService communityIo = Executors.newSingleThreadExecutor();
@@ -1425,9 +1423,14 @@ public final class RecordingsActivity extends VoiceDropActivity {
     }
 
     protected boolean loadRecordingsAndPublishPendingReplies() throws Exception {
+        return loadRecordingsAndPublishPendingReplies(false);
+    }
+
+    protected boolean loadRecordingsAndPublishPendingReplies(boolean forceMetadata) throws Exception {
         recordings = library.load(uploader.pendingNames(), uploader.pendingTagsByName());
         photoMarkerRepairs.repairReady(recordings, library);
-        scheduleRecordingMetadataEnrichment(recordings);
+        if (forceMetadata) library.enrichMissingMetadata(recordings, true);
+        else scheduleRecordingMetadataEnrichment(recordings);
         boolean tagsChanged = refreshHomeTagsFromRecordings();
         int published = pendingReplies.publishReadyReplies(recordings,
                 (recording, replyToShareId) -> community.share(recording, replyToShareId) != null);
@@ -1500,11 +1503,13 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected void refreshRecordingsFromPull(PullRefreshLayout refresher) {
         recordingsLoadAttempted = true;
         closeOpenSwipes();
+        recordingMetadataGeneration++;
+        PhotoService.retryFailedThumbnails();
         io.execute(() -> {
             uploader.drainPending();
             boolean tagsChanged = false;
             try {
-                tagsChanged = loadRecordingsAndPublishPendingReplies();
+                tagsChanged = loadRecordingsAndPublishPendingReplies(true);
             } catch (Exception e) {
                 toast("加载失败：" + e.getMessage());
             }
@@ -2598,22 +2603,27 @@ public final class RecordingsActivity extends VoiceDropActivity {
         final int loadGeneration = recordingMetadataGeneration;
         String dedicatedKey = rec.coverJpgKey();
         String cachedFallbackKey = rec.coverPhotoKey;
+        final String scope = library.ownerScope();
+        if (scope == null) return;
+        Bitmap cachedDedicated = dedicatedKey == null ? null : PhotoService.cachedThumbnail(scope + dedicatedKey);
+        if (cachedDedicated != null) {
+            displayRowCover(iconWrap, fallbackIcon, cachedDedicated, true);
+            return;
+        }
+        Bitmap cachedFirst = cachedFallbackKey == null || cachedFallbackKey.isEmpty()
+                ? null : PhotoService.cachedThumbnail(scope + cachedFallbackKey);
+        // A missing optional cover must not hide an already decoded first photo.
+        final View mountedIcon = cachedFirst == null ? fallbackIcon
+                : displayRowCover(iconWrap, fallbackIcon, cachedFirst, false);
         coverIo.execute(() -> {
-            String scope;
-            try { scope = library.ownerScope(); }
-            catch (Exception ignored) { return; }
-            if (scope == null) return;
-
             Bitmap bitmap = null;
             boolean dedicated = false;
             String dedicatedFullKey = dedicatedKey == null ? null : scope + dedicatedKey;
-            if (dedicatedFullKey != null && !MISSING_DEDICATED_COVERS.contains(dedicatedFullKey)) {
+            if (dedicatedFullKey != null) {
                 try {
                     bitmap = PhotoService.thumbnail(dedicatedFullKey);
                     dedicated = bitmap != null;
-                    if (!dedicated) MISSING_DEDICATED_COVERS.add(dedicatedFullKey);
                 } catch (Exception ignored) {
-                    MISSING_DEDICATED_COVERS.add(dedicatedFullKey);
                 }
             }
             if (bitmap == null) {
@@ -2636,22 +2646,28 @@ public final class RecordingsActivity extends VoiceDropActivity {
             boolean isDedicated = dedicated;
             main.post(() -> {
                 if (loadGeneration != recordingMetadataGeneration || isFinishing() || isDestroyed()) return;
-                int index = iconWrap.indexOfChild(fallbackIcon);
-                if (index < 0) return;
-                iconWrap.removeView(fallbackIcon);
-                RoundedImageView cover = new RoundedImageView(this);
-                cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                cover.setImageBitmap(loaded);
-                int width = isDedicated ? dp(40) : dp(44);
-                int height = isDedicated ? dp(60) : dp(44);
-                iconWrap.addView(cover, index, new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
-                if (isDedicated && iconWrap.getLayoutParams() != null) {
-                    iconWrap.getLayoutParams().height = dp(60);
-                    iconWrap.requestLayout();
-                }
+                if (loaded == cachedFirst && !isDedicated) return;
+                displayRowCover(iconWrap, mountedIcon, loaded, isDedicated);
             });
         });
     }
+    protected View displayRowCover(FrameLayout iconWrap, View previous, Bitmap bitmap, boolean dedicated) {
+        int index = iconWrap.indexOfChild(previous);
+        if (index < 0) return previous;
+        RoundedImageView cover = new RoundedImageView(this);
+        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        cover.setImageBitmap(bitmap);
+        int width = dedicated ? dp(40) : dp(44);
+        int height = dedicated ? dp(60) : dp(44);
+        iconWrap.removeView(previous);
+        iconWrap.addView(cover, index, new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
+        if (iconWrap.getLayoutParams() != null) {
+            iconWrap.getLayoutParams().height = height;
+            iconWrap.requestLayout();
+        }
+        return cover;
+    }
+
     protected void showRecording(boolean first) {
         closeOpenSwipes();
         clearHomePagerRefs();

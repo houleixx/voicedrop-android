@@ -33,6 +33,7 @@ public final class LibraryStore {
     private String cachedScope;
     private String cachedScopeToken;
     private String metadataIdentity = "";
+    private long metadataGeneration;
 
     public LibraryStore(AuthStore auth, HttpClient http) {
         this.auth = auth;
@@ -99,13 +100,25 @@ public final class LibraryStore {
 
     /** Fetches titles/tags after the lightweight rows are already visible. */
     public boolean enrichMissingMetadata(List<Recording> recordings) {
-        ensureMetadataCache();
+        return enrichMissingMetadata(recordings, false);
+    }
+
+    /** Explicit refresh revalidates even a cached empty first-photo key. */
+    public boolean enrichMissingMetadata(List<Recording> recordings, boolean forceRefresh) {
+        final long generation;
+        final String identity;
+        synchronized (this) {
+            ensureMetadataCache();
+            if (forceRefresh) metadataGeneration++;
+            generation = metadataGeneration;
+            identity = metadataIdentity;
+        }
         List<Callable<MetadataResult>> tasks = new ArrayList<>();
         for (Recording r : recordings == null ? Collections.<Recording>emptyList() : recordings) {
             boolean articleMetaMissing;
             synchronized (this) {
                 articleMetaMissing = r.hasArticles
-                        && (!titleCache.containsKey(r.articleKey())
+                        && (forceRefresh || !titleCache.containsKey(r.articleKey())
                         || !tagsCache.containsKey(r.articleKey())
                         || !coverCache.containsKey(r.articleKey()));
             }
@@ -124,6 +137,7 @@ public final class LibraryStore {
                     String title = result.doc.articles.isEmpty() ? "" : result.doc.articles.get(0).title;
                     String cover = coverPhotoKey(result.doc);
                     synchronized (this) {
+                        if (generation != metadataGeneration || !identity.equals(auth.libraryCacheIdentity())) continue;
                         result.recording.articleTitle = title;
                         result.recording.tags = new ArrayList<>(result.doc.tags);
                         result.recording.coverPhotoKey = cover;
@@ -149,6 +163,7 @@ public final class LibraryStore {
         String identity = auth.libraryCacheIdentity();
         if (identity.equals(metadataIdentity)) return;
         metadataIdentity = identity;
+        metadataGeneration++;
         titleCache.clear();
         tagsCache.clear();
         coverCache.clear();
@@ -254,6 +269,7 @@ public final class LibraryStore {
 
     public synchronized void invalidateArticleCaches(List<String> stems) {
         ensureMetadataCache();
+        metadataGeneration++;
         if (ClientReliability.shouldInvalidateAllArticleCaches(stems)) {
             titleCache.clear();
             tagsCache.clear();

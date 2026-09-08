@@ -54,6 +54,20 @@ public class RecordingListCacheSourceTest {
         assertTrue(activity.contains("coverIo.execute"));
     }
 
+    @Test
+    public void explicitRefreshRevalidatesEmptyCoverMetadataAndRetriesFailures() throws Exception {
+        String library = source("src/main/java/com/baixingai/voicedrop/data/LibraryStore.java");
+        String activity = source("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String photos = source("src/main/java/com/baixingai/voicedrop/data/PhotoService.java");
+        assertTrue(library.contains("forceRefresh || !titleCache.containsKey"));
+        assertTrue(library.contains("generation != metadataGeneration"));
+        assertTrue(activity.contains("library.enrichMissingMetadata(recordings, true)"));
+        assertTrue(activity.contains("loadRecordingsAndPublishPendingReplies(true)"));
+        assertTrue(activity.contains("PhotoService.retryFailedThumbnails()"));
+        assertTrue(photos.contains("missingThumbs.clear()"));
+        org.junit.Assert.assertFalse(activity.contains("MISSING_DEDICATED_COVERS"));
+    }
+
     private static String source(String relative) throws Exception {
         return new String(Files.readAllBytes(Path.of(relative)), StandardCharsets.UTF_8);
     }

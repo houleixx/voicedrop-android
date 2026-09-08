@@ -13,7 +13,7 @@ public class RecordingPhotoMarkerRepairSourceTest {
     @Test public void remembersExpectedPhotoKeysBeforeAudioAndRepairsReadyArticles() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String photos = methodBody(source, "protected boolean uploadCapturedPhotos");
-        String load = methodBody(source, "protected boolean loadRecordingsAndPublishPendingReplies");
+        String load = methodBody(source, "protected boolean loadRecordingsAndPublishPendingReplies(boolean");
 
         assertTrue(photos.indexOf("uploader.stagePhotos(staged)")
                 < photos.indexOf("photoMarkerRepairs.remember(recordingName, photoKeys)"));

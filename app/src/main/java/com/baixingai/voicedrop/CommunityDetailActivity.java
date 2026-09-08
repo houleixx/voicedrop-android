@@ -126,9 +126,9 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
     protected static final ExecutorService COMMUNITY_LIKE_IO = Executors.newSingleThreadExecutor();
     public static final String EXTRA_COMMUNITY_DATA_CHANGED = "communityDataChanged";
     private static final int COMMUNITY_TOOLBAR_ICON_DP = 24;
-    private static final int COMMUNITY_TOOLBAR_BARE_SLOT_DP = 36;
+    private static final int COMMUNITY_TOOLBAR_ACTION_SLOT_DP = 44;
     private static final int COMMUNITY_TOOLBAR_MORE_BOX_DP = 34;
-    private static final int COMMUNITY_TOOLBAR_MORE_SLOT_DP = 56;
+    private static final int COMMUNITY_TOOLBAR_MORE_SLOT_DP = 44;
     private static final int PROCESSING_CARD_COLOR = 0xb8000000;
     public static final String EXTRA_AUDIO_NAME = "audioName";
     public static final String EXTRA_SHARE_ID = "shareId";
@@ -612,10 +612,33 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         lp.setMargins(leftMargin, 0, 0, 0);
         parent.addView(touch, lp);
         touch.setOnClickListener(action);
+        addToolbarPressFeedback(touch, btn);
     }
     protected void addCommunityToolbarIcon(FrameLayout touch, ImageView icon) {
-        touch.addView(icon, new FrameLayout.LayoutParams(
+        FrameLayout box = new FrameLayout(this);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Theme.CARD);
+        background.setCornerRadius(dp(11));
+        background.setStroke(dp(1), 0xffe0d8cc);
+        box.setBackground(background);
+        box.setElevation(dp(2));
+        box.addView(icon, new FrameLayout.LayoutParams(
                 dp(COMMUNITY_TOOLBAR_ICON_DP), dp(COMMUNITY_TOOLBAR_ICON_DP), Gravity.CENTER));
+        touch.addView(box, new FrameLayout.LayoutParams(
+                dp(COMMUNITY_TOOLBAR_MORE_BOX_DP), dp(COMMUNITY_TOOLBAR_MORE_BOX_DP), Gravity.CENTER));
+        addToolbarPressFeedback(touch, box);
+    }
+
+    private void addToolbarPressFeedback(View touch, View box) {
+        touch.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_UP
+                    || action == MotionEvent.ACTION_CANCEL) {
+                float scale = action == MotionEvent.ACTION_DOWN ? 0.94f : 1f;
+                box.animate().scaleX(scale).scaleY(scale).setDuration(120).start();
+            }
+            return false;
+        });
     }
 
     /** Applies both heart states inside the same 24dp toolbar icon box. */
@@ -970,7 +993,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         feedIcon.setTranslationY(-dp(1));
         addCommunityToolbarIcon(feedBtn, feedIcon);
         LinearLayout.LayoutParams feedLp = new LinearLayout.LayoutParams(
-                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+                dp(COMMUNITY_TOOLBAR_ACTION_SLOT_DP), dp(48));
         bar.addView(feedBtn, feedLp);
         io.execute(() -> {
             try {
@@ -989,13 +1012,13 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         feedBtn.setOnClickListener(v -> {
             if (fed[0] || feeding[0]) return;
             feeding[0] = true;
-            feedBtn.setAlpha(0.45f);
+            feedIcon.setAlpha(0.45f);
             io.execute(() -> {
                 try {
                     CommunityStore.FeedResult result = community.feed(shareId);
                     main.post(() -> {
                         feeding[0] = false;
-                        feedBtn.setAlpha(1f);
+                        feedIcon.setAlpha(1f);
                         if (result.ok || result.already) {
                             fed[0] = true;
                             feedIcon.setColorFilter(0xffd99a1a);
@@ -1014,7 +1037,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
                 } catch (Exception e) {
                     main.post(() -> {
                         feeding[0] = false;
-                        feedBtn.setAlpha(1f);
+                        feedIcon.setAlpha(1f);
                         toast("投币失败：" + e.getMessage());
                     });
                 }
@@ -1029,7 +1052,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
         addCommunityToolbarIcon(likeBtn, likeIcon);
         LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
-                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+                dp(COMMUNITY_TOOLBAR_ACTION_SLOT_DP), dp(48));
         bar.addView(likeBtn, likeLp);
         likeBtn.setOnClickListener(v -> {
             liked[0] = !liked[0];
@@ -1206,7 +1229,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         feedIcon.setTranslationY(-dp(1));
         addCommunityToolbarIcon(feedBtn, feedIcon);
         LinearLayout.LayoutParams feedLp = new LinearLayout.LayoutParams(
-                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+                dp(COMMUNITY_TOOLBAR_ACTION_SLOT_DP), dp(48));
         bar.addView(feedBtn, feedLp);
         photoIo.execute(() -> {
             try {
@@ -1223,13 +1246,13 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         feedBtn.setOnClickListener(v -> {
             if (fed[0] || feeding[0]) return;
             feeding[0] = true;
-            feedBtn.setAlpha(0.45f);
+            feedIcon.setAlpha(0.45f);
             io.execute(() -> {
                 try {
                     CommunityStore.FeedResult result = community.feed(shareId);
                     main.post(() -> {
                         feeding[0] = false;
-                        feedBtn.setAlpha(1f);
+                        feedIcon.setAlpha(1f);
                         if (result.ok || result.already) {
                             fed[0] = true;
                             feedIcon.setColorFilter(0xffd99a1a);
@@ -1250,7 +1273,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
                 } catch (Exception e) {
                     main.post(() -> {
                         feeding[0] = false;
-                        feedBtn.setAlpha(1f);
+                        feedIcon.setAlpha(1f);
                         toast("投币失败：" + e.getMessage());
                     });
                 }
@@ -1267,7 +1290,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         likeIcon.setScaleType(ImageView.ScaleType.CENTER);
         addCommunityToolbarIcon(likeBtn, likeIcon);
         LinearLayout.LayoutParams likeLp = new LinearLayout.LayoutParams(
-                dp(COMMUNITY_TOOLBAR_BARE_SLOT_DP), dp(48));
+                dp(COMMUNITY_TOOLBAR_ACTION_SLOT_DP), dp(48));
         bar.addView(likeBtn, likeLp);
         io.execute(() -> {
             try {

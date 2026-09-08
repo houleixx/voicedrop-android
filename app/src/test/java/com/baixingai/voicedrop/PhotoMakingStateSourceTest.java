@@ -11,14 +11,14 @@ import static org.junit.Assert.assertTrue;
 
 public class PhotoMakingStateSourceTest {
     @Test
-    public void ordinaryPhotoFailureDoesNotEnterMakingStateOrPoll() throws Exception {
+    public void ordinaryPhotoLoadingUsesRestoredProvenanceAndKeepsItsSpinner() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
         String render = methodBody(source, "protected void renderArticleBody");
         String load = source;
         String loading = methodBody(source, "protected void showPhotoLoading");
 
         assertTrue(render.contains("showPhotoLoading(photo)"));
-        assertTrue(render.contains("PhotoLoadPolicy.Intent.ORIGINAL"));
+        assertTrue(render.contains("PhotoLoadPolicy.restoredIntent"));
         assertTrue(load.contains("PhotoLoadPolicy.shouldPoll(intent)"));
         assertTrue(load.contains("showPhotoLoadFailed(frame, relKey, intent)"));
         assertTrue(loading.contains("ProgressBar spinner = new ProgressBar(this)"));

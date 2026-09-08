@@ -6,6 +6,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -244,6 +245,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
     protected LinearLayout articleInlineEditActions;
     protected TextView articleInlineEditDone;
     protected View articleEditPanel;
+    private final ArticleRenderPolicy.RenderedState articleRenderState = new ArticleRenderPolicy.RenderedState();
     protected EditText inlineEditingInput;
     protected FrameLayout inlineEditingRow;
     protected TextView inlineEditingReadView;
@@ -579,6 +581,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         articleScroll = null;
         articleContent = null;
         currentArticleDoc = null;
+        articleRenderState.clear();
         currentArticleStem = null;
         deferredArticleRenderRecording = null;
         deferredArticleRenderDoc = null;
@@ -993,37 +996,29 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         }
         int scrollY = articleScroll.getScrollY();
         int nextArticleIndex = Math.min(articleIndex, doc.articles.size() - 1);
-        boolean renderedArticleChanged = renderedArticleChanged(currentArticleDoc, doc);
+        boolean renderedArticleChanged = articleRenderState.needsRender(doc, nextArticleIndex);
         currentArticleDoc = doc;
         articleIndex = nextArticleIndex;
         if (renderedArticleChanged) {
             renderCurrentArticle(articleContent, rec, doc);
         }
+        refreshArticleEditPanel(rec);
         refreshArticleHistoryState(rec);
         if (renderedArticleChanged) {
             articleContent.post(() -> articleScroll.scrollTo(0, scrollY));
         }
     }
 
-    /** Returns whether the visible article body, including its photo slots, changed. */
-    protected boolean renderedArticleChanged(ArticleDoc previous, ArticleDoc updated) {
-        if (previous == null || updated == null
-                || !Objects.equals(previous.ownerScope, updated.ownerScope)
-                || !Objects.equals(previous.photos, updated.photos)
-                || previous.articles == null || updated.articles == null
-                || previous.articles.size() != updated.articles.size()) {
-            return true;
-        }
-        for (int i = 0; i < previous.articles.size(); i++) {
-            MinedArticle oldArticle = previous.articles.get(i);
-            MinedArticle newArticle = updated.articles.get(i);
-            if (!Objects.equals(oldArticle.title, newArticle.title)
-                    || !Objects.equals(oldArticle.body, newArticle.body)
-                    || !Objects.equals(oldArticle.style, newArticle.style)) {
-                return true;
-            }
-        }
-        return false;
+    /** Queue/reply changes are visible even when the article itself did not change. */
+    protected void refreshArticleEditPanel(Recording rec) {
+        if (articleEditPanel == null || !(articleEditPanel.getParent() instanceof FrameLayout)) return;
+        // Preserve active dictation and inline editing, including their touch targets.
+        if (isHoldArticleEditActiveFor(rec) || isInlineParagraphEditingFor(rec)) return;
+        FrameLayout frame = (FrameLayout) articleEditPanel.getParent();
+        frame.removeView(articleEditPanel);
+        LinearLayout panel = renderArticleEditBar(frame, rec);
+        SystemBarDefaults.applyScrollableBottomInsetsAbove(
+                articleContent, panel, dp(22), dp(0), dp(22), dp(28));
     }
 
     protected void publishWechat(Recording rec) {
@@ -2600,6 +2595,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         }
 
         renderArticleBody(content, articleBodyWithoutDuplicateTitle(article), doc);
+        articleRenderState.didRender(doc, articleIndex);
     }
 
     protected void ensureArticleEditSession(Recording rec) {
@@ -2785,6 +2781,8 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
             TextView row = text((inFlight ? "✎ " : "⏱ ") + req.text, 14,
                     inFlight ? Theme.INK : Theme.SECONDARY, Typeface.NORMAL);
             row.setPadding(dp(12), dp(8), dp(12), dp(8));
+            row.setMaxLines(3);
+            row.setEllipsize(TextUtils.TruncateAt.END);
             row.setBackground(round(inFlight ? Theme.AMBER_BG : Theme.CARD, 12));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.setMargins(0, 0, 0, dp(6));
@@ -3058,9 +3056,8 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
             holdEditTranscriptBubble.setVisibility(View.GONE);
         }
         holdEditButton = null;
-        holdEditMicIcon = null;
-        holdEditTranscriptBubble = null;
-        holdEditTranscriptText = null;
+        // These views belong to the edit bar, which survives cancel/empty recognition.
+        // Keep them available for the next utterance; page cleanup releases them.
         holdEditPromptText = null;
         holdEditCanceled = false;
         holdEditFinishing = false;
@@ -3121,9 +3118,10 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
                 p.setMargins(0, 0, 0, dp(12));
                 content.addView(photo, p);
                 if (key != null) {
-                    PhotoLoadPolicy.Intent intent = generatedPhotoKeys.contains(key)
-                            ? PhotoLoadPolicy.Intent.GENERATED
-                            : PhotoLoadPolicy.Intent.ORIGINAL;
+                    String historyKey = photoHistoryKey(key);
+                    PhotoLoadPolicy.Intent intent = PhotoLoadPolicy.restoredIntent(
+                            generatedPhotoKeys.contains(key) || photoHistory().getBoolean(historyKey + ":generated", false),
+                            photoHistory().getBoolean(historyKey + ":displayed", false));
                     loadPhotoInto(photo, key, intent);
                 }
                 final String relKey = key;
@@ -3686,7 +3684,13 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         if (previous == null || updated == null) return;
         Set<String> previousKeys = articlePhotoKeys(previous);
         for (String key : articlePhotoKeys(updated)) {
-            if (!previousKeys.contains(key)) generatedPhotoKeys.add(key);
+            if (!previousKeys.contains(key)) {
+                generatedPhotoKeys.add(key);
+                String historyKey = photoHistoryKey(key);
+                photoHistory().edit().putBoolean(historyKey + ":generated", true)
+                        .putLong(historyKey + ":started", PhotoLoadPolicy.startedAt(
+                                photoHistory().getLong(historyKey + ":started", 0), System.currentTimeMillis(), false)).apply();
+            }
         }
     }
 
@@ -3703,6 +3707,21 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         return keys;
     }
 
+    private SharedPreferences photoHistory() {
+        return getSharedPreferences("article-photo-progress", MODE_PRIVATE);
+    }
+
+    private String photoHistoryKey(String relKey) {
+        String scope = currentArticleDoc != null ? currentArticleDoc.ownerScope : null;
+        if (scope == null || scope.isEmpty()) scope = library.ownerScope();
+        return relKey.startsWith("users/") ? relKey : (scope == null ? "" : scope) + relKey;
+    }
+
+    private void rememberDisplayedPhoto(String historyKey) {
+        photoHistory().edit().putBoolean(historyKey + ":displayed", true)
+                .remove(historyKey + ":generated").remove(historyKey + ":started").apply();
+    }
+
     protected void loadPhotoInto(FrameLayout frame, String relKey, PhotoLoadPolicy.Intent intent) {
         loadPhotoInto(frame, relKey, intent, false);
     }
@@ -3712,6 +3731,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         if (!ignoringLocalCache) {
             Bitmap cached = articlePhotoCache.get(relKey);
             if (cached != null) {
+                rememberDisplayedPhoto(photoHistoryKey(relKey));
                 showLoadedPhoto(frame, cached);
                 return;
             }
@@ -3719,22 +3739,42 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
             articlePhotoCache.remove(relKey);
             showPhotoLoading(frame);
         }
-        long startedAt = System.currentTimeMillis();
+        String historyKey = photoHistoryKey(relKey);
+        long startedAt = PhotoLoadPolicy.startedAt(photoHistory().getLong(historyKey + ":started", 0),
+                System.currentTimeMillis(), ignoringLocalCache);
+        photoHistory().edit().putLong(historyKey + ":started", startedAt).apply();
         frame.setTag(startedAt);
         schedulePhotoMakingState(frame, startedAt, intent);
+        // Independent deadline: a stalled HTTP request must not keep a tile waiting forever.
+        // Always allow the first request on reopening to discover a late completed image.
+        long remaining = startedAt + PhotoLoadPolicy.timeoutMs(intent) - System.currentTimeMillis();
+        main.postDelayed(() -> {
+            if (!isPhotoLoadActive(frame, startedAt)) return;
+            frame.setTag(null);
+            showPhotoUnavailable(frame, relKey, intent);
+        }, remaining > 0 ? remaining : 15_000L);
         fetchPhotoInto(frame, relKey, startedAt, intent, ignoringLocalCache);
     }
 
     protected void schedulePhotoMakingState(FrameLayout frame, long startedAt,
                                             PhotoLoadPolicy.Intent intent) {
-        if (!PhotoLoadPolicy.shouldPoll(intent)) return;
+        if (intent == PhotoLoadPolicy.Intent.ORIGINAL) return;
         main.postDelayed(() -> {
-            if (isPhotoLoadActive(frame, startedAt)) showPhotoMaking(frame);
+            if (!isPhotoLoadActive(frame, startedAt)) return;
+            if (intent == PhotoLoadPolicy.Intent.GENERATED) showPhotoMaking(frame);
+            else {
+                removePhotoState(frame);
+                TextView label = text("正在获取图片", 13, Theme.SECONDARY, Typeface.NORMAL);
+                label.setGravity(Gravity.CENTER);
+                label.setTag("photo_status");
+                frame.addView(label, match());
+            }
         }, PHOTO_MAKING_GRACE_MS);
     }
 
     protected void fetchPhotoInto(FrameLayout frame, String relKey, long startedAt,
                                   PhotoLoadPolicy.Intent intent, boolean ignoringLocalCache) {
+        final String historyKey = photoHistoryKey(relKey);
         photoIo.execute(() -> {
             Bitmap bitmap = null;
             try {
@@ -3749,6 +3789,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
                 if (!isPhotoLoadActive(frame, startedAt)) return;
                 if (result != null) {
                     articlePhotoCache.put(relKey, result);
+                    rememberDisplayedPhoto(historyKey);
                     frame.setTag(null);
                     showLoadedPhoto(frame, result);
                     return;
@@ -3759,12 +3800,12 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
                     return;
                 }
                 long elapsed = System.currentTimeMillis() - startedAt;
-                if (elapsed >= PHOTO_POLL_TIMEOUT_MS) {
+                if (elapsed >= PhotoLoadPolicy.timeoutMs(intent)) {
                     frame.setTag(null);
                     showPhotoUnavailable(frame, relKey, intent);
                     return;
                 }
-                long nextDelay = Math.min(PHOTO_POLL_INTERVAL_MS, PHOTO_POLL_TIMEOUT_MS - elapsed);
+                long nextDelay = Math.min(PHOTO_POLL_INTERVAL_MS, PhotoLoadPolicy.timeoutMs(intent) - elapsed);
                 main.postDelayed(() -> {
                     if (isPhotoLoadActive(frame, startedAt)) {
                         fetchPhotoInto(frame, relKey, startedAt, intent, true);

@@ -3098,6 +3098,9 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
                 lineNo[0]++;
                 imageNo[0]++;
                 FrameLayout photo = new FrameLayout(this);
+                // Line locators sit in the left margin, outside the photo bounds.
+                photo.setClipChildren(false);
+                photo.setClipToPadding(false);
                 photo.setBackground(round(0xfff1e7db, 10));
                 if (key != null) {
                     showPhotoLoading(photo);

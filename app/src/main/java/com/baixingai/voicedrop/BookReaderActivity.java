@@ -118,7 +118,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         // WebView does not save attachment responses itself. The in-page PDF link is
-        // therefore routed to the same native downloader as the toolbar menu.
+        // therefore routed to the native PDF downloader.
         web.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             if (url != null && url.startsWith("https://jianshuo.dev/agent/books/pdf/")) {
                 downloadBookPdf();
@@ -208,14 +208,6 @@ public final class BookReaderActivity extends VoiceDropActivity {
             addMenuDivider(menu);
         }
 
-        LinearLayout downloadRow = bookMenuRow("下载 PDF", RemixIconGlyph.DOWNLOAD, Theme.ACCENT);
-        downloadRow.setOnClickListener(ignored -> {
-            if (popupRef[0] != null) popupRef[0].dismiss();
-            downloadBookPdf();
-        });
-        menu.addView(downloadRow);
-        addMenuDivider(menu);
-
         LinearLayout shareRow = bookMenuRow("分享", RemixIconGlyph.SHARE_FORWARD, Theme.SECONDARY);
         shareRow.setOnClickListener(ignored -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
@@ -262,7 +254,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
                 bookPdfDownloading = false;
                 if (isFinishing() || isDestroyed()) return;
                 // fetchBookPdf returns only after MediaStore has published the file.
-                // Do not launch a viewer here: this menu action promises a download.
+                // Do not launch a viewer here: the page action promises a download.
                 if (!result) {
                     SimpleToast.show(this, I18n.text(this, "下载失败，请检查网络后重试"));
                     return;

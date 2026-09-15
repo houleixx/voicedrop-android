@@ -28,6 +28,7 @@ public final class IosDialog extends Dialog {
     private View bottomSheetCard;
     private boolean bottomSheetExitAnimating;
     private Runnable bottomSheetExitCompletion;
+    private int actionColor = Theme.RED;
 
     public IosDialog(Context context) {
         super(context, android.R.style.Theme_Translucent_NoTitleBar);
@@ -107,6 +108,14 @@ public final class IosDialog extends Dialog {
         show(ctx, title, message, "好", null);
     }
 
+    /** Message dialog with a feature-specific action color. */
+    public static void show(Context ctx, String title, String message, int actionColor) {
+        IosDialog dialog = new IosDialog(ctx);
+        dialog.actionColor = actionColor;
+        dialog.build(ctx, title, message, dp(ctx, 200), "好", null, null, null);
+        dialog.show();
+    }
+
     /** Two-button dialog (positive + cancel) */
     public static void show(Context ctx, String title, String message,
                             String positiveText, Runnable onPositive) {
@@ -152,7 +161,14 @@ public final class IosDialog extends Dialog {
     public static IosDialog showConfirmation(Context ctx, String title, String message,
                                              String positiveText, Runnable onPositive,
                                              String cancelText, Runnable onCancel) {
+        return showConfirmation(ctx, title, message, positiveText, onPositive, cancelText, onCancel, Theme.RED);
+    }
+
+    public static IosDialog showConfirmation(Context ctx, String title, String message,
+                                             String positiveText, Runnable onPositive,
+                                             String cancelText, Runnable onCancel, int actionColor) {
         IosDialog dialog = new IosDialog(ctx);
+        dialog.actionColor = actionColor;
         dialog.setCancelable(false);
         dialog.setCanceledOnTouchOutside(false);
         dialog.build(ctx, title, message, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -510,7 +526,7 @@ public final class IosDialog extends Dialog {
 
             if (includeDefaultCancelButton) {
                 // Cancel button (middle)
-                btnRow.addView(makeButton(ctx, "取消", Theme.RED, v -> dismiss()),
+                btnRow.addView(makeButton(ctx, "取消", actionColor, v -> dismiss()),
                         new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
                 // Divider
                 View midDiv2 = new View(ctx);
@@ -518,7 +534,7 @@ public final class IosDialog extends Dialog {
                 btnRow.addView(midDiv2, new LinearLayout.LayoutParams(dp(ctx, 1), -1));
             }
             // Positive button (right)
-            btnRow.addView(makeButton(ctx, positiveText, Theme.RED, v -> {
+            btnRow.addView(makeButton(ctx, positiveText, actionColor, v -> {
                 dismiss();
                 if (onPositive != null) onPositive.run();
             }), new LinearLayout.LayoutParams(0, dp(ctx, 50), 1));
@@ -529,7 +545,7 @@ public final class IosDialog extends Dialog {
                 dismiss();
                 if (onPositive != null) onPositive.run();
             })
-                    : makeButton(ctx, positiveText, Theme.RED, v -> {
+                    : makeButton(ctx, positiveText, actionColor, v -> {
                 dismiss();
                 if (onPositive != null) onPositive.run();
             })), new LinearLayout.LayoutParams(-1, dp(ctx, bottomSheet ? 56 : 50)));

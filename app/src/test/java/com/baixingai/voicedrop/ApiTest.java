@@ -13,6 +13,7 @@ public class ApiTest {
         assertEquals("https://voicedrop-test.pages.dev/files/api", Api.filesBase());
         assertEquals("https://voicedrop-test.pages.dev/files/api", Api.photoBase());
         assertEquals("https://voicedrop-agent-test.houleixx.workers.dev/agent", Api.agentBase());
+        assertEquals("https://voicedrop-agent-test.houleixx.workers.dev/agent/wechat-pay/product", Api.wechatProductUrl());
         assertEquals("https://voicedrop-reco-test.houleixx.workers.dev/reco", Api.recoBase());
         assertEquals("wss://voicedrop-agent-test.houleixx.workers.dev/agent", Api.agentWs());
         assertEquals("https://voicedrop-test.pages.dev/voicedrop", Api.publicWebBase());

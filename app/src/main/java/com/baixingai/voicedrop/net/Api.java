@@ -33,6 +33,10 @@ public final class Api {
         return "https://" + host() + "/agent";
     }
 
+    public static String wechatProductUrl() {
+        return agentBase() + "/wechat-pay/product";
+    }
+
     public static String recoBase() {
         if (isTestEnvironment()) return "https://" + TEST_RECO_HOST + "/reco";
         return "https://" + host() + "/reco";

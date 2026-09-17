@@ -14,9 +14,15 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.SystemClock;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewOutlineProvider;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -29,6 +35,8 @@ import com.baixingai.voicedrop.BookReaderActivity;
 import com.baixingai.voicedrop.BookWritingActivity;
 import com.baixingai.voicedrop.core.BookShelfIndex;
 import com.baixingai.voicedrop.core.BookShelfLoadingPolicy;
+import com.baixingai.voicedrop.core.BookShelfSearch;
+import com.baixingai.voicedrop.core.BookShelfSearchState;
 import com.baixingai.voicedrop.data.AuthStore;
 import com.baixingai.voicedrop.data.BookShelfCache;
 import com.baixingai.voicedrop.data.BookCoverLoader;
@@ -36,6 +44,7 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,6 +60,16 @@ public final class BooksShelfPanel extends LinearLayout {
     private BookShelfCache shelfCache;
     private List<BookShelfIndex.Book> books = new ArrayList<>();
     private boolean initialLoadPending;
+    private boolean shelfFailed;
+    private boolean disposed;
+    private boolean searching;
+    private String query = "";
+    private String selectedFilter = BookShelfSearch.ALL;
+    private List<BookShelfSearch.Match> visible = new ArrayList<>();
+    private final BookShelfSearchState searchState = new BookShelfSearchState();
+    private final LinearLayout filterRow;
+    private final TextView searchStatus;
+    private final Runnable searchRequest = this::loadSearchIndex;
 
     public BooksShelfPanel(Context context) {
         super(context);
@@ -59,6 +78,17 @@ public final class BooksShelfPanel extends LinearLayout {
         auth = new AuthStore(context);
         shelfCache = new BookShelfCache(context, auth.libraryCacheIdentity());
         coverLoader = new BookCoverLoader(context);
+
+        filterRow = new LinearLayout(context);
+        filterRow.setOrientation(HORIZONTAL);
+        filterRow.setGravity(Gravity.CENTER_VERTICAL);
+        filterRow.setPadding(dp(18), 0, dp(18), 0);
+        filterRow.setBackgroundColor(Theme.FILTER_BG);
+        addView(filterRow, new LinearLayout.LayoutParams(-1, dp(44)));
+        searchStatus = text("", 12, Theme.SECONDARY, Typeface.NORMAL, false);
+        searchStatus.setPadding(dp(20), dp(2), dp(20), dp(6));
+        searchStatus.setVisibility(GONE);
+        addView(searchStatus, new LinearLayout.LayoutParams(-1, -2));
 
         refresher = new PullRefreshLayout(context);
         shelves = new RecyclerView(context);
@@ -81,14 +111,19 @@ public final class BooksShelfPanel extends LinearLayout {
     }
 
     private void load(boolean quiet) {
+        if (disposed) return;
+        removeCallbacks(searchRequest);
+        long requestGeneration = searchState.invalidate();
+        shelfFailed = false;
         if (!quiet) refresher.setRefreshing(true);
         String requestIdentity = auth.libraryCacheIdentity();
         if (!shelfCache.matches(requestIdentity)) {
             shelfCache = new BookShelfCache(getContext(), requestIdentity);
             books = BookShelfIndex.parse(shelfCache.read());
             initialLoadPending = books.isEmpty();
-            render();
+            selectedFilter = BookShelfSearch.ALL;
         }
+        render();
         BookShelfCache requestCache = shelfCache;
         String bearer = auth.bearer();
         io.execute(() -> {
@@ -100,9 +135,9 @@ public final class BooksShelfPanel extends LinearLayout {
             } catch (Exception ignored) {}
             String result = raw;
             post(() -> {
+                if (disposed || !searchState.isCurrent(requestGeneration)) return;
                 if (!requestCache.matches(auth.libraryCacheIdentity())) {
                     refreshForCurrentAccount();
-                    refresher.setRefreshing(false);
                     return;
                 }
                 shelfCache = requestCache;
@@ -110,29 +145,172 @@ public final class BooksShelfPanel extends LinearLayout {
                     requestCache.store(result);
                     books = BookShelfIndex.parse(result);
                 }
+                shelfFailed = result == null;
                 initialLoadPending = false;
                 render();
                 refresher.setRefreshing(false);
+                scheduleSearch();
             });
         });
     }
 
     /** Called by the hosting activity after login, logout, or an account import. */
     public void refreshForCurrentAccount() {
-        String identity = auth.libraryCacheIdentity();
-        if (!shelfCache.matches(identity)) {
-            shelfCache = new BookShelfCache(getContext(), identity);
-            books = BookShelfIndex.parse(shelfCache.read());
-            initialLoadPending = books.isEmpty();
-            render();
-        }
         load(true);
     }
 
+    private void scheduleSearch() {
+        removeCallbacks(searchRequest);
+        if (disposed || BookShelfSearch.query(query).isEmpty() || searchState.index() != null
+                || searchState.loading()) return;
+        postDelayed(searchRequest, Math.max(300, searchState.retryDelay(SystemClock.uptimeMillis())));
+    }
+
+    private void loadSearchIndex() {
+        if (disposed || BookShelfSearch.query(query).isEmpty()) return;
+        if (!shelfCache.matches(auth.libraryCacheIdentity())) {
+            refreshForCurrentAccount();
+            return;
+        }
+        long request = searchState.begin(SystemClock.uptimeMillis());
+        if (request < 0) return;
+        String requestIdentity = auth.libraryCacheIdentity();
+        String bearer = auth.bearer();
+        render();
+        io.execute(() -> {
+            Map<String, BookShelfSearch.Entry> parsed = null;
+            try {
+                HttpClient.Response response = new HttpClient().get(
+                        Api.publicWebBase() + "/books/?format=search", bearer);
+                if (response.ok()) parsed = BookShelfSearch.parse(response.text());
+            } catch (Exception ignored) {}
+            Map<String, BookShelfSearch.Entry> result = parsed;
+            post(() -> {
+                if (disposed || !searchState.isCurrent(request)) return;
+                if (!requestIdentity.equals(auth.libraryCacheIdentity())) {
+                    refreshForCurrentAccount();
+                    return;
+                }
+                if (searchState.complete(request, result, SystemClock.uptimeMillis())) render();
+            });
+        });
+    }
+
     private void render() {
+        List<String> filters = BookShelfSearch.filters(books);
+        if (!filters.contains(selectedFilter)) selectedFilter = BookShelfSearch.ALL;
+        if (!searching) buildFilters(filters);
+        visible = BookShelfSearch.select(books, selectedFilter, query, searchState.index());
+        String status = !hasQuery() ? "" : searchState.loading() ? "正在翻章节…"
+                : searchState.failed() ? "章节暂时加载失败，已按书名、作者搜索；继续输入或下拉刷新重试" : "";
+        searchStatus.setText(I18n.text(getContext(), status));
+        searchStatus.setVisibility(status.isEmpty() ? GONE : VISIBLE);
         coverLoader.cancelAll();
         shelfAdapter.notifyDataSetChanged();
     }
+
+    private boolean hasQuery() { return !BookShelfSearch.query(query).isEmpty(); }
+
+    private void buildFilters(List<String> filters) {
+        filterRow.removeAllViews();
+        HorizontalScrollView scroll = new HorizontalScrollView(getContext());
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout tabs = new LinearLayout(getContext());
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        for (String filter : filters) {
+            boolean active = filter.equals(selectedFilter);
+            TextView tab = text(filter, 15, active ? Theme.INK : Theme.SECONDARY,
+                    active ? Typeface.BOLD : Typeface.NORMAL, false);
+            tab.setGravity(Gravity.CENTER);
+            tab.setPadding(0, 0, dp(18), 0);
+            tab.setSelected(active);
+            tab.setOnClickListener(v -> {
+                selectedFilter = filter;
+                render();
+                shelves.scrollToPosition(0);
+            });
+            tabs.addView(tab, new LinearLayout.LayoutParams(-2, dp(44)));
+        }
+        scroll.addView(tabs);
+        filterRow.addView(scroll, new LinearLayout.LayoutParams(0, -1, 1));
+        TextView search = text("⌕", 24, Theme.SECONDARY, Typeface.NORMAL, false);
+        search.setGravity(Gravity.CENTER);
+        search.setContentDescription(I18n.text(getContext(), "搜索书架"));
+        search.setOnClickListener(v -> showSearch());
+        filterRow.addView(search, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        // Rebuilding the dynamic category list must not scroll a selected trailing tab out of sight.
+        scroll.post(() -> {
+            int index = filters.indexOf(selectedFilter);
+            View active = tabs.getChildAt(index);
+            if (active != null) scroll.scrollTo(Math.max(0, active.getRight() - scroll.getWidth()), 0);
+        });
+    }
+
+    private void showSearch() {
+        searching = true;
+        filterRow.removeAllViews();
+        EditText input = new EditText(getContext());
+        input.setSingleLine(true);
+        input.setTextSize(14);
+        input.setTextColor(Theme.INK);
+        input.setHintTextColor(Theme.SECONDARY);
+        input.setHint(I18n.text(getContext(), "搜书名、作者、章节"));
+        input.setContentDescription(I18n.text(getContext(), "搜书名、作者、章节"));
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        // Reserve room for the clear control inside the rounded input background.
+        input.setPadding(dp(12), 0, dp(44), 0);
+        GradientDrawable background = round(Theme.CARD, 20);
+        background.setStroke(dp(1), 0xffded5c8);
+        input.setBackground(background);
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                query = s.toString();
+                render();
+                shelves.scrollToPosition(0);
+                scheduleSearch();
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+        FrameLayout searchField = new FrameLayout(getContext());
+        searchField.addView(input, new FrameLayout.LayoutParams(-1, dp(36), Gravity.CENTER_VERTICAL));
+        TextView clear = text("×", 22, Theme.SECONDARY, Typeface.NORMAL, false);
+        clear.setGravity(Gravity.CENTER);
+        clear.setContentDescription(I18n.text(getContext(), "清空"));
+        clear.setOnClickListener(v -> input.setText(""));
+        searchField.addView(clear, new FrameLayout.LayoutParams(dp(40), dp(44), Gravity.END | Gravity.CENTER_VERTICAL));
+        filterRow.addView(searchField, new LinearLayout.LayoutParams(0, dp(44), 1));
+        TextView cancel = text("取消", 14, Theme.INK, Typeface.NORMAL, false);
+        cancel.setGravity(Gravity.CENTER);
+        cancel.setOnClickListener(v -> {
+            InputMethodManager keyboard = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.hideSoftInputFromWindow(input.getWindowToken(), 0);
+            input.clearFocus();
+            searching = false;
+            query = "";
+            removeCallbacks(searchRequest);
+            render();
+        });
+        filterRow.addView(cancel, new LinearLayout.LayoutParams(dp(52), dp(40)));
+        input.requestFocus();
+        input.post(() -> {
+            InputMethodManager keyboard = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null && searching && !disposed) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    private String emptyHint() {
+        if (!visible.isEmpty()) return null;
+        if (shelfFailed && books.isEmpty()) return "书架没加载出来，下拉刷新重试";
+        if (hasQuery()) return searchState.loading() ? "正在翻章节…"
+                : I18n.format(getContext(), "没有找到「%s」", BookShelfSearch.query(query));
+        if (BookShelfSearch.MINE.equals(selectedFilter)) return !auth.bearer().isEmpty()
+                ? "还没有你的书，点「写书」开始" : "登录后这里是你写的书";
+        return "书架还没有书，点「写书」开始";
+    }
+
+    private int cellCount() { return visible.size() + (hasQuery() ? 0 : 1); }
+    private int shelfRowCount() { return (cellCount() + 1) / 2; }
 
     private LinearLayout.LayoutParams weightedCellParams(int leftMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1f);
@@ -144,15 +322,16 @@ public final class BooksShelfPanel extends LinearLayout {
     private final class ShelfAdapter extends RecyclerView.Adapter<ShelfRowHolder> {
         private static final int TYPE_LOADING = 0;
         private static final int TYPE_SHELF_ROW = 1;
+        private static final int TYPE_EMPTY = 2;
 
         @Override public int getItemViewType(int position) {
             return BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())
-                    ? TYPE_LOADING : TYPE_SHELF_ROW;
+                    ? TYPE_LOADING : position >= shelfRowCount() ? TYPE_EMPTY : TYPE_SHELF_ROW;
         }
 
         @Override public ShelfRowHolder onCreateViewHolder(android.view.ViewGroup parent,
                                                             int viewType) {
-            if (viewType == TYPE_LOADING) {
+            if (viewType == TYPE_LOADING || viewType == TYPE_EMPTY) {
                 TextView loading = text("正在整理书架…", 14, Theme.SECONDARY, Typeface.NORMAL, false);
                 loading.setGravity(Gravity.CENTER);
                 loading.setLayoutParams(new RecyclerView.LayoutParams(-1, dp(220)));
@@ -166,6 +345,10 @@ public final class BooksShelfPanel extends LinearLayout {
         }
 
         @Override public void onBindViewHolder(ShelfRowHolder holder, int position) {
+            if (getItemViewType(position) == TYPE_EMPTY) {
+                ((TextView) holder.itemView).setText(I18n.text(getContext(), emptyHint()));
+                return;
+            }
             if (getItemViewType(position) != TYPE_SHELF_ROW) return;
             LinearLayout item = (LinearLayout) holder.itemView;
             item.removeAllViews();
@@ -175,7 +358,7 @@ public final class BooksShelfPanel extends LinearLayout {
             row.setGravity(Gravity.TOP);
             row.setClipChildren(false);
             row.addView(cellAt(firstCell), weightedCellParams(0));
-            if (firstCell + 1 <= books.size()) {
+            if (firstCell + 1 < cellCount()) {
                 row.addView(cellAt(firstCell + 1), weightedCellParams(dp(22)));
             } else {
                 row.addView(new View(getContext()), weightedCellParams(dp(22)));
@@ -188,12 +371,14 @@ public final class BooksShelfPanel extends LinearLayout {
             if (BookShelfLoadingPolicy.shouldShowExclusiveLoading(initialLoadPending, books.size())) {
                 return 1;
             }
-            return (books.size() + 2) / 2;
+            return shelfRowCount() + (emptyHint() == null ? 0 : 1);
         }
     }
 
     private View cellAt(int index) {
-        return index == 0 ? writeCell() : bookCell(books.get(index - 1));
+        if (!hasQuery() && index == 0) return writeCell();
+        BookShelfSearch.Match match = visible.get(index - (hasQuery() ? 0 : 1));
+        return bookCell(match.book, match.chapter);
     }
 
     private static final class ShelfRowHolder extends RecyclerView.ViewHolder {
@@ -237,7 +422,7 @@ public final class BooksShelfPanel extends LinearLayout {
         return cell;
     }
 
-    private View bookCell(BookShelfIndex.Book book) {
+    private View bookCell(BookShelfIndex.Book book, String chapterHit) {
         LinearLayout cell = cellContainer();
         cell.setOnClickListener(v -> {
             if (getContext() instanceof Activity) {
@@ -257,7 +442,14 @@ public final class BooksShelfPanel extends LinearLayout {
         if (book.hidden) addHiddenBadge(cover);
         cell.addView(cover, new LinearLayout.LayoutParams(-1, -2));
         String meta = book.chapters > 0 ? I18n.format(getContext(), "%d 章", book.chapters) : book.sub;
+        if (!book.category.isEmpty()) meta = (meta == null || meta.isEmpty() ? "" : meta + " · ") + I18n.text(getContext(), book.category);
         cell.addView(caption(book.main, meta == null || meta.isEmpty() ? " " : meta), captionParams());
+        if (!chapterHit.isEmpty()) {
+            TextView hit = text(I18n.format(getContext(), "章节：%s", chapterHit), 12, Theme.SECONDARY, Typeface.NORMAL, false);
+            hit.setMaxLines(2);
+            hit.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            cell.addView(hit, new LinearLayout.LayoutParams(-1, -2));
+        }
         return cell;
     }
 
@@ -366,6 +558,9 @@ public final class BooksShelfPanel extends LinearLayout {
     private int dpF(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     @Override protected void onDetachedFromWindow() {
+        disposed = true;
+        removeCallbacks(searchRequest);
+        searchState.invalidate();
         coverLoader.cancelAll();
         coverLoader.shutdown();
         io.shutdownNow();

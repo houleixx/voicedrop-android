@@ -26,24 +26,32 @@ public final class BookShelfIndex {
                         Math.max(0, item.optInt("chapters", 0)), item.optString("author", ""),
                         Math.max(0L, item.optLong("createdAt", 0L)),
                         Math.max(0L, item.optLong("coverAt", 0L)),
-                        item.optBoolean("hidden", false), item.optBoolean("mine", false)));
+                        item.optBoolean("hidden", false), Boolean.TRUE.equals(item.opt("mine")),
+                        item.opt("category") instanceof String ? item.optString("category") : ""));
             }
         } catch (Exception ignored) {}
         return out;
     }
 
     public static final class Book {
-        public final String slug, title, main, sub, c, c2, author;
+        public final String slug, title, main, sub, c, c2, author, category;
         public final boolean cover, hidden, mine;
         public final int chapters;
         public final long createdAt, coverAt;
         public Book(String slug, String title, String main, String sub, String c, String c2,
                     boolean cover, int chapters, String author, long createdAt, long coverAt,
                     boolean hidden, boolean mine) {
+            this(slug, title, main, sub, c, c2, cover, chapters, author, createdAt, coverAt,
+                    hidden, mine, "");
+        }
+        public Book(String slug, String title, String main, String sub, String c, String c2,
+                    boolean cover, int chapters, String author, long createdAt, long coverAt,
+                    boolean hidden, boolean mine, String category) {
             this.slug = slug; this.title = title; this.main = main; this.sub = sub;
             this.c = c; this.c2 = c2; this.cover = cover; this.chapters = chapters;
             this.author = author == null ? "" : author; this.createdAt = createdAt;
             this.coverAt = coverAt; this.hidden = hidden; this.mine = mine;
+            this.category = category == null ? "" : category;
         }
         public String readerUrl(String publicWebBase) {
             return publicWebBase + "/books/" + slug + "/";

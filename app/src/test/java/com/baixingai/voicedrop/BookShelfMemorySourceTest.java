@@ -16,7 +16,7 @@ public final class BookShelfMemorySourceTest {
         assertTrue(source.contains("new LinearLayoutManager(context)"));
         assertTrue(source.contains("private final ShelfAdapter shelfAdapter;"));
         assertTrue(source.contains("private final class ShelfAdapter extends RecyclerView.Adapter"));
-        assertTrue(source.contains("return (books.size() + 2) / 2;"));
+        assertTrue(source.contains("return (cellCount() + 1) / 2;"));
         assertTrue(source.contains("onBindViewHolder"));
         assertTrue(!source.contains("BOOKS_PER_PAGE"));
         assertTrue(!source.contains("addMoreBooksAction"));

@@ -4,6 +4,19 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class BookShelfIndexTest {
+    @Test public void ownershipRequiresTrueAndCategorySupportsLegacyAndNullValues() {
+        java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
+                "{\"slug\":\"a\",\"mine\":true,\"category\":\"AI\"}," +
+                "{\"slug\":\"b\",\"mine\":\"true\",\"category\":null}," +
+                "{\"slug\":\"c\",\"mine\":1},{\"slug\":\"d\"}]}");
+        assertTrue(books.get(0).mine);
+        assertEquals("AI", books.get(0).category);
+        for (int i = 1; i < books.size(); i++) {
+            assertFalse(books.get(i).mine);
+            assertEquals("", books.get(i).category);
+        }
+    }
+
     @Test public void parsesIosShelfContractAndSkipsMissingSlug() {
         java.util.List<BookShelfIndex.Book> books = BookShelfIndex.parse("{\"books\":[" +
                 "{\"slug\":\"a-book\",\"main\":\"主标题\",\"sub\":\"副标题\",\"c\":\"#111111\",\"c2\":\"#222222\",\"cover\":true,\"coverAt\":456,\"chapters\":7,\"author\":\"作者\",\"createdAt\":123},{}]}");

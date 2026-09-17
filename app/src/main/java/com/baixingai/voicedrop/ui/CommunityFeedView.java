@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -63,7 +64,7 @@ public final class CommunityFeedView extends LinearLayout {
         this.feed = feed == null ? CommunityStore.Feed.empty() : feed;
         this.listener = listener;
         setOrientation(VERTICAL);
-        setBackgroundColor(0xfff3efe7);
+        setBackgroundColor(Theme.FILTER_BG);
 
         tabRow = buildTabs();
         addView(tabRow, new LayoutParams(-1, dp(44)));
@@ -124,7 +125,7 @@ public final class CommunityFeedView extends LinearLayout {
         input.setTextColor(Theme.INK);
         input.setHintTextColor(Theme.SECONDARY);
         input.setHint(I18n.text(getContext(), "搜索标题、作者或内容"));
-        input.setPadding(dp(12), 0, dp(12), 0);
+        input.setPadding(dp(12), 0, dp(44), 0);
         GradientDrawable inputBackground = new GradientDrawable();
         inputBackground.setColor(Theme.CARD);
         inputBackground.setCornerRadius(dp(20));
@@ -138,7 +139,14 @@ public final class CommunityFeedView extends LinearLayout {
             }
             @Override public void afterTextChanged(Editable s) {}
         });
-        tabRow.addView(input, new LayoutParams(0, dp(36), 1));
+        FrameLayout searchField = new FrameLayout(getContext());
+        searchField.addView(input, new FrameLayout.LayoutParams(-1, dp(36), Gravity.CENTER_VERTICAL));
+        TextView clear = text("×", 22, Theme.SECONDARY, Typeface.NORMAL);
+        clear.setGravity(Gravity.CENTER);
+        clear.setContentDescription(I18n.text(getContext(), "清空"));
+        clear.setOnClickListener(v -> input.setText(""));
+        searchField.addView(clear, new FrameLayout.LayoutParams(dp(40), dp(44), Gravity.END | Gravity.CENTER_VERTICAL));
+        tabRow.addView(searchField, new LayoutParams(0, dp(44), 1));
         TextView cancel = text("取消", 14, Theme.INK, Typeface.NORMAL);
         cancel.setGravity(Gravity.CENTER);
         cancel.setOnClickListener(v -> hideSearch());

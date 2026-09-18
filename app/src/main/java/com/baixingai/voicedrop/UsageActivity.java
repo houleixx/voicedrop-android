@@ -35,9 +35,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.HashMap;
-import com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram;
-import com.tencent.mm.opensdk.modelbiz.WXOpenBusinessWebview;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -486,30 +483,28 @@ public final class UsageActivity extends Activity {
             return;
         }
         boolean sent;
-        if (contract.canLaunchWechat()) {
-            WXLaunchMiniProgram.Req request = new WXLaunchMiniProgram.Req();
-            request.userName = contract.miniProgramUserName;
-            request.path = contract.miniProgramPath;
-            request.miniprogramType = WXLaunchMiniProgram.Req.MINIPTOGRAM_TYPE_RELEASE;
-            request.extData = contract.contractCode;
-            sent = WechatLogin.api(this).sendReq(request);
-        } else if (contract.preEntrustwebId != null && !contract.preEntrustwebId.isEmpty()) {
-            // Old approved templates use OpenBusinessWebview instead of the signing mini program.
-            WXOpenBusinessWebview.Req request = new WXOpenBusinessWebview.Req();
-            request.businessType = 12; // WeChat's approved APP pure-signing business type.
-            request.queryInfo = new HashMap<>();
-            request.queryInfo.put("pre_entrustweb_id", contract.preEntrustwebId);
+        if (contract.appPayParams != null) {
+            WechatSubscriptionStore.AppPayParams p = contract.appPayParams;
+            if (!p.validFor(WechatLogin.APP_ID)) {
+                render(usageLoaded);
+                toast("支付签约参数无效，请刷新重试");
+                return;
+            }
+            com.tencent.mm.opensdk.modelpay.PayReq request = new com.tencent.mm.opensdk.modelpay.PayReq();
+            request.appId = p.appId; request.partnerId = p.partnerId; request.prepayId = p.prepayId;
+            request.packageValue = p.packageValue; request.nonceStr = p.nonceStr;
+            request.timeStamp = p.timeStamp; request.sign = p.sign;
             sent = WechatLogin.api(this).sendReq(request);
         } else {
             render(usageLoaded);
-            IosDialog.show(this, "暂时无法打开微信签约", "服务端尚未返回微信签约会话。请稍后重试。", WechatSubscriptionUi.PRIMARY);
+            IosDialog.show(this, "暂时无法打开微信支付", "服务端尚未返回有效支付参数。请稍后重试。", WechatSubscriptionUi.PRIMARY);
             return;
         }
         render(usageLoaded);
         if (sent) {
             refreshSubscriptionOnResume = true;
             awaitingPurchaseOutcome = true;
-            toast("已打开微信，请确认金额并完成签约");
+            toast("已打开微信，请确认金额并完成首期支付及签约");
         } else {
             render(usageLoaded);
             toast("微信未能打开签约页面，请重试");

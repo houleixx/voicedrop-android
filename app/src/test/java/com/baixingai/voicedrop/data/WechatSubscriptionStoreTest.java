@@ -149,7 +149,7 @@ public final class WechatSubscriptionStoreTest {
     }
 
 
-    @Test public void legacySigningPayloadDoesNotProvideAppPaymentParameters() throws Exception {
+    @Test public void onlyAppPaymentPayloadCanProvidePaymentParameters() throws Exception {
         WechatSubscriptionStore.Contract old = WechatSubscriptionStore.Contract.fromJson(new JSONObject(
                 "{\"contract_code\":\"old\",\"pre_entrustweb_id\":\"old-session\",\"wechat_mini_program_username\":\"gh_old\"}"));
         assertTrue(old.appPayParams == null);
@@ -164,15 +164,5 @@ public final class WechatSubscriptionStoreTest {
         assertEquals("请在微信管理签约", status.actionLabel());
         assertTrue(status.paymentNotice().contains("App 内解约"));
         assertTrue(status.paymentNotice().contains("无需再次付款"));
-    }
-    @Test public void restoresV2SigningParametersExactlyAsReturnedByBackend() throws Exception {
-        WechatSubscriptionStore.Contract c = WechatSubscriptionStore.Contract.fromJson(new JSONObject(
-                "{\"contract_code\":\"VD123\",\"pre_entrustweb_id\":\"pre123\",\"wechat_mini_program_username\":\"gh_sign\",\"wechat_mini_program_path\":\"pages/sign?pre_entrustweb_id=pre123\"}"));
-        assertEquals("VD123", c.contractCode);
-        assertEquals("pre123", c.preEntrustwebId);
-        assertEquals("gh_sign", c.miniProgramUserName);
-        assertEquals("pages/sign?pre_entrustweb_id=pre123", c.miniProgramPath);
-        assertTrue(c.canLaunchWechat());
-        assertTrue(c.appPayParams == null);
     }
 }

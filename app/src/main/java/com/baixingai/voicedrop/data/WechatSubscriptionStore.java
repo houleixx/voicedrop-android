@@ -30,9 +30,9 @@ public final class WechatSubscriptionStore {
         return Status.fromJson(new JSONObject(response.text()), current);
     }
 
-    /** Creates the V2 pure-signing session for the current retest. */
+    /** Creates or resumes the same first-payment-and-contract order. */
     public Contract createContract() throws Exception {
-        HttpClient.Response response = http.postJson(Api.agentBase() + "/wechat-pay/contract", auth.bearer(),
+        HttpClient.Response response = http.postJson(Api.agentBase() + "/wechat-pay/checkout", auth.bearer(),
                 "{}".getBytes(StandardCharsets.UTF_8));
         if (!response.ok()) throw failure(response);
         return Contract.fromJson(new JSONObject(response.text()));
@@ -205,36 +205,18 @@ public final class WechatSubscriptionStore {
 
     public static final class Contract {
         public final String contractCode;
-        public final String preEntrustwebId;
-        public final String miniProgramUserName;
-        public final String miniProgramPath;
         public final long expiresAt;
         public final AppPayParams appPayParams;
 
-        Contract(String contractCode, String preEntrustwebId, String miniProgramUserName,
-                 String miniProgramPath, long expiresAt, AppPayParams appPayParams) {
+        Contract(String contractCode, long expiresAt, AppPayParams appPayParams) {
             this.contractCode = contractCode;
-            this.preEntrustwebId = preEntrustwebId;
-            this.miniProgramUserName = miniProgramUserName;
-            this.miniProgramPath = miniProgramPath;
             this.expiresAt = expiresAt;
             this.appPayParams = appPayParams;
         }
 
-        /**
-         * The backend owns all signed WeChat parameters.  The aliases retain compatibility while
-         * the service migrates from its original response naming to the Android handoff fields.
-         */
         static Contract fromJson(JSONObject body) {
-            return new Contract(nullable(body, "contract_code"), first(body,
-                    "pre_entrustweb_id", "preEntrustwebId"), first(body,
-                    "wechat_mini_program_username", "mini_program_username", "miniProgramUserName"),
-                    first(body, "wechat_mini_program_path", "mini_program_path", "miniProgramPath"),
-                    body.optLong("expires_at", 0), AppPayParams.fromJson(body.optJSONObject("pay_params")));
-        }
-
-        public boolean canLaunchWechat() {
-            return !empty(miniProgramUserName) && !empty(miniProgramPath);
+            return new Contract(nullable(body, "contract_code"), body.optLong("expires_at", 0),
+                    AppPayParams.fromJson(body.optJSONObject("pay_params")));
         }
     }
 
@@ -253,14 +235,6 @@ public final class WechatSubscriptionStore {
                     && !empty(prepayId) && "Sign=WXPay".equals(packageValue) && !empty(nonceStr)
                     && timeStamp != null && timeStamp.matches("[0-9]{10}") && !empty(sign);
         }
-    }
-
-    private static String first(JSONObject body, String... names) {
-        for (String name : names) {
-            String value = nullable(body, name);
-            if (!empty(value)) return value;
-        }
-        return null;
     }
 
     private static String nullable(JSONObject body, String name) {

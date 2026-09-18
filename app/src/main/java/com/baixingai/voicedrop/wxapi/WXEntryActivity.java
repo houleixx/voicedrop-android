@@ -16,7 +16,6 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.tencent.mm.opensdk.modelbase.BaseReq;
 import com.tencent.mm.opensdk.modelbase.BaseResp;
 import com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram;
-import com.tencent.mm.opensdk.modelbiz.WXOpenBusinessWebview;
 import com.tencent.mm.opensdk.modelmsg.SendAuth;
 import com.tencent.mm.opensdk.openapi.IWXAPIEventHandler;
 
@@ -47,10 +46,8 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
 
     @Override
     public void onResp(BaseResp resp) {
-        // The recurring-payment signing flow returns through the normal WeChat entry Activity.
-        // Its authoritative result is the server callback, so UsageActivity refreshes /status
-        // when it resumes instead of trusting a client-side response payload.
-        if (resp instanceof WXLaunchMiniProgram.Resp || resp instanceof WXOpenBusinessWebview.Resp) {
+        // Mini-program sharing can return here; payments use WXPayEntryActivity.
+        if (resp instanceof WXLaunchMiniProgram.Resp) {
             finish();
             return;
         }

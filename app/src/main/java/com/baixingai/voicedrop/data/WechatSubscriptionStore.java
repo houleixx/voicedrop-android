@@ -169,7 +169,7 @@ public final class WechatSubscriptionStore {
             if (renewalStopped) return "本周期续费已暂停";
             if ("payment-failed".equals(paymentIssue)) return "最近一次扣款未完成";
             if (active) return "包月算力已开通";
-            if (canCancel) return "已签约 · 等待扣款";
+            if (canCancel && "active".equals(status)) return "已签约 · 等待扣款";
             if (pending()) return "签约尚未完成";
             if (appleActive) return "已通过 Apple 订阅";
             return "包月算力";

@@ -8,6 +8,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class WechatSubscriptionStoreTest {
+    @Test public void cancellablePendingRequestDoesNotClaimAgreementWasSigned() throws Exception {
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
+                new JSONObject().put("status", "pending").put("can_cancel", true));
+        assertEquals("签约尚未完成", status.displayTitle());
+    }
+
     @Test public void cancellationPendingStopsReopeningWithoutClaimingConfirmedTermination() throws Exception {
         JSONObject body = new JSONObject().put("status", "active").put("active", true).put("can_cancel", true)
                 .put("enabled", true).put("renewal_stopped", true).put("cancel_pending", true);

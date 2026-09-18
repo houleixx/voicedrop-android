@@ -8,6 +8,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class WechatSubscriptionStoreTest {
+    @Test public void cancellationPendingStopsReopeningWithoutClaimingConfirmedTermination() throws Exception {
+        JSONObject body = new JSONObject().put("status", "active").put("active", true).put("can_cancel", true)
+                .put("enabled", true).put("renewal_stopped", true).put("cancel_pending", true);
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body,
+                new JSONObject().put("active", true).put("provider", "wechat"));
+        assertFalse(status.canSubscribe());
+        assertFalse(status.cancelled());
+        assertEquals("正在确认解约结果", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("暂停新的续费申请"));
+        assertTrue(WechatSubscriptionStore.failureMessage("cancel-pending").contains("正在确认"));
+    }
+
     @Test public void appCheckoutResumeAndPaidUnsignedStatus() throws Exception {
         JSONObject shared = new JSONObject("{\"active\":false}");
         JSONObject body = new JSONObject("{\"enabled\":true,\"status\":\"pending\",\"payment_pending\":true,\"checkout_pending\":true,\"amount_fen\":1}");

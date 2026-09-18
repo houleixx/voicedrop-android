@@ -72,6 +72,7 @@ public final class WechatSubscriptionStore {
             case "unauthorized": return "登录状态已失效，请重新登录后再试。";
             case "no-active-contract": return "当前没有可解除的签约，请刷新订阅状态。";
             case "contract-management-unavailable": return "App 内暂不支持解约，请在微信扣费服务中管理。";
+            case "cancel-pending": return "已暂停新的续费申请，正在确认微信解约结果，请稍后刷新。此前已提交的扣款仍可能完成。";
             case "cancel-unavailable": return "暂时无法确认解约结果，请刷新查看，也可在微信扣费服务中管理。";
             case "degraded": return "微信订阅服务暂不可用，请稍后再试。";
             default: return "请求未能完成，请刷新确认当前状态后再试。";
@@ -96,12 +97,14 @@ public final class WechatSubscriptionStore {
         public final boolean checkoutPending;
         public final boolean checkoutPaid;
         public final int amountFen;
+        public final boolean cancelPending;
         public final boolean renewalAvailable;
         public final boolean contractManagementAvailable;
 
         Status(boolean active, boolean enabled, boolean canCancel, String status, String planId, long expiresAt, long scheduledChargeAt, String paymentIssue,
                double subscriptionSuanli, double monthlySuanli, boolean purchaseStatusKnown, boolean appleActive,
-               boolean paymentPending, boolean renewalStopped, boolean checkoutPending, boolean checkoutPaid, int amountFen, boolean renewalAvailable, boolean contractManagementAvailable) {
+               boolean paymentPending, boolean renewalStopped, boolean checkoutPending, boolean checkoutPaid, int amountFen, boolean renewalAvailable, boolean contractManagementAvailable, boolean cancelPending) {
+            this.cancelPending = cancelPending;
             this.active = active;
             this.enabled = enabled;
             this.canCancel = canCancel && contractManagementAvailable;
@@ -127,7 +130,7 @@ public final class WechatSubscriptionStore {
         public boolean cancelled() { return "cancelled".equals(status); }
         public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
         public boolean canSubscribe() {
-            if (!purchaseStatusKnown || appleActive || (checkoutPaid && pending())) return false;
+            if (cancelPending || !purchaseStatusKnown || appleActive || (checkoutPaid && pending())) return false;
             if (checkoutPending) return enabled && (pending() || "active".equals(status));
             return !paymentPending && !canCancel && !"active".equals(status) && (enabled || pending());
         }
@@ -137,6 +140,7 @@ public final class WechatSubscriptionStore {
         }
 
         public String actionLabel() {
+            if (cancelPending) return "解约结果确认中";
             if (!contractManagementAvailable && checkoutPaid && !cancelled()) return "请在微信管理签约";
             if (canSubscribe() && checkoutPending) return "继续支付并签约";
             if (checkoutPaid && pending()) return "等待签约确认";
@@ -154,6 +158,7 @@ public final class WechatSubscriptionStore {
         }
 
         public String displayTitle() {
+            if (cancelPending) return "正在确认解约结果";
             if (cancelled() && !paymentPending) return "自动续费已解除";
             if (!active && checkoutPaid && !renewalAvailable) return "算力周期已到期";
             if (!renewalAvailable && checkoutPaid) return "已付款 · 自动续费暂不可用";
@@ -171,6 +176,7 @@ public final class WechatSubscriptionStore {
         }
 
         public String paymentNotice() {
+            if (cancelPending) return "已暂停新的续费申请，正在确认微信解约结果。已付算力继续有效，此前已提交的订单仍可能完成扣款。请稍后刷新。";
             if (cancelled()) return "自动续费已解除，已付算力保留至各自到期日。重新开通并付款后，新周期衔接剩余有效期；未完成的旧订单仍需先确认结果。";
             if (!active && checkoutPaid && !renewalAvailable) return "已购买的算力周期已到期。请先在微信扣费服务中确认原授权状态，解除后返回刷新再重新开通。";
             if (!renewalAvailable) return (checkoutPaid ? "首期算力已到账，无需再次付款。" : "首期付款成功后发放算力。")
@@ -204,7 +210,7 @@ public final class WechatSubscriptionStore {
                     body.optBoolean("payment_pending", false), body.optBoolean("renewal_stopped", false),
                     body.optBoolean("checkout_pending", false), body.optBoolean("checkout_paid", false),
                     Math.max(1, body.optInt("amount_fen", 1990)),
-                    body.optBoolean("renewal_available", true), body.optBoolean("contract_management_available", true));
+                    body.optBoolean("renewal_available", true), body.optBoolean("contract_management_available", true), body.optBoolean("cancel_pending", false));
         }
     }
 

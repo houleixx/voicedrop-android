@@ -82,7 +82,7 @@ public final class WechatSubscriptionStoreTest {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
                 new JSONObject("{\"status\":\"cancelled\",\"payment_issue\":\"payment-failed\"}"));
         assertEquals("自动续费已解除", status.displayTitle());
-        assertTrue(status.paymentNotice().contains("不再发起新的续费扣款"));
+        assertTrue(status.paymentNotice().contains("自动续费已解除"));
     }
 
     @Test public void paymentFailureMessagesNeverExposeRawProviderDetails() {
@@ -164,5 +164,24 @@ public final class WechatSubscriptionStoreTest {
         assertEquals("请在微信管理签约", status.actionLabel());
         assertTrue(status.paymentNotice().contains("App 内解约"));
         assertTrue(status.paymentNotice().contains("无需再次付款"));
+    }
+
+    @Test public void verifiedCancellationAllowsReopeningDespiteHistoricalFirstPayment() throws Exception {
+        JSONObject body = new JSONObject("{\"active\":true,\"enabled\":true,\"status\":\"cancelled\",\"checkout_paid\":true,\"renewal_available\":false,\"contract_management_available\":false}");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":true,\"provider\":\"wechat\"}"));
+        assertTrue(status.canSubscribe());
+        assertEquals("重新开通", status.actionLabel());
+        assertEquals("自动续费已解除", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("衔接剩余有效期"));
+        body.put("payment_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":false}")).canSubscribe());
+    }
+
+    @Test public void expiredCoverageDoesNotPretendHistoricalPaymentIsStillActive() throws Exception {
+        JSONObject body = new JSONObject("{\"active\":false,\"status\":\"pending\",\"checkout_paid\":true,\"renewal_available\":false,\"contract_management_available\":false}");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":false}"));
+        assertFalse(status.canSubscribe());
+        assertEquals("算力周期已到期", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("原授权状态"));
     }
 }

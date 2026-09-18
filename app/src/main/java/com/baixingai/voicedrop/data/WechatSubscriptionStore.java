@@ -67,6 +67,7 @@ public final class WechatSubscriptionStore {
             case "checkout-unavailable": return "暂时无法创建支付签约订单，请稍后重试。";
             case "payment-pending": return "有一笔扣款正在确认，请稍后刷新。请勿重复开通。";
             case "already-subscribed": return "已有订阅或有效签约，请刷新后管理订阅。";
+            case "contract-status-unavailable": return "算力周期已到期，但原签约状态尚未确认。请在微信扣费服务中查看授权，并返回刷新。";
             case "disabled": return "包月算力暂未开放购买，已有订阅仍可管理。";
             case "unauthorized": return "登录状态已失效，请重新登录后再试。";
             case "no-active-contract": return "当前没有可解除的签约，请刷新订阅状态。";
@@ -136,7 +137,7 @@ public final class WechatSubscriptionStore {
         }
 
         public String actionLabel() {
-            if (!contractManagementAvailable && checkoutPaid) return "请在微信管理签约";
+            if (!contractManagementAvailable && checkoutPaid && !cancelled()) return "请在微信管理签约";
             if (canSubscribe() && checkoutPending) return "继续支付并签约";
             if (checkoutPaid && pending()) return "等待签约确认";
             if (canCancel) return "解除自动续费";
@@ -153,6 +154,8 @@ public final class WechatSubscriptionStore {
         }
 
         public String displayTitle() {
+            if (cancelled() && !paymentPending) return "自动续费已解除";
+            if (!active && checkoutPaid && !renewalAvailable) return "算力周期已到期";
             if (!renewalAvailable && checkoutPaid) return "已付款 · 自动续费暂不可用";
             if (checkoutPaid && pending()) return "已付款 · 自动续费待确认";
             if (checkoutPending) return "首期支付尚未完成";
@@ -168,6 +171,8 @@ public final class WechatSubscriptionStore {
         }
 
         public String paymentNotice() {
+            if (cancelled()) return "自动续费已解除，已付算力保留至各自到期日。重新开通并付款后，新周期衔接剩余有效期；未完成的旧订单仍需先确认结果。";
+            if (!active && checkoutPaid && !renewalAvailable) return "已购买的算力周期已到期。请先在微信扣费服务中确认原授权状态，解除后返回刷新再重新开通。";
             if (!renewalAvailable) return (checkoutPaid ? "首期算力已到账，无需再次付款。" : "首期付款成功后发放算力。")
                     + "当前暂不支持后续自动续费和 App 内解约；请在微信扣费服务中查看或解除授权。";
             if (checkoutPaid && pending()) return "首期算力已到账，自动续费签约尚未确认，请稍后刷新。无需再次付款。";

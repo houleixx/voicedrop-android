@@ -8,6 +8,35 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class WechatSubscriptionStoreTest {
+    @Test public void restorePendingCanResumeButCannotClaimCreditOrAgreementSuccess() throws Exception {
+        JSONObject body = new JSONObject().put("active", true).put("status", "pending").put("can_cancel", true)
+                .put("enabled", true).put("restore_authorization", true).put("contract_code", "new").put("expires_date", 1000);
+        JSONObject shared = new JSONObject().put("active", true).put("provider", "wechat");
+        WechatSubscriptionStore.Status pending = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertTrue(pending.canSubscribe());
+        assertEquals("恢复自动续费", pending.actionLabel());
+        assertFalse(pending.hasNewCoverage(1000));
+        assertFalse(pending.authorizationRestored("new"));
+        body.put("status", "active").put("contract_status_known", true).put("restore_authorization", false);
+        WechatSubscriptionStore.Status confirmed = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertTrue(confirmed.authorizationRestored("new"));
+        assertFalse(confirmed.authorizationRestored("old"));
+        assertFalse(confirmed.hasNewCoverage(1000));
+        body.put("cancel_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, shared).authorizationRestored("new"));
+    }
+
+    @Test public void pureAuthorizationKeepsProviderPathUnchangedAndRejectsMixedPayment() throws Exception {
+        String path = "pages/index?pre_entrustweb_id=a%2Fb&sign_scene=app";
+        JSONObject body = new JSONObject().put("checkout_mode", "restore-authorization").put("contract_code", "new")
+                .put("wechat_mini_program_username", "gh_test").put("wechat_mini_program_path", path);
+        WechatSubscriptionStore.Contract contract = WechatSubscriptionStore.Contract.fromJson(body);
+        assertTrue(contract.validAuthorization());
+        assertEquals(path, contract.miniProgramPath);
+        body.put("pay_params", new JSONObject());
+        assertFalse(WechatSubscriptionStore.Contract.fromJson(body).validAuthorization());
+    }
+
     @Test public void cancellablePendingRequestDoesNotClaimAgreementWasSigned() throws Exception {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
                 new JSONObject().put("status", "pending").put("can_cancel", true));
@@ -190,7 +219,7 @@ public final class WechatSubscriptionStoreTest {
         assertTrue(status.canSubscribe());
         assertEquals("重新开通", status.actionLabel());
         assertEquals("自动续费已解除", status.displayTitle());
-        assertTrue(status.paymentNotice().contains("衔接剩余有效期"));
+        assertTrue(status.paymentNotice().contains("支付新一期费用"));
         body.put("payment_pending", true);
         assertFalse(WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":false}")).canSubscribe());
     }

@@ -58,6 +58,7 @@ public final class UsageActivity extends Activity {
     private boolean resumed;
     private boolean awaitingPurchaseOutcome;
     private long purchaseBaselineExpiry;
+    private String restoringContractCode;
     private Dialog subscriptionDialog;
     private int ledgerGeneration;
     private UsagePageLoader pageLoader;
@@ -81,6 +82,7 @@ public final class UsageActivity extends Activity {
         if (savedInstanceState != null) {
             awaitingPurchaseOutcome = savedInstanceState.getBoolean("awaitingPurchaseOutcome", false);
             purchaseBaselineExpiry = savedInstanceState.getLong("purchaseBaselineExpiry", 0);
+            restoringContractCode = savedInstanceState.getString("restoringContractCode");
         }
         configureEdgeToEdge();
 
@@ -162,6 +164,7 @@ public final class UsageActivity extends Activity {
         outState.putBoolean("wechatSigning", refreshSubscriptionOnResume || watchingPayment);
         outState.putBoolean("awaitingPurchaseOutcome", awaitingPurchaseOutcome);
         outState.putLong("purchaseBaselineExpiry", purchaseBaselineExpiry);
+        outState.putString("restoringContractCode", restoringContractCode);
         super.onSaveInstanceState(outState);
     }
 
@@ -204,13 +207,17 @@ public final class UsageActivity extends Activity {
                 render(usageLoaded);
                 boolean newPayment = subscriptionLoaded && awaitingPurchaseOutcome
                         && subscriptionStatus.hasNewCoverage(purchaseBaselineExpiry);
-                if (newPayment) {
+                boolean restored = subscriptionLoaded && awaitingPurchaseOutcome
+                        && subscriptionStatus.authorizationRestored(restoringContractCode);
+                if (newPayment || restored) {
                     awaitingPurchaseOutcome = false;
                     watchingPayment = false;
                     if (subscriptionDialog != null) subscriptionDialog.dismiss();
-                    subscriptionDialog = WechatSubscriptionUi.showSuccess(this, subscriptionStatus);
+                    if (newPayment) subscriptionDialog = WechatSubscriptionUi.showSuccess(this, subscriptionStatus);
+                    else toast("自动续费授权已恢复，已付权益保持不变");
+                    restoringContractCode = null;
                 }
-                boolean waiting = !newPayment && (watchingPayment || result.subscriptionFailed
+                boolean waiting = !newPayment && !restored && (watchingPayment || result.subscriptionFailed
                         || (subscriptionStatus != null && (subscriptionStatus.paymentPending || subscriptionStatus.pending()
                         || (subscriptionStatus.canCancel && !subscriptionStatus.active
                         && !subscriptionStatus.renewalStopped
@@ -348,7 +355,7 @@ public final class UsageActivity extends Activity {
             card.addView(expiry);
         }
         String buttonLabel = !loaded ? "订阅状态未更新" : subscriptionInProgress ? "正在处理…"
-                : status.checkoutPending && status.canSubscribe() ? status.actionLabel()
+                : (status.checkoutPending || status.restoreAuthorization) && status.canSubscribe() ? status.actionLabel()
                 : status.canCancel ? "管理订阅" : status.actionLabel();
         TextView button = text(buttonLabel, 15, 0xffffffff, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
@@ -367,17 +374,17 @@ public final class UsageActivity extends Activity {
         card.addView(button, btnLp);
         button.setEnabled(canAct);
         button.setOnClickListener(v -> {
-            if (status.canCancel && !status.checkoutPending) {
+            if (status.canCancel && !status.checkoutPending && !status.restoreAuthorization) {
                 subscriptionDialog = WechatSubscriptionUi.showManagement(this, status,
                         () -> confirmWechatCancellation(subscriptionStatus), () -> {
                             if (subscriptionDialog != null) subscriptionDialog.dismiss();
                             load();
                         });
             } else {
-                subscriptionDialog = WechatSubscriptionUi.showPurchase(this, status, this::beginWechatSubscription);
+                subscriptionDialog = WechatSubscriptionUi.showPurchase(this, status, () -> beginWechatSubscription(status.restoreAuthorization));
             }
         });
-        if (loaded && status.canCancel && status.checkoutPending) {
+        if (loaded && status.canCancel && (status.checkoutPending || status.restoreAuthorization)) {
             TextView manage = text("管理自动续费", 13, Theme.AMBER, Typeface.NORMAL);
             manage.setPadding(0, dp(12), 0, dp(12));
             manage.setOnClickListener(v -> confirmWechatCancellation(subscriptionStatus));
@@ -427,7 +434,7 @@ public final class UsageActivity extends Activity {
         });
     }
 
-    private void beginWechatSubscription() {
+    private void beginWechatSubscription(boolean restoreOnly) {
         if (subscriptionInProgress || !resumed || isFinishing() || isDestroyed()) return;
         if (!WechatLogin.api(this).isWXAppInstalled()) {
             IosDialog.show(this, "未安装微信", "请安装微信后再开通包月算力。", WechatSubscriptionUi.PRIMARY);
@@ -452,7 +459,7 @@ public final class UsageActivity extends Activity {
                     });
                     return;
                 }
-                WechatSubscriptionStore.Contract contract = subscriptionStore.createContract();
+                WechatSubscriptionStore.Contract contract = subscriptionStore.createContract(restoreOnly);
                 runOnUiThread(() -> {
                     if (isDestroyed()) return;
                     if (!resumed) { subscriptionInProgress = false; return; }
@@ -483,7 +490,14 @@ public final class UsageActivity extends Activity {
             return;
         }
         boolean sent;
-        if (contract.appPayParams != null) {
+        if (contract.authorizationOnly) {
+            if (!contract.validAuthorization()) { render(usageLoaded); toast("续费授权参数无效，请刷新重试"); return; }
+            com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram.Req request = new com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram.Req();
+            request.userName = contract.miniProgramUsername;
+            request.path = contract.miniProgramPath;
+            request.miniprogramType = com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram.Req.MINIPTOGRAM_TYPE_RELEASE;
+            sent = WechatLogin.api(this).sendReq(request);
+        } else if (contract.appPayParams != null) {
             WechatSubscriptionStore.AppPayParams p = contract.appPayParams;
             if (!p.validFor(WechatLogin.APP_ID)) {
                 render(usageLoaded);
@@ -504,7 +518,8 @@ public final class UsageActivity extends Activity {
         if (sent) {
             refreshSubscriptionOnResume = true;
             awaitingPurchaseOutcome = true;
-            toast("已打开微信，请确认金额并完成首期支付及签约");
+            restoringContractCode = contract.authorizationOnly ? contract.contractCode : null;
+            toast(contract.authorizationOnly ? "已打开微信，请确认恢复自动续费授权" : "已打开微信，请确认金额并完成首期支付及签约");
         } else {
             render(usageLoaded);
             toast("微信未能打开签约页面，请重试");

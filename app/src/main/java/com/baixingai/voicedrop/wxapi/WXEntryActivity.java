@@ -46,7 +46,7 @@ public final class WXEntryActivity extends Activity implements IWXAPIEventHandle
 
     @Override
     public void onResp(BaseResp resp) {
-        // Mini-program sharing can return here; payments use WXPayEntryActivity.
+        // Sharing and authorization restoration return here. UsageActivity refreshes server state on resume; SDK success is not proof of authorization.
         if (resp instanceof WXLaunchMiniProgram.Resp) {
             finish();
             return;

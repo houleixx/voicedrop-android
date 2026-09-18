@@ -35,13 +35,13 @@ public final class WechatSubscriptionUi {
         centered(body, status.priceLabel(), 32, Theme.INK, true);
         centered(body, "每期 " + number(status.monthlySuanli) + " 算力 · 按订阅周期到期", 13, Theme.SECONDARY, false);
         paymentMethod(body);
-        label(body, "首期付款并开通自动续费，订阅价格 " + status.priceLabel() + "，请在微信确认金额。", 13, Theme.SECONDARY, false);
-        label(body, status.renewalAvailable ? "首期在微信确认后支付；续费在到期前第 3 天申请，通常通知 24 小时后扣款。可随时解约，已提交的扣款仍可能完成。" : status.paymentNotice(), 13, Theme.SECONDARY, false);
+        label(body, status.restoreAuthorization ? "本次仅恢复自动续费授权，后续续费价格 " + status.priceLabel() + "。" : "首期付款并开通自动续费，订阅价格 " + status.priceLabel() + "，请在微信确认金额。", 13, Theme.SECONDARY, false);
+        label(body, status.restoreAuthorization ? status.paymentNotice() : status.renewalAvailable ? "首期在微信确认后支付；续费在到期前第 3 天申请，通常通知 24 小时后扣款。可随时解约，已提交的扣款仍可能完成。" : status.paymentNotice(), 13, Theme.SECONDARY, false);
         link(body, "产品介绍  ›", () -> openProduct(activity));
         LinearLayout rules = column(activity);
         rules.setPadding(0, 0, 0, dp(activity, 8));
         if (status.renewalAvailable && status.contractManagementAvailable) section(rules, "完整购买与自动续费须知",
-                "1. 在微信支付首期金额并开通自动续费。首期付款成功后发放算力，自动续费以签约结果为准。\n\n"
+                (status.restoreAuthorization ? "1. 在微信恢复自动续费授权，当前已付算力及有效期不变。如果已到续费申请时间，授权后即可申请下一期扣款。\n\n" : "1. 在微信支付首期金额并开通自动续费。首期付款成功后发放算力，自动续费以签约结果为准。\n\n")
                 + "2. 当前续费计划在到期日前第 3 个北京时间自然日凌晨 2 点申请，通常在通知后 24 小时扣款，实际付款可能早于到期日。\n\n"
                 + "3. 提前续费成功后，新算力立即可用，有效至下一订阅周期结束；旧算力仍按原到期日失效。\n\n"
                 + "4. 可在本页「管理订阅」解除自动续费，也可在微信的扣费服务中管理。卸载应用不会解除签约。\n\n"
@@ -51,7 +51,7 @@ public final class WechatSubscriptionUi {
 
         LinearLayout footer = column(activity);
         footer.setBackgroundColor(Theme.CARD);
-        TextView pay = button(footer, "同意并支付签约", PRIMARY);
+        TextView pay = button(footer, status.restoreAuthorization ? "同意并恢复自动续费" : "同意并支付签约", PRIMARY);
         IosDialog dialog = sheetWithFooter(activity, "确认订阅", body, footer, 520);
         pay.setOnClickListener(v -> {
             if (!pay.isEnabled()) return;

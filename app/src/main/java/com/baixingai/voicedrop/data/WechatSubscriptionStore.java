@@ -136,10 +136,26 @@ public final class WechatSubscriptionStore {
 
         public boolean pending() { return "pending".equals(status); }
         public boolean cancelled() { return "cancelled".equals(status); }
+        public boolean waitingForCoverageExpiry() {
+            // A failed restoration creates a new pending agreement against the old paid period.
+            return active && (cancelled() || (pending() && restoreAuthorization && !checkoutPaid));
+        }
         public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
+        /** Permission to cancel a pending request does not confirm a signed agreement. */
+        public boolean confirmedAgreement() { return contractVerified && "active".equals(status); }
+        public boolean canManageRenewal() { return canCancel && confirmedAgreement(); }
+        public boolean paidWithoutConfirmedRenewal() { return checkoutPaid && pending(); }
+        public boolean needsResultRefresh(long now) {
+            if (waitingForCoverageExpiry() && !paymentPending) return false;
+            return paymentPending || (pending() && !paidWithoutConfirmedRenewal())
+                    || (canManageRenewal() && !active && !renewalStopped && scheduledChargeAt <= now);
+        }
+        public String managementLabel() { return confirmedAgreement() ? "管理订阅" : "查看开通状态"; }
         public boolean canSubscribe() {
-            if (cancelPending || !purchaseStatusKnown || appleActive || (checkoutPaid && pending())) return false;
+            if (waitingForCoverageExpiry()) return false;
+            if (cancelPending || !purchaseStatusKnown || appleActive) return false;
             if (restoreAuthorization && !paymentPending) return enabled && renewalAvailable;
+            if (checkoutPaid && pending()) return false;
             if (checkoutPending) return enabled && (pending() || "active".equals(status));
             return !paymentPending && !canCancel && !"active".equals(status) && (enabled || pending());
         }
@@ -150,11 +166,12 @@ public final class WechatSubscriptionStore {
 
         public String actionLabel() {
             if (cancelPending) return "解约结果确认中";
+            if (waitingForCoverageExpiry()) return "本期到期后可重新开通";
             if (!contractManagementAvailable && checkoutPaid && !cancelled()) return "请在微信管理签约";
-            if (canSubscribe() && restoreAuthorization) return "恢复自动续费";
+            if (canSubscribe() && restoreAuthorization) return authorizationActionLabel();
             if (canSubscribe() && checkoutPending) return "继续支付并签约";
-            if (checkoutPaid && pending()) return "等待签约确认";
-            if (canCancel) return "解除自动续费";
+            if (paidWithoutConfirmedRenewal()) return "刷新状态";
+            if (canManageRenewal()) return "解除自动续费";
             if (appleActive) return "已通过 Apple 订阅";
             if (!purchaseStatusKnown) return "订阅状态暂不可用";
             if (paymentPending) return "扣款结果确认中";
@@ -172,12 +189,17 @@ public final class WechatSubscriptionStore {
                     && "active".equals(status) && !cancelPending && !renewalStopped;
         }
 
+        public String authorizationActionLabel() {
+            return paidWithoutConfirmedRenewal() ? "开通自动续费" : "恢复自动续费";
+        }
+
         public String displayTitle() {
             if (cancelPending) return "正在确认解约结果";
+            if (waitingForCoverageExpiry() && !cancelled()) return "自动续费未开通";
             if (cancelled() && !paymentPending) return "自动续费已解除";
             if (!active && checkoutPaid && !renewalAvailable) return "算力周期已到期";
             if (!renewalAvailable && checkoutPaid) return "已付款 · 自动续费暂不可用";
-            if (checkoutPaid && pending()) return "已付款 · 自动续费待确认";
+            if (paidWithoutConfirmedRenewal()) return active ? "本期算力已到账" : "本期算力已到期";
             if (checkoutPending) return "首期支付尚未完成";
             if (paymentPending) return "扣款结果确认中";
             if (cancelled()) return "自动续费已解除";
@@ -193,12 +215,15 @@ public final class WechatSubscriptionStore {
 
         public String paymentNotice() {
             if (cancelPending) return "已暂停新的续费申请，正在确认微信解约结果。已付算力继续有效，此前已提交的订单仍可能完成扣款。请稍后刷新。";
-            if (restoreAuthorization) return "已付算力保留至原到期日，本次只恢复自动续费授权，不重复购买当前周期。后续按到期前三天的计划申请扣款；若已到计划时间，授权后即可申请下一期扣款。";
+            if (waitingForCoverageExpiry() && !paymentPending) return "自动续费已关闭，本期算力可继续使用至到期。到期后可重新付款，并在支付时开通自动续费。";
+            if (restoreAuthorization) return "已付算力保留至原到期日，本次仅申请自动续费授权，不重复购买当前周期。后续按到期前三天的计划申请扣款；若已到计划时间，授权后即可申请下一期扣款。";
             if (cancelled()) return "自动续费已解除，已付算力保留至各自到期日。权益已到期后，重新开通需支付新一期费用；未完成的旧订单仍需先确认结果。";
             if (!active && checkoutPaid && !renewalAvailable) return "已购买的算力周期已到期。请先在微信扣费服务中确认原授权状态，解除后返回刷新再重新开通。";
             if (!renewalAvailable) return (checkoutPaid ? "首期算力已到账，无需再次付款。" : "首期付款成功后发放算力。")
                     + "当前暂不支持后续自动续费和 App 内解约；请在微信扣费服务中查看或解除授权。";
-            if (checkoutPaid && pending()) return "首期算力已到账，自动续费签约尚未确认，请稍后刷新。无需再次付款。";
+            if (paidWithoutConfirmedRenewal()) return active
+                    ? "本期算力已到账，无需再次付款。仅付款不会开通自动续费；如已在微信授权，请以微信扣费服务中的状态为准。"
+                    : "本期算力已到期。尚未确认自动续费授权，可在微信扣费服务中查看后刷新状态。";
             if (checkoutPending) return "首期订单尚未确认付款。可继续进入微信完成支付并签约，返回后刷新结果。";
             if (paymentPending) return "微信正在处理扣款，以最终支付结果为准。无需重复开通，可稍后刷新查看。";
             if (cancelled()) return "不再发起新的续费扣款。已付算力保留至各自到期日，解约前提交的订单仍可能完成支付。";

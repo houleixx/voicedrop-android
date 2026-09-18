@@ -29,6 +29,7 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.WechatSubscriptionUi;
+import com.baixingai.voicedrop.ui.WechatShareLoadingDialog;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -60,6 +61,9 @@ public final class UsageActivity extends Activity {
     private long purchaseBaselineExpiry;
     private String restoringContractCode;
     private Dialog subscriptionDialog;
+    private Dialog paymentConfirmationDialog;
+    private final Handler paymentFeedbackHandler = new Handler(Looper.getMainLooper());
+    private static final long PAYMENT_CONFIRMATION_TIMEOUT_MS = 30_000;
     private int ledgerGeneration;
     private UsagePageLoader pageLoader;
     private final Handler refreshHandler = new Handler(Looper.getMainLooper());
@@ -146,7 +150,7 @@ public final class UsageActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
-        watchingPayment = refreshSubscriptionOnResume;
+        watchingPayment = awaitingPurchaseOutcome && (refreshSubscriptionOnResume || watchingPayment);
         refreshSubscriptionOnResume = false;
         load();
     }
@@ -154,6 +158,7 @@ public final class UsageActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        dismissPaymentConfirmation();
         refreshSession.stop();
         refreshHandler.removeCallbacksAndMessages(null);
         super.onPause();
@@ -170,6 +175,7 @@ public final class UsageActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        dismissPaymentConfirmation();
         refreshSession.stop();
         refreshHandler.removeCallbacksAndMessages(null);
         if (subscriptionDialog != null) subscriptionDialog.dismiss();
@@ -182,7 +188,31 @@ public final class UsageActivity extends Activity {
         refreshHandler.removeCallbacksAndMessages(null);
         usageRefreshing = true;
         render(usageLoaded);
+        if (watchingPayment && awaitingPurchaseOutcome) showPaymentConfirmation();
         refreshPage(refreshSession.start());
+    }
+
+    private void showPaymentConfirmation() {
+        if (paymentConfirmationDialog != null || !resumed || isFinishing() || isDestroyed()) return;
+        paymentConfirmationDialog = WechatShareLoadingDialog.show(this,
+                restoringContractCode == null ? "正在确认\n支付结果" : "正在确认\n续费授权");
+        // A slow request must not leave the user behind an indefinite modal spinner.
+        paymentFeedbackHandler.postDelayed(() -> {
+            if (paymentConfirmationDialog == null) return;
+            dismissPaymentConfirmation();
+            watchingPayment = false;
+            if (resumed && awaitingPurchaseOutcome) toast(restoringContractCode == null
+                    ? "支付结果仍在确认，请稍后刷新算力，无需重复付款。"
+                    : "授权结果仍在确认，请稍后刷新状态。");
+        }, PAYMENT_CONFIRMATION_TIMEOUT_MS);
+    }
+
+    private void dismissPaymentConfirmation() {
+        paymentFeedbackHandler.removeCallbacksAndMessages(null);
+        if (paymentConfirmationDialog != null) {
+            paymentConfirmationDialog.dismiss();
+            paymentConfirmationDialog = null;
+        }
     }
 
     private void refreshPage(int generation) {
@@ -210,23 +240,26 @@ public final class UsageActivity extends Activity {
                 boolean restored = subscriptionLoaded && awaitingPurchaseOutcome
                         && subscriptionStatus.authorizationRestored(restoringContractCode);
                 if (newPayment || restored) {
+                    dismissPaymentConfirmation();
                     awaitingPurchaseOutcome = false;
                     watchingPayment = false;
                     if (subscriptionDialog != null) subscriptionDialog.dismiss();
                     if (newPayment) subscriptionDialog = WechatSubscriptionUi.showSuccess(this, subscriptionStatus);
-                    else toast("自动续费授权已恢复，已付权益保持不变");
+                    else toast("自动续费已开通，已付权益保持不变");
                     restoringContractCode = null;
                 }
                 boolean waiting = !newPayment && !restored && (watchingPayment || result.subscriptionFailed
-                        || (subscriptionStatus != null && (subscriptionStatus.paymentPending || subscriptionStatus.pending()
-                        || (subscriptionStatus.canCancel && !subscriptionStatus.active
-                        && !subscriptionStatus.renewalStopped
-                        && subscriptionStatus.scheduledChargeAt <= System.currentTimeMillis()))));
+                        || (subscriptionStatus != null && subscriptionStatus.needsResultRefresh(System.currentTimeMillis())));
                 if (refreshSession.completed(generation, waiting)) {
                     refreshHandler.postDelayed(() -> refreshPage(generation), SubscriptionRefreshSession.DELAY_MS);
                 } else {
+                    boolean confirming = paymentConfirmationDialog != null;
+                    dismissPaymentConfirmation();
                     watchingPayment = false;
-                    if (result.usageFailed || result.subscriptionFailed) toast("部分数据未更新，请稍后重新进入此页");
+                    if (confirming && awaitingPurchaseOutcome) toast(restoringContractCode == null
+                            ? "支付结果仍在确认，请稍后刷新算力，无需重复付款。"
+                            : "授权结果仍在确认，请稍后刷新状态。");
+                    else if (result.usageFailed || result.subscriptionFailed) toast("部分数据未更新，请稍后重新进入此页");
                 }
             });
         });
@@ -293,7 +326,7 @@ public final class UsageActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(16));
         card.setBackground(strokedRound(Theme.CARD, 11, Theme.BORDER_CHROME));
-        boolean paid = loaded && status.active && !status.paymentPending && !status.renewalStopped && !status.cancelled();
+        boolean paid = loaded && status.active && !status.paymentPending && !status.renewalStopped && !status.waitingForCoverageExpiry();
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         ImageView icon = new ImageView(this);
@@ -329,15 +362,7 @@ public final class UsageActivity extends Activity {
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, -2, 1);
         labelsLp.setMargins(dp(12), 0, 0, 0);
         row.addView(labels, labelsLp);
-        card.addView(row);
-        if (paid) {
-            View divider = new View(this);
-            divider.setBackgroundColor(Theme.BORDER_CHROME);
-            LinearLayout.LayoutParams line = new LinearLayout.LayoutParams(-1, dp(1));
-            line.topMargin = dp(20);
-            line.bottomMargin = dp(8);
-            card.addView(divider, line);
-        }
+        if (!paid) card.addView(row);
         boolean needsNotice = !loaded || status.appleActive || status.paymentPending || status.renewalStopped
                 || status.cancelled() || status.pending() || "payment-failed".equals(status.paymentIssue)
                 || (status.canCancel && !status.active);
@@ -356,11 +381,12 @@ public final class UsageActivity extends Activity {
         }
         String buttonLabel = !loaded ? "订阅状态未更新" : subscriptionInProgress ? "正在处理…"
                 : (status.checkoutPending || status.restoreAuthorization) && status.canSubscribe() ? status.actionLabel()
-                : status.canCancel ? "管理订阅" : status.actionLabel();
+                : status.canManageRenewal() ? status.managementLabel() : status.actionLabel();
         TextView button = text(buttonLabel, 15, 0xffffffff, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        boolean canAct = loaded && !subscriptionInProgress && (status.canCancel || status.canSubscribe());
-        if (loaded && status.canCancel) {
+        boolean canAct = loaded && !subscriptionInProgress
+                && (status.canManageRenewal() || status.canSubscribe() || status.paidWithoutConfirmedRenewal());
+        if (loaded && status.canManageRenewal()) {
             button.setTextColor(Theme.AMBER);
             button.setBackground(strokedRound(Theme.CARD, 9, Theme.AMBER));
         } else {
@@ -371,10 +397,12 @@ public final class UsageActivity extends Activity {
         button.setPadding(dp(12), dp(8), dp(12), dp(8));
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
         btnLp.topMargin = dp(16);
-        card.addView(button, btnLp);
+        if (!loaded || !status.waitingForCoverageExpiry()) card.addView(button, btnLp);
         button.setEnabled(canAct);
         button.setOnClickListener(v -> {
-            if (status.canCancel && !status.checkoutPending && !status.restoreAuthorization) {
+            if (status.paidWithoutConfirmedRenewal() && !status.canSubscribe()) {
+                load();
+            } else if (status.canManageRenewal() && !status.checkoutPending && !status.restoreAuthorization) {
                 subscriptionDialog = WechatSubscriptionUi.showManagement(this, status,
                         () -> confirmWechatCancellation(subscriptionStatus), () -> {
                             if (subscriptionDialog != null) subscriptionDialog.dismiss();
@@ -384,13 +412,13 @@ public final class UsageActivity extends Activity {
                 subscriptionDialog = WechatSubscriptionUi.showPurchase(this, status, () -> beginWechatSubscription(status.restoreAuthorization));
             }
         });
-        if (loaded && status.canCancel && (status.checkoutPending || status.restoreAuthorization)) {
+        if (loaded && status.canManageRenewal() && (status.checkoutPending || status.restoreAuthorization)) {
             TextView manage = text("管理自动续费", 13, Theme.AMBER, Typeface.NORMAL);
             manage.setPadding(0, dp(12), 0, dp(12));
             manage.setOnClickListener(v -> confirmWechatCancellation(subscriptionStatus));
             card.addView(manage);
         }
-        if (!paid && loaded && status.canSubscribe()) {
+        if (loaded && status.canSubscribe()) {
             TextView terms = text("按订阅周期到期 · 随时可取消自动续费", 12, Theme.SECONDARY, Typeface.NORMAL);
             terms.setGravity(Gravity.CENTER);
             terms.setPadding(0, dp(10), 0, 0);
@@ -400,6 +428,10 @@ public final class UsageActivity extends Activity {
     }
 
     private void confirmWechatCancellation(WechatSubscriptionStore.Status status) {
+        if (!status.canManageRenewal()) {
+            load();
+            return;
+        }
         String until = status.expiresAt > 0 ? "已付算力仍可使用至 " + formatDate(status.expiresAt) + "。" : "已付算力不会立即失效。";
         subscriptionDialog = IosDialog.showConfirmation(this, "解除自动续费", until + "\n\n解除后不再发起新的续费扣款。解约前已提交的订单仍可能完成支付，并正常发放算力。解除自动续费不会自动退款。",
                 "解除", this::cancelWechatSubscription, "暂不解除", null, WechatSubscriptionUi.PRIMARY);
@@ -455,7 +487,7 @@ public final class UsageActivity extends Activity {
                         subscriptionStatus = latest;
                         subscriptionLoaded = true;
                         render(usageLoaded);
-                        toast(latest.canCancel ? "已签约，请刷新查看扣款结果" : latest.actionLabel());
+                        toast(latest.confirmedAgreement() ? "已签约，请刷新查看扣款结果" : latest.actionLabel());
                     });
                     return;
                 }
@@ -519,7 +551,7 @@ public final class UsageActivity extends Activity {
             refreshSubscriptionOnResume = true;
             awaitingPurchaseOutcome = true;
             restoringContractCode = contract.authorizationOnly ? contract.contractCode : null;
-            toast(contract.authorizationOnly ? "已打开微信，请确认恢复自动续费授权" : "已打开微信，请确认金额并完成首期支付及签约");
+            toast(contract.authorizationOnly ? "已打开微信，请确认自动续费授权" : "已打开微信，请确认金额并完成首期支付及签约");
         } else {
             render(usageLoaded);
             toast("微信未能打开签约页面，请重试");

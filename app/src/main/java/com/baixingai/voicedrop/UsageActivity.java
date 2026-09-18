@@ -29,13 +29,10 @@ import com.baixingai.voicedrop.ui.SimpleToast;
 import com.baixingai.voicedrop.ui.SystemBarDefaults;
 import com.baixingai.voicedrop.ui.Theme;
 import com.baixingai.voicedrop.ui.WechatSubscriptionUi;
-import com.tencent.mm.opensdk.modelbiz.WXLaunchMiniProgram;
-import com.tencent.mm.opensdk.modelbiz.WXOpenBusinessWebview;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -307,11 +304,11 @@ public final class UsageActivity extends Activity {
         titleRow.addView(text(loaded ? status.displayTitle() : "包月算力", 16, Theme.INK, Typeface.BOLD),
                 new LinearLayout.LayoutParams(0, -2, 1));
         if (!paid) {
-            TextView price = text("¥19.9/月", 20, Theme.INK, Typeface.BOLD);
-            android.text.SpannableString priceLabel = new android.text.SpannableString("¥19.9/月");
-            priceLabel.setSpan(new android.text.style.RelativeSizeSpan(0.65f), 5, priceLabel.length(),
+            TextView price = text(status.priceLabel(), 20, Theme.INK, Typeface.BOLD);
+            android.text.SpannableString priceLabel = new android.text.SpannableString(status.priceLabel());
+            priceLabel.setSpan(new android.text.style.RelativeSizeSpan(0.65f), priceLabel.length() - 2, priceLabel.length(),
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            priceLabel.setSpan(new android.text.style.ForegroundColorSpan(Theme.SECONDARY), 5, priceLabel.length(),
+            priceLabel.setSpan(new android.text.style.ForegroundColorSpan(Theme.SECONDARY), priceLabel.length() - 2, priceLabel.length(),
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             price.setText(priceLabel);
             LinearLayout.LayoutParams priceLp = new LinearLayout.LayoutParams(-2, -2);
@@ -351,6 +348,7 @@ public final class UsageActivity extends Activity {
             card.addView(expiry);
         }
         String buttonLabel = !loaded ? "订阅状态未更新" : subscriptionInProgress ? "正在处理…"
+                : status.checkoutPending && status.canSubscribe() ? status.actionLabel()
                 : status.canCancel ? "管理订阅" : status.actionLabel();
         TextView button = text(buttonLabel, 15, 0xffffffff, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
@@ -369,7 +367,7 @@ public final class UsageActivity extends Activity {
         card.addView(button, btnLp);
         button.setEnabled(canAct);
         button.setOnClickListener(v -> {
-            if (status.canCancel) {
+            if (status.canCancel && !status.checkoutPending) {
                 subscriptionDialog = WechatSubscriptionUi.showManagement(this, status,
                         () -> confirmWechatCancellation(subscriptionStatus), () -> {
                             if (subscriptionDialog != null) subscriptionDialog.dismiss();
@@ -379,6 +377,12 @@ public final class UsageActivity extends Activity {
                 subscriptionDialog = WechatSubscriptionUi.showPurchase(this, status, this::beginWechatSubscription);
             }
         });
+        if (loaded && status.canCancel && status.checkoutPending) {
+            TextView manage = text("管理自动续费", 13, Theme.AMBER, Typeface.NORMAL);
+            manage.setPadding(0, dp(12), 0, dp(12));
+            manage.setOnClickListener(v -> confirmWechatCancellation(subscriptionStatus));
+            card.addView(manage);
+        }
         if (!paid && loaded && status.canSubscribe()) {
             TextView terms = text("按订阅周期到期 · 随时可取消自动续费", 12, Theme.SECONDARY, Typeface.NORMAL);
             terms.setGravity(Gravity.CENTER);
@@ -479,30 +483,28 @@ public final class UsageActivity extends Activity {
             return;
         }
         boolean sent;
-        if (contract.canLaunchWechat()) {
-            WXLaunchMiniProgram.Req request = new WXLaunchMiniProgram.Req();
-            request.userName = contract.miniProgramUserName;
-            request.path = contract.miniProgramPath;
-            request.miniprogramType = WXLaunchMiniProgram.Req.MINIPTOGRAM_TYPE_RELEASE;
-            request.extData = contract.contractCode;
-            sent = WechatLogin.api(this).sendReq(request);
-        } else if (contract.preEntrustwebId != null && !contract.preEntrustwebId.isEmpty()) {
-            // Old approved templates use OpenBusinessWebview instead of the signing mini program.
-            WXOpenBusinessWebview.Req request = new WXOpenBusinessWebview.Req();
-            request.businessType = 12; // WeChat's approved APP pure-signing business type.
-            request.queryInfo = new HashMap<>();
-            request.queryInfo.put("pre_entrustweb_id", contract.preEntrustwebId);
+        if (contract.appPayParams != null) {
+            WechatSubscriptionStore.AppPayParams p = contract.appPayParams;
+            if (!p.validFor(WechatLogin.APP_ID)) {
+                render(usageLoaded);
+                toast("支付签约参数无效，请刷新重试");
+                return;
+            }
+            com.tencent.mm.opensdk.modelpay.PayReq request = new com.tencent.mm.opensdk.modelpay.PayReq();
+            request.appId = p.appId; request.partnerId = p.partnerId; request.prepayId = p.prepayId;
+            request.packageValue = p.packageValue; request.nonceStr = p.nonceStr;
+            request.timeStamp = p.timeStamp; request.sign = p.sign;
             sent = WechatLogin.api(this).sendReq(request);
         } else {
             render(usageLoaded);
-            IosDialog.show(this, "暂时无法打开微信签约", "服务端尚未返回微信签约会话。请稍后重试。", WechatSubscriptionUi.PRIMARY);
+            IosDialog.show(this, "暂时无法打开微信支付", "服务端尚未返回有效支付参数。请稍后重试。", WechatSubscriptionUi.PRIMARY);
             return;
         }
         render(usageLoaded);
         if (sent) {
             refreshSubscriptionOnResume = true;
             awaitingPurchaseOutcome = true;
-            toast("已打开微信，请确认金额并完成签约");
+            toast("已打开微信，请确认金额并完成首期支付及签约");
         } else {
             render(usageLoaded);
             toast("微信未能打开签约页面，请重试");

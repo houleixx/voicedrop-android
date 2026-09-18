@@ -26,14 +26,14 @@ public final class ApiRouteIntegrationContractTest {
         assertTrue(route.contains("getSharedPreferences"));
     }
 
-    @Test public void publicBookRequestsAreDynamicButShareAndLabUrlsStayFixed() throws Exception {
+    @Test public void publicBookUrlsFollowEnvironmentWhileLabServiceStaysFixed() throws Exception {
         String shelf = read("BooksShelfActivity.java") + read("ui/BooksShelfPanel.java");
         String reader = read("BookReaderActivity.java");
         String writer = read("BookWritingActivity.java") + read("BookReviseBottomSheet.java");
 
         assertTrue(shelf.contains("Api.publicWebBase() + \"/books/?format=json\""));
         assertTrue(reader.contains("web.loadUrl(Api.publicWebBase()"));
-        assertTrue(reader.contains("String root = \"https://voicedrop.cn/books/\""));
+        assertTrue(reader.contains("String root = Api.publicShareBase() + \"/books/\""));
         assertTrue(writer.contains("https://lab.jianshuo.dev/api/book"));
         assertFalse(shelf.contains("https://voicedrop.cn/books/?format=json"));
     }

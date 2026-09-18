@@ -142,6 +142,8 @@
             android:name=".PromptImportActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
+        <activity android:name=".wxapi.WXPayEntryActivity" android:exported="true"
+            android:launchMode="singleTop" android:theme="@style/WechatEntryTheme" />
         <activity
             android:name=".wxapi.WXEntryActivity"
             android:exported="true"

@@ -77,7 +77,8 @@ public final class AppRouter {
         if ("voicedrop.cn".equals(h) || "www.voicedrop.cn".equals(h)) {
             // Entire public VoiceDrop site opens in-app; routable single-token paths
             // become share links, everything else falls back to a web page.
-        } else if ("jianshuo.dev".equals(h) || "www.jianshuo.dev".equals(h)) {
+        } else if ("jianshuo.dev".equals(h) || "www.jianshuo.dev".equals(h)
+                || com.baixingai.voicedrop.net.Api.isTestPublicHost(h)) {
             if (segs.isEmpty() || !"voicedrop".equals(segs.get(0))) return DeepLink.none();
             segs.remove(0);
         } else {

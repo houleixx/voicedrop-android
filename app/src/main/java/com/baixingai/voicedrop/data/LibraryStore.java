@@ -392,7 +392,7 @@ public final class LibraryStore {
         HttpClient.Response response = http.get(Api.filesBase() + "/share/" + Api.path(rec.articleKey()), auth.bearer());
         if (!response.ok()) return null;
         String url = new JSONObject(response.text()).optString("url", "");
-        return url.isEmpty() ? null : url + "?s=" + section;
+        return url.isEmpty() ? null : Api.generatedShareUrl(url) + "?s=" + section;
     }
 
     public LinkTarget resolveShareLink(String id) throws Exception {

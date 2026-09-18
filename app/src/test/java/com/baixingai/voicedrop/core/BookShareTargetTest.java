@@ -6,6 +6,13 @@ import static org.junit.Assert.*;
 public final class BookShareTargetTest {
     private static final String ROOT = "https://voicedrop.cn/books/demo/";
 
+    @Test public void testChapterStaysOnTestHost() {
+        String root = "https://voicedrop-test.baixing.work/voicedrop/books/demo/";
+        String chapter = root + "chapter-2.html?from=reader";
+        assertEquals(chapter, BookShareTarget.resolve(root, chapter, "章节", "书名", "作者").url);
+        assertEquals(root, BookShareTarget.resolve(root, ROOT + "chapter-2.html", "章节", "书名", "作者").url);
+    }
+
     @Test public void sharesTheCurrentTrustedChapterAndItsPageTitle() {
         BookShareTarget.Target target = BookShareTarget.resolve(ROOT,
                 ROOT + "chapter-2.html", "第二章", "书名", "作者");

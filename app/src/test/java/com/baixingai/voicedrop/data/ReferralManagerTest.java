@@ -15,6 +15,17 @@ public class ReferralManagerTest {
     }
 
     @Test
+    public void extractsTestLinksWithoutMatchingLookalikeDomains() {
+        String base = "https://voicedrop-test.baixing.work/voicedrop";
+        assertEquals("abc123", ReferralManager.shareToken("打开 " + base + "/abc123?s=1"));
+        assertEquals("Invite77", ReferralManager.shareToken(base + "/i/Invite77"));
+        assertNull(ReferralManager.shareToken("https://evil.voicedrop-test.baixing.work/voicedrop/abc123"));
+        assertNull(ReferralManager.shareToken("https://voicedrop-test.baixing.work.evil.example/voicedrop/abc123"));
+        assertNull(ReferralManager.shareToken(base + "/abc123/extra"));
+        assertNull(ReferralManager.shareToken(base + "/privacy"));
+    }
+
+    @Test
     public void ignoresStaticAndInvalidPaths() {
         assertNull(ReferralManager.shareToken("https://voicedrop.cn/help"));
         assertNull(ReferralManager.shareToken("https://voicedrop.cn/privacy"));

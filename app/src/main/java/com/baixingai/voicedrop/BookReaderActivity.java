@@ -326,7 +326,7 @@ public final class BookReaderActivity extends Activity {
     private BookShareTarget.Target currentShareTarget() {
         String slug = getIntent().getStringExtra("slug");
         if (slug == null || !slug.matches("[A-Za-z0-9_-]+")) return null;
-        String root = "https://voicedrop.cn/books/" + slug + "/";
+        String root = Api.publicShareBase() + "/books/" + slug + "/";
         String bookTitle = getIntent().getStringExtra("shareTitle");
         if (bookTitle == null || bookTitle.trim().isEmpty()) {
             bookTitle = getIntent().getStringExtra("displayTitle");

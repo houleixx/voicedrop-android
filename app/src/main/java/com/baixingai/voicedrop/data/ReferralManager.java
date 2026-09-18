@@ -21,10 +21,13 @@ public final class ReferralManager {
     private static final long WINDOW_MS = 24L * 60L * 60L * 1000L;
     // 邀请码链接（voicedrop.cn/i/<码>，2026-07-16 上线的「邀请好友」落地页）比分享
     // 短链更窄，先判——与 iOS ReferralManager.shareToken 的模式顺序保持一致。
+    private static final String PUBLIC_LINK_ORIGINS = "(?:www\\.)?(?:voicedrop\\.cn|jianshuo\\.dev/voicedrop)"
+            + (Api.isTestEnvironment() ? "|" + Pattern.quote(Api.publicShareBase().substring("https://".length())) : "");
+    private static final String LINK_PREFIX = "(?<![A-Za-z0-9_./@-])(?:https?://)?(?:" + PUBLIC_LINK_ORIGINS + ")";
     private static final Pattern INVITE = Pattern.compile(
-            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn|jianshuo\\.dev/voicedrop)/i/([A-Za-z0-9]{6,16})(?![A-Za-z0-9_/-])");
+            LINK_PREFIX + "/i/([A-Za-z0-9]{6,16})(?![A-Za-z0-9_/-])");
     private static final Pattern TOKEN = Pattern.compile(
-            "(?:https?://)?(?:www\\.)?(?:voicedrop\\.cn/|jianshuo\\.dev/voicedrop/)([A-Za-z0-9_-]{6,16})");
+            LINK_PREFIX + "/([A-Za-z0-9_-]{6,16})(?![A-Za-z0-9_/-])");
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final java.util.concurrent.atomic.AtomicBoolean LAUNCH_STARTED =
             new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -78,7 +81,7 @@ public final class ReferralManager {
         JSONObject json = new JSONObject(response.text());
         String url = json.optString("url", "").trim();
         if (url.isEmpty()) throw new IllegalStateException("邀请链接暂不可用");
-        return new InviteLink(url, json.optString("name", "").trim(),
+        return new InviteLink(Api.generatedShareUrl(url), json.optString("name", "").trim(),
                 json.optInt("suanliInviter", 0), json.optInt("suanliFriend", 0),
                 json.optInt("suanliFeedAuthor", 0));
     }

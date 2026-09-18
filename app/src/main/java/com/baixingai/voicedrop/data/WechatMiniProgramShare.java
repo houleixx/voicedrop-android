@@ -57,6 +57,10 @@ public final class WechatMiniProgramShare {
 
     public static Result send(Context context, String title, String webpageUrl, String miniProgramPath,
                               Bitmap articleImage, String description) {
+        // The released mini program reads production data; test IDs must open the test website.
+        if (com.baixingai.voicedrop.net.Api.isTestEnvironment()) {
+            return sendFriend(context, title, webpageUrl, articleImage, "打开 VoiceDrop 查看内容");
+        }
         if (!isOriginalId(BuildConfig.VOICEDROP_MINI_PROGRAM_ORIGINAL_ID)) {
             return Result.CONFIGURATION_REQUIRED;
         }

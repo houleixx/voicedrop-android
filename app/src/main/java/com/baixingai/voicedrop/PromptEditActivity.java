@@ -421,7 +421,7 @@ public final class PromptEditActivity extends Activity {
             codeLabel.setPadding(0, dp(12), 0, 0);
             card.addView(codeLabel);
 
-            TextView linkLabel = text("voicedrop.cn/" + state.code, 13, Typeface.NORMAL, Theme.SECONDARY);
+            TextView linkLabel = text(Api.sharePage(state.code).replace("https://", ""), 13, Typeface.NORMAL, Theme.SECONDARY);
             linkLabel.setGravity(Gravity.CENTER);
             linkLabel.setPadding(0, dp(4), 0, 0);
             card.addView(linkLabel);

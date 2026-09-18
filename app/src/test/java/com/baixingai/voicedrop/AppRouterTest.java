@@ -6,6 +6,17 @@ import static org.junit.Assert.*;
 
 public class AppRouterTest {
     @Test
+    public void routesTestPublicLinksUnderTheirPagesPrefix() {
+        String base = "https://voicedrop-test.baixing.work/voicedrop";
+        assertEquals(AppRouter.Kind.SHARE_LINK, AppRouter.parse(base + "/abc123?s=1").kind);
+        assertEquals(AppRouter.Kind.PROMPT_IMPORT, AppRouter.parse(base + "/1234567").kind);
+        assertEquals(AppRouter.Kind.INVITE, AppRouter.parse(base + "/i/Invite77").kind);
+        assertEquals(AppRouter.Kind.BOOKS, AppRouter.parse(base + "/books/").kind);
+        assertEquals(AppRouter.Kind.NONE, AppRouter.parse("https://voicedrop-test.baixing.work/abc123").kind);
+        assertEquals(AppRouter.Kind.NONE, AppRouter.parse("https://voicedrop-test.baixing.work.evil.example/voicedrop/abc123").kind);
+    }
+
+    @Test
     public void parsesVoicedropRoutes() {
         assertEquals(AppRouter.Kind.RECORDINGS, AppRouter.parse("voicedrop://recordings").kind);
         assertEquals(AppRouter.Kind.COMMUNITY, AppRouter.parse("voicedrop://community").kind);

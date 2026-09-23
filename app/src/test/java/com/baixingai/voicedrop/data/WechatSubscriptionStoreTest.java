@@ -8,6 +8,178 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class WechatSubscriptionStoreTest {
+    @Test public void failedRestorationWaitsForExpiryWithoutClaimingCreditOrAgreementSuccess() throws Exception {
+        JSONObject body = new JSONObject().put("active", true).put("status", "pending").put("can_cancel", true)
+                .put("enabled", true).put("restore_authorization", true).put("contract_code", "new").put("expires_date", 1000);
+        JSONObject shared = new JSONObject().put("active", true).put("provider", "wechat");
+        WechatSubscriptionStore.Status pending = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertFalse(pending.canSubscribe());
+        assertTrue(pending.waitingForCoverageExpiry());
+        assertFalse(pending.needsResultRefresh(500));
+        assertEquals("本期到期后可重新开通", pending.actionLabel());
+        assertEquals("自动续费未开通", pending.displayTitle());
+        assertFalse(pending.hasNewCoverage(1000));
+        assertFalse(pending.authorizationRestored("new"));
+        body.put("status", "active").put("contract_status_known", true).put("restore_authorization", false);
+        WechatSubscriptionStore.Status confirmed = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertTrue(confirmed.authorizationRestored("new"));
+        assertFalse(confirmed.authorizationRestored("old"));
+        assertFalse(confirmed.hasNewCoverage(1000));
+        body.put("cancel_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, shared).authorizationRestored("new"));
+    }
+
+    @Test public void pureAuthorizationKeepsProviderPathUnchangedAndRejectsMixedPayment() throws Exception {
+        String path = "pages/index?pre_entrustweb_id=a%2Fb&sign_scene=app";
+        JSONObject body = new JSONObject().put("checkout_mode", "restore-authorization").put("contract_code", "new")
+                .put("wechat_mini_program_username", "gh_test").put("wechat_mini_program_path", path);
+        WechatSubscriptionStore.Contract contract = WechatSubscriptionStore.Contract.fromJson(body);
+        assertTrue(contract.validAuthorization());
+        assertEquals(path, contract.miniProgramPath);
+        body.put("pay_params", new JSONObject());
+        assertFalse(WechatSubscriptionStore.Contract.fromJson(body).validAuthorization());
+    }
+
+    @Test public void cancellablePendingRequestDoesNotClaimAgreementWasSigned() throws Exception {
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
+                new JSONObject().put("status", "pending").put("can_cancel", true), new JSONObject().put("active", false));
+        assertEquals("签约尚未完成", status.displayTitle());
+        assertEquals("继续微信签约", status.actionLabel());
+        assertFalse(status.canManageRenewal());
+    }
+
+    @Test public void unpaidCheckoutKeepsResumeWithoutExposingRenewalManagement() throws Exception {
+        JSONObject body = new JSONObject().put("status", "pending").put("can_cancel", true)
+                .put("enabled", true).put("checkout_pending", true).put("payment_pending", true);
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body,
+                new JSONObject().put("active", false));
+        assertTrue(status.canCancel);
+        assertTrue(status.canSubscribe());
+        assertFalse(status.confirmedAgreement());
+        assertEquals("继续支付并签约", status.actionLabel());
+        assertFalse(status.canManageRenewal());
+        assertEquals("查看开通状态", status.managementLabel());
+    }
+
+    @Test public void confirmedAgreementCanBeManagedEvenBeforePaymentArrives() throws Exception {
+        JSONObject body = new JSONObject().put("status", "active").put("can_cancel", true)
+                .put("active", false).put("contract_status_known", true);
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body);
+        assertTrue(status.confirmedAgreement());
+        assertTrue(status.canManageRenewal());
+        assertEquals("解除自动续费", status.actionLabel());
+        assertEquals("管理订阅", status.managementLabel());
+    }
+
+    @Test public void paidCoverageDoesNotConfirmPendingReplacementAgreement() throws Exception {
+        for (boolean restore : new boolean[]{false, true}) {
+            JSONObject body = new JSONObject().put("status", "pending").put("can_cancel", true)
+                    .put("active", true).put("checkout_paid", !restore).put("restore_authorization", restore);
+            WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body);
+            assertFalse(status.confirmedAgreement());
+            assertFalse(status.canManageRenewal());
+            assertEquals("查看开通状态", status.managementLabel());
+        }
+    }
+
+    @Test public void cancellationPendingStopsReopeningWithoutClaimingConfirmedTermination() throws Exception {
+        JSONObject body = new JSONObject().put("status", "active").put("active", true).put("can_cancel", true)
+                .put("enabled", true).put("renewal_stopped", true).put("cancel_pending", true);
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body,
+                new JSONObject().put("active", true).put("provider", "wechat"));
+        assertFalse(status.canSubscribe());
+        assertFalse(status.cancelled());
+        assertEquals("正在确认解约结果", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("暂停新的续费申请"));
+        assertTrue(WechatSubscriptionStore.failureMessage("cancel-pending").contains("正在确认"));
+    }
+
+    @Test public void appCheckoutResumeAndPaidUnsignedStatus() throws Exception {
+        JSONObject shared = new JSONObject("{\"active\":false}");
+        JSONObject body = new JSONObject("{\"enabled\":true,\"status\":\"pending\",\"payment_pending\":true,\"checkout_pending\":true,\"amount_fen\":1}");
+        WechatSubscriptionStore.Status pending = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertTrue(pending.canSubscribe());
+        assertEquals("继续支付并签约", pending.actionLabel());
+        assertEquals("¥0.01/月", pending.priceLabel());
+        body.put("checkout_pending", false).put("checkout_paid", true).put("active", true).put("payment_pending", false);
+        WechatSubscriptionStore.Status paid = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertFalse(paid.canSubscribe());
+        assertEquals("本期算力已到账", paid.displayTitle());
+        assertEquals("刷新状态", paid.actionLabel());
+        assertTrue(paid.paymentNotice().contains("无需再次付款"));
+        assertTrue(paid.paymentNotice().contains("仅付款不会开通自动续费"));
+        assertFalse(paid.needsResultRefresh(1000));
+        assertFalse(paid.canManageRenewal());
+    }
+
+    @Test public void paidUnsignedCoverageCanConfirmPaymentWithoutConfirmingAutoRenewal() throws Exception {
+        JSONObject body = new JSONObject().put("status", "pending").put("checkout_paid", true)
+                .put("active", true).put("expires_date", 2000).put("can_cancel", true);
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body);
+        assertTrue(status.hasNewCoverage(1000));
+        assertFalse(status.hasNewCoverage(2000));
+        assertFalse(status.confirmedAgreement());
+        assertFalse(status.authorizationRestored("contract"));
+        assertFalse(status.needsResultRefresh(1000));
+        body.put("active", false);
+        WechatSubscriptionStore.Status expired = WechatSubscriptionStore.Status.fromJson(body);
+        assertEquals("本期算力已到期", expired.displayTitle());
+        assertFalse(expired.hasNewCoverage(0));
+        assertFalse(expired.needsResultRefresh(3000));
+    }
+
+    @Test public void paidUnsignedUserCanEnableRenewalWithoutBuyingCurrentPeriodAgain() throws Exception {
+        JSONObject body = new JSONObject().put("status", "pending").put("checkout_paid", true)
+                .put("active", true).put("enabled", true).put("restore_authorization", true)
+                .put("expires_date", 2000).put("can_cancel", true);
+        JSONObject shared = new JSONObject().put("active", true).put("provider", "wechat");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, shared);
+        assertTrue(status.canSubscribe());
+        assertEquals("开通自动续费", status.actionLabel());
+        assertFalse(status.canManageRenewal());
+        assertFalse(status.hasNewCoverage(2000));
+        assertTrue(status.paymentNotice().contains("不重复购买当前周期"));
+        body.put("payment_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, shared).canSubscribe());
+        body.put("payment_pending", false).put("cancel_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, shared).canSubscribe());
+        body.put("cancel_pending", false).put("renewal_available", false);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, shared).canSubscribe());
+    }
+
+    @Test public void unfinishedPaymentRefreshesButBlockedRestorationDoesNotPoll() throws Exception {
+        JSONObject pending = new JSONObject().put("status", "pending").put("checkout_pending", true)
+                .put("payment_pending", true);
+        WechatSubscriptionStore.Status payment = WechatSubscriptionStore.Status.fromJson(pending);
+        assertTrue(payment.needsResultRefresh(1000));
+        assertFalse(payment.hasNewCoverage(0));
+        JSONObject restoring = new JSONObject().put("status", "pending").put("restore_authorization", true)
+                .put("active", true).put("expires_date", 2000);
+        WechatSubscriptionStore.Status signing = WechatSubscriptionStore.Status.fromJson(restoring);
+        assertFalse(signing.needsResultRefresh(1000));
+        restoring.put("payment_pending", true);
+        assertTrue(WechatSubscriptionStore.Status.fromJson(restoring).needsResultRefresh(1000));
+        assertFalse(signing.hasNewCoverage(2000));
+    }
+
+    @Test public void appCheckoutCannotBypassAppleOrUnknownPurchaseStatus() throws Exception {
+        JSONObject body = new JSONObject("{\"enabled\":true,\"status\":\"pending\",\"checkout_pending\":true}");
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body).canSubscribe());
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body,
+                new JSONObject("{\"active\":true,\"provider\":\"apple\"}")).canSubscribe());
+    }
+
+    @Test public void appPayParamsRequireAllFieldsAndRegisteredApp() throws Exception {
+        JSONObject params = new JSONObject("{\"appId\":\"app\",\"partnerId\":\"merchant\",\"prepayId\":\"prepay\",\"packageValue\":\"Sign=WXPay\",\"nonceStr\":\"nonce\",\"timeStamp\":\"1789704000\",\"sign\":\"signature\"}");
+        JSONObject body = new JSONObject().put("pay_params", params);
+        WechatSubscriptionStore.AppPayParams p = WechatSubscriptionStore.Contract.fromJson(body).appPayParams;
+        assertTrue(p.validFor("app"));
+        assertFalse(p.validFor("another-app"));
+        params.remove("sign");
+        assertFalse(WechatSubscriptionStore.Contract.fromJson(body).appPayParams.validFor("app"));
+        assertTrue(WechatSubscriptionStore.Contract.fromJson(new JSONObject()).appPayParams == null);
+    }
+
     @Test public void unresolvedPaymentBlocksResigningEvenAfterCancellation() throws Exception {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
                 new JSONObject("{\"status\":\"cancelled\",\"enabled\":true,\"payment_pending\":true}"),
@@ -50,7 +222,7 @@ public final class WechatSubscriptionStoreTest {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
                 new JSONObject("{\"status\":\"cancelled\",\"payment_issue\":\"payment-failed\"}"));
         assertEquals("自动续费已解除", status.displayTitle());
-        assertTrue(status.paymentNotice().contains("不再发起新的续费扣款"));
+        assertTrue(status.paymentNotice().contains("自动续费已解除"));
     }
 
     @Test public void paymentFailureMessagesNeverExposeRawProviderDetails() {
@@ -75,7 +247,7 @@ public final class WechatSubscriptionStoreTest {
 
     @Test public void sharedStatusOutageBlocksPurchaseButKeepsCancellationAvailable() throws Exception {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
-                new JSONObject("{\"enabled\":true,\"status\":\"active\",\"can_cancel\":true}"), null);
+                new JSONObject("{\"enabled\":true,\"status\":\"active\",\"can_cancel\":true,\"contract_status_known\":true}"), null);
         assertFalse(status.canSubscribe());
         assertTrue(status.canCancel);
         assertEquals("解除自动续费", status.actionLabel());
@@ -89,12 +261,6 @@ public final class WechatSubscriptionStoreTest {
         assertFalse(WechatSubscriptionStore.Status.fromJson(new JSONObject("{\"enabled\":false,\"status\":\"cancelled\"}"), current).canSubscribe());
     }
 
-    @Test public void jsonNullHandoffNeverLaunchesALiteralNullMiniProgram() throws Exception {
-        WechatSubscriptionStore.Contract contract = WechatSubscriptionStore.Contract.fromJson(new JSONObject(
-                "{\"wechat_mini_program_username\":null,\"wechat_mini_program_path\":null,\"pre_entrustweb_id\":\"valid-old-template\"}"));
-        assertFalse(contract.canLaunchWechat());
-        assertEquals("valid-old-template", contract.preEntrustwebId);
-    }
     @Test public void parsesActiveStatus() throws Exception {
         WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(new JSONObject("{"
                 + "\"active\":true,\"enabled\":true,\"can_cancel\":true,\"status\":\"active\",\"expires_date\":1770000000000,\"scheduled_charge_at\":1760000000000,"
@@ -122,31 +288,56 @@ public final class WechatSubscriptionStoreTest {
         assertFalse(status.canCancel);
     }
 
-    @Test public void parsesAndroidSigningHandoffWithoutSecrets() throws Exception {
-        WechatSubscriptionStore.Contract contract = WechatSubscriptionStore.Contract.fromJson(new JSONObject("{"
-                + "\"contract_code\":\"VD123\",\"pre_entrustweb_id\":\"pre123\","
-                + "\"wechat_mini_program_username\":\"gh_abc\","
-                + "\"wechat_mini_program_path\":\"pages/sign?pre_entrustweb_id=pre123\"}"));
-        assertEquals("VD123", contract.contractCode);
-        assertEquals("pre123", contract.preEntrustwebId);
-        assertTrue(contract.canLaunchWechat());
+
+    @Test public void onlyAppPaymentPayloadCanProvidePaymentParameters() throws Exception {
+        WechatSubscriptionStore.Contract old = WechatSubscriptionStore.Contract.fromJson(new JSONObject(
+                "{\"contract_code\":\"old\",\"pre_entrustweb_id\":\"old-session\",\"wechat_mini_program_username\":\"gh_old\"}"));
+        assertTrue(old.appPayParams == null);
     }
 
-    @Test public void originalContractResponseDoesNotPretendItCanLaunchWechat() throws Exception {
-        WechatSubscriptionStore.Contract contract = WechatSubscriptionStore.Contract.fromJson(
-                new JSONObject("{\"contract_code\":\"VD123\",\"plan_id\":\"monthly\"}"));
-        assertFalse(contract.canLaunchWechat());
-    }
-    @Test public void priceUsesServerConfiguredV2Amount() throws Exception {
-        assertEquals("¥0.01/月", WechatSubscriptionStore.Status.fromJson(new JSONObject("{\"amount_fen\":1}")).priceLabel());
-        assertEquals("¥19.9/月", WechatSubscriptionStore.Status.fromJson(new JSONObject()).priceLabel());
-    }
-
-    @Test public void pendingLegacyPaymentPreventsNewSigning() throws Exception {
-        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(
-                new JSONObject("{\"enabled\":true,\"payment_pending\":true,\"status\":\"pending\"}"),
-                new JSONObject("{\"active\":false}"));
+    @Test public void unsupportedRenewalIsExplicitWithoutPretendingToCancelAuthorization() throws Exception {
+        JSONObject body = new JSONObject("{\"active\":true,\"status\":\"pending\",\"checkout_paid\":true,\"can_cancel\":true,\"renewal_available\":false,\"contract_management_available\":false}");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":true,\"provider\":\"wechat\"}"));
+        assertFalse(status.canCancel);
         assertFalse(status.canSubscribe());
-        assertEquals("扣款结果确认中", status.actionLabel());
+        assertEquals("已付款 · 自动续费暂不可用", status.displayTitle());
+        assertEquals("请在微信管理签约", status.actionLabel());
+        assertTrue(status.paymentNotice().contains("App 内解约"));
+        assertTrue(status.paymentNotice().contains("无需再次付款"));
+    }
+
+    @Test public void expiredCancellationAllowsReopeningDespiteHistoricalFirstPayment() throws Exception {
+        JSONObject body = new JSONObject("{\"active\":false,\"enabled\":true,\"status\":\"cancelled\",\"checkout_paid\":true,\"renewal_available\":false,\"contract_management_available\":false}");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":true,\"provider\":\"wechat\"}"));
+        assertTrue(status.canSubscribe());
+        assertEquals("重新开通", status.actionLabel());
+        assertEquals("自动续费已解除", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("支付新一期费用"));
+        body.put("payment_pending", true);
+        assertFalse(WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":false}")).canSubscribe());
+    }
+
+    @Test public void cancelledUnexpiredCoverageBlocksRestorationEvenWhenServerOffersIt() throws Exception {
+        JSONObject shared = new JSONObject().put("active", true).put("provider", "wechat");
+        for (boolean restore : new boolean[]{false, true}) {
+            JSONObject body = new JSONObject().put("active", true).put("enabled", true)
+                    .put("status", "cancelled").put("checkout_paid", true)
+                    .put("restore_authorization", restore).put("expires_date", 2000);
+            WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, shared);
+            assertTrue(status.waitingForCoverageExpiry());
+            assertFalse(status.canSubscribe());
+            assertEquals(2000, status.expiresAt);
+            assertEquals("本期到期后可重新开通", status.actionLabel());
+            assertTrue(status.paymentNotice().contains("到期后可重新付款"));
+            assertFalse(status.paymentNotice().contains("本次仅申请"));
+        }
+    }
+
+    @Test public void expiredCoverageDoesNotPretendHistoricalPaymentIsStillActive() throws Exception {
+        JSONObject body = new JSONObject("{\"active\":false,\"status\":\"pending\",\"checkout_paid\":true,\"renewal_available\":false,\"contract_management_available\":false}");
+        WechatSubscriptionStore.Status status = WechatSubscriptionStore.Status.fromJson(body, new JSONObject("{\"active\":false}"));
+        assertFalse(status.canSubscribe());
+        assertEquals("算力周期已到期", status.displayTitle());
+        assertTrue(status.paymentNotice().contains("原授权状态"));
     }
 }

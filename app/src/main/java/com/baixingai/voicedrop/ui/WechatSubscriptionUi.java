@@ -16,7 +16,6 @@ import android.widget.TextView;
 
 import com.baixingai.voicedrop.WechatProductActivity;
 import com.baixingai.voicedrop.data.WechatSubscriptionStore.Status;
-import com.baixingai.voicedrop.net.Api;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -36,29 +35,24 @@ public final class WechatSubscriptionUi {
         centered(body, status.priceLabel(), 32, Theme.INK, true);
         centered(body, "每期 " + number(status.monthlySuanli) + " 算力 · 按订阅周期到期", 13, Theme.SECONDARY, false);
         paymentMethod(body);
-        label(body, Api.isTestEnvironment()
-                ? "请在微信签约页确认扣款金额，签约后将按约扣款。"
-                : "每月自动续费，首期及续费金额为 " + status.priceLabel() + "。", 13, Theme.SECONDARY, false);
-        label(body, "首次签约可能立即扣款；续费在到期前第 3 天申请，通常通知 24 小时后扣款。可随时解约，已提交的扣款仍可能完成。", 13, Theme.SECONDARY, false);
-        if (status.cancelled() && status.expiresAt > System.currentTimeMillis()) {
-            section(body, "重新开通", "已有权益有效至 " + date(status.expiresAt)
-                    + "。重新签约后按原到期日衔接扣款计划；若已到申请时间，将立即申请扣款。旧算力仍在原到期日失效。");
-        }
+        label(body, status.restoreAuthorization ? "本次仅申请自动续费授权，后续续费价格 " + status.priceLabel() + "。" : "首期付款并开通自动续费，订阅价格 " + status.priceLabel() + "，请在微信确认金额。", 13, Theme.SECONDARY, false);
+        label(body, status.restoreAuthorization ? status.paymentNotice() : status.renewalAvailable ? "首期在微信确认后支付；续费在到期前第 3 天申请，通常通知 24 小时后扣款。可随时解约，已提交的扣款仍可能完成。" : status.paymentNotice(), 13, Theme.SECONDARY, false);
         link(body, "产品介绍  ›", () -> openProduct(activity));
         LinearLayout rules = column(activity);
         rules.setPadding(0, 0, 0, dp(activity, 8));
-        section(rules, "完整购买与自动续费须知",
-                "1. 在微信完成自动续费签约后，将按计划发起扣款。首次或重新签约后 12 小时内申请，可能立即扣款。\n\n"
+        if (status.renewalAvailable && status.contractManagementAvailable) section(rules, "完整购买与自动续费须知",
+                (status.restoreAuthorization ? "1. 在微信确认自动续费授权，当前已付算力及有效期不变。如果已到续费申请时间，授权后即可申请下一期扣款。\n\n" : "1. 在微信支付首期金额并开通自动续费。首期付款成功后发放算力，自动续费以签约结果为准。\n\n")
                 + "2. 当前续费计划在到期日前第 3 个北京时间自然日凌晨 2 点申请，通常在通知后 24 小时扣款，实际付款可能早于到期日。\n\n"
                 + "3. 提前续费成功后，新算力立即可用，有效至下一订阅周期结束；旧算力仍按原到期日失效。\n\n"
                 + "4. 可在本页「管理订阅」解除自动续费，也可在微信的扣费服务中管理。卸载应用不会解除签约。\n\n"
                 + "5. 解约不自动退款，也不收回已付算力。解约前已提交的扣款仍可能完成，付款成功后会正常发放算力。");
+        else section(rules, "当前服务范围", "首期付款成功后获得一个月算力。后续自动续费暂不可用。微信中的授权状态请在微信扣费服务中查看或解除，App 暂不提供解约。卸载 App 不会解除授权。");
         body.addView(rules);
 
         LinearLayout footer = column(activity);
         footer.setBackgroundColor(Theme.CARD);
-        TextView pay = button(footer, status.pending() ? "同意并继续微信签约" : "同意并前往微信签约", PRIMARY);
-        IosDialog dialog = sheetWithFooter(activity, "确认订阅", body, footer, 520);
+        TextView pay = button(footer, status.restoreAuthorization ? "同意并" + status.authorizationActionLabel() : "同意并支付签约", PRIMARY);
+        IosDialog dialog = sheetWithFooter(activity, status.restoreAuthorization ? status.authorizationActionLabel() : "确认订阅", body, footer, 520);
         pay.setOnClickListener(v -> {
             if (!pay.isEnabled()) return;
             pay.setEnabled(false);
@@ -72,7 +66,7 @@ public final class WechatSubscriptionUi {
         label(body, status.displayTitle(), 24, Theme.INK, true);
         label(body, status.paymentNotice(), 14, Theme.SECONDARY, false);
         if (status.expiresAt > 0) section(body, "已付权益有效至", date(status.expiresAt));
-        section(body, "解约与退款", "解除后不再发起新扣款，已付算力仍可使用至到期。已提交的订单仍可能完成支付；解除自动续费不会自动退款。");
+        section(body, "解约与退款", status.contractManagementAvailable ? "解除后不再发起新扣款，已付算力仍可使用至到期。已提交的订单仍可能完成支付；解除自动续费不会自动退款。" : "请在微信扣费服务中查看或解除授权。App 内解约暂不可用；已付算力仍可使用至到期。");
         section(body, "需要帮助", "扣费或到账有疑问，可联系客服并提供账号标识、付款时间和订单号。请勿提供支付密码或验证码。\njianshuo@hotmail.com");
         LinearLayout links = new LinearLayout(activity);
         boolean stacked = activity.getResources().getConfiguration().fontScale >= 1.3f
@@ -88,8 +82,8 @@ public final class WechatSubscriptionUi {
         if (!stacked) refreshLink.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         body.addView(links, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout footer = column(activity);
-        TextView stop = status.canCancel ? button(footer, "解除自动续费", PRIMARY) : null;
-        IosDialog dialog = sheetWithFooter(activity, "管理订阅", body, footer, 520);
+        TextView stop = status.canManageRenewal() ? button(footer, "解除自动续费", PRIMARY) : null;
+        IosDialog dialog = sheetWithFooter(activity, status.managementLabel(), body, footer, 520);
         if (stop != null) stop.setOnClickListener(v -> dialog.dismissAnimated(cancel));
         return dialog;
     }
@@ -113,9 +107,9 @@ public final class WechatSubscriptionUi {
         icon.topMargin = 0;
         icon.bottomMargin = dp(activity, 22);
         page.addView(check, icon);
-        centered(page, "订阅成功", 25, Theme.INK, true);
-        centered(page, "算力已到账", 30, Theme.INK, true);
-        centered(page, "VoiceDrop 包月算力", 16, Theme.SECONDARY, false);
+        centered(page, "付款成功", 25, Theme.INK, true);
+        centered(page, "算力已添加", 30, Theme.INK, true);
+        if (status.confirmedAgreement()) centered(page, "已开通自动续费", 16, Theme.SECONDARY, false);
         centered(page, "权益有效至 " + date(status.expiresAt), 14, Theme.SECONDARY, false);
         centered(page, "每笔算力的使用与到期情况，可返回算力页查看。", 13, Theme.SECONDARY, false);
         page.addView(new View(activity), new LinearLayout.LayoutParams(1, 0, 1));

@@ -137,8 +137,8 @@ public final class WechatSubscriptionStore {
         public boolean pending() { return "pending".equals(status); }
         public boolean cancelled() { return "cancelled".equals(status); }
         public boolean waitingForCoverageExpiry() {
-            // A failed restoration creates a new pending agreement against the old paid period.
-            return active && (cancelled() || (pending() && restoreAuthorization && !checkoutPaid));
+            // A server-authorized restoration can resume during the paid period without buying it again.
+            return active && cancelled() && !restoreAuthorization;
         }
         public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
         /** Permission to cancel a pending request does not confirm a signed agreement. */

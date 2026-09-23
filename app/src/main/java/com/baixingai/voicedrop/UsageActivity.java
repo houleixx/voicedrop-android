@@ -326,7 +326,8 @@ public final class UsageActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(16));
         card.setBackground(strokedRound(Theme.CARD, 11, Theme.BORDER_CHROME));
-        boolean paid = loaded && status.active && !status.paymentPending && !status.renewalStopped && !status.waitingForCoverageExpiry();
+        boolean paid = loaded && status.active && status.confirmedAgreement()
+                && !status.paymentPending && !status.renewalStopped;
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         ImageView icon = new ImageView(this);

@@ -30,10 +30,10 @@ public final class WechatSubscriptionStore {
         return Status.fromJson(new JSONObject(response.text()), current);
     }
 
-    /** Server selects paid checkout or authorization-only restoration. */
-    public Contract createContract(boolean restoreOnly) throws Exception {
-        HttpClient.Response response = http.postJson(Api.agentBase() + "/wechat-pay/checkout", auth.bearer(),
-                (restoreOnly ? "{\"restore_only\":true}" : "{}").getBytes(StandardCharsets.UTF_8));
+    /** Creates a server-side contract and its short-lived WeChat signing handoff. */
+    public Contract createContract() throws Exception {
+        HttpClient.Response response = http.postJson(Api.agentBase() + "/wechat-pay/contract", auth.bearer(),
+                "{}".getBytes(StandardCharsets.UTF_8));
         if (!response.ok()) throw failure(response);
         return Contract.fromJson(new JSONObject(response.text()));
     }
@@ -63,18 +63,13 @@ public final class WechatSubscriptionStore {
 
     public static String failureMessage(String code) {
         switch (code) {
-            case "coverage-changed": return "原权益已到期，请刷新后确认新的付费订阅。";
-            case "authorization-unavailable": return "暂时无法恢复微信续费授权，请稍后重试。此次没有创建付款订单。";
-            case "checkout-expired": return "支付订单已关闭，请刷新后重新开通。";
-            case "checkout-unavailable": return "暂时无法创建支付签约订单，请稍后重试。";
+            case "contract-unavailable": return "暂时无法创建微信签约，请稍后重试。";
+            case "contract-status-unavailable": return "原支付签约状态尚未确认，请先在微信检查授权状态。";
             case "payment-pending": return "有一笔扣款正在确认，请稍后刷新。请勿重复开通。";
             case "already-subscribed": return "已有订阅或有效签约，请刷新后管理订阅。";
-            case "contract-status-unavailable": return "算力周期已到期，但原签约状态尚未确认。请在微信扣费服务中查看授权，并返回刷新。";
             case "disabled": return "包月算力暂未开放购买，已有订阅仍可管理。";
             case "unauthorized": return "登录状态已失效，请重新登录后再试。";
             case "no-active-contract": return "当前没有可解除的签约，请刷新订阅状态。";
-            case "contract-management-unavailable": return "App 内暂不支持解约，请在微信扣费服务中管理。";
-            case "cancel-pending": return "已暂停新的续费申请，正在确认微信解约结果，请稍后刷新。此前已提交的扣款仍可能完成。";
             case "cancel-unavailable": return "暂时无法确认解约结果，请刷新查看，也可在微信扣费服务中管理。";
             case "degraded": return "微信订阅服务暂不可用，请稍后再试。";
             default: return "请求未能完成，请刷新确认当前状态后再试。";
@@ -82,9 +77,6 @@ public final class WechatSubscriptionStore {
     }
 
     public static final class Status {
-        public final boolean restoreAuthorization;
-        public final String contractCode;
-        public final boolean contractVerified;
         public final boolean active;
         public final boolean enabled;
         public final boolean canCancel;
@@ -99,23 +91,14 @@ public final class WechatSubscriptionStore {
         public final boolean appleActive;
         public final boolean paymentPending;
         public final boolean renewalStopped;
-        public final boolean checkoutPending;
-        public final boolean checkoutPaid;
         public final int amountFen;
-        public final boolean cancelPending;
-        public final boolean renewalAvailable;
-        public final boolean contractManagementAvailable;
 
         Status(boolean active, boolean enabled, boolean canCancel, String status, String planId, long expiresAt, long scheduledChargeAt, String paymentIssue,
                double subscriptionSuanli, double monthlySuanli, boolean purchaseStatusKnown, boolean appleActive,
-               boolean paymentPending, boolean renewalStopped, boolean checkoutPending, boolean checkoutPaid, int amountFen, boolean renewalAvailable, boolean contractManagementAvailable, boolean cancelPending, boolean restoreAuthorization, String contractCode, boolean contractVerified) {
-            this.restoreAuthorization = restoreAuthorization;
-            this.contractCode = contractCode;
-            this.contractVerified = contractVerified;
-            this.cancelPending = cancelPending;
+               boolean paymentPending, boolean renewalStopped, int amountFen) {
             this.active = active;
             this.enabled = enabled;
-            this.canCancel = canCancel && contractManagementAvailable;
+            this.canCancel = canCancel;
             this.status = status;
             this.planId = planId;
             this.expiresAt = expiresAt;
@@ -127,51 +110,23 @@ public final class WechatSubscriptionStore {
             this.appleActive = appleActive;
             this.paymentPending = paymentPending;
             this.renewalStopped = renewalStopped;
-            this.checkoutPending = checkoutPending;
-            this.checkoutPaid = checkoutPaid;
             this.amountFen = amountFen;
-            this.renewalAvailable = renewalAvailable;
-            this.contractManagementAvailable = contractManagementAvailable;
-        }
-
-        public boolean pending() { return "pending".equals(status); }
-        public boolean cancelled() { return "cancelled".equals(status); }
-        public boolean waitingForCoverageExpiry() {
-            // A failed restoration creates a new pending agreement against the old paid period.
-            return active && (cancelled() || (pending() && restoreAuthorization && !checkoutPaid));
-        }
-        public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
-        /** Permission to cancel a pending request does not confirm a signed agreement. */
-        public boolean confirmedAgreement() { return contractVerified && "active".equals(status); }
-        public boolean canManageRenewal() { return canCancel && confirmedAgreement(); }
-        public boolean paidWithoutConfirmedRenewal() { return checkoutPaid && pending(); }
-        public boolean needsResultRefresh(long now) {
-            if (waitingForCoverageExpiry() && !paymentPending) return false;
-            return paymentPending || (pending() && !paidWithoutConfirmedRenewal())
-                    || (canManageRenewal() && !active && !renewalStopped && scheduledChargeAt <= now);
-        }
-        public String managementLabel() { return confirmedAgreement() ? "管理订阅" : "查看开通状态"; }
-        public boolean canSubscribe() {
-            if (waitingForCoverageExpiry()) return false;
-            if (cancelPending || !purchaseStatusKnown || appleActive) return false;
-            if (restoreAuthorization && !paymentPending) return enabled && renewalAvailable;
-            if (checkoutPaid && pending()) return false;
-            if (checkoutPending) return enabled && (pending() || "active".equals(status));
-            return !paymentPending && !canCancel && !"active".equals(status) && (enabled || pending());
         }
 
         public String priceLabel() {
             return "¥" + java.math.BigDecimal.valueOf(amountFen, 2).stripTrailingZeros().toPlainString() + "/月";
         }
 
+        public boolean pending() { return "pending".equals(status); }
+        public boolean cancelled() { return "cancelled".equals(status); }
+        public boolean hasContract() { return pending() || "active".equals(status) || cancelled(); }
+        public boolean canSubscribe() {
+            return purchaseStatusKnown && !appleActive && !paymentPending && !canCancel && !"active".equals(status)
+                    && (enabled || pending());
+        }
+
         public String actionLabel() {
-            if (cancelPending) return "解约结果确认中";
-            if (waitingForCoverageExpiry()) return "本期到期后可重新开通";
-            if (!contractManagementAvailable && checkoutPaid && !cancelled()) return "请在微信管理签约";
-            if (canSubscribe() && restoreAuthorization) return authorizationActionLabel();
-            if (canSubscribe() && checkoutPending) return "继续支付并签约";
-            if (paidWithoutConfirmedRenewal()) return "刷新状态";
-            if (canManageRenewal()) return "解除自动续费";
+            if (canCancel) return "解除自动续费";
             if (appleActive) return "已通过 Apple 订阅";
             if (!purchaseStatusKnown) return "订阅状态暂不可用";
             if (paymentPending) return "扣款结果确认中";
@@ -184,47 +139,19 @@ public final class WechatSubscriptionStore {
             return active && expiresAt > previousExpiry;
         }
 
-        public boolean authorizationRestored(String expectedCode) {
-            return expectedCode != null && expectedCode.equals(contractCode) && contractVerified
-                    && "active".equals(status) && !cancelPending && !renewalStopped;
-        }
-
-        public String authorizationActionLabel() {
-            return paidWithoutConfirmedRenewal() ? "开通自动续费" : "恢复自动续费";
-        }
-
         public String displayTitle() {
-            if (cancelPending) return "正在确认解约结果";
-            if (waitingForCoverageExpiry() && !cancelled()) return "自动续费未开通";
-            if (cancelled() && !paymentPending) return "自动续费已解除";
-            if (!active && checkoutPaid && !renewalAvailable) return "算力周期已到期";
-            if (!renewalAvailable && checkoutPaid) return "已付款 · 自动续费暂不可用";
-            if (paidWithoutConfirmedRenewal()) return active ? "本期算力已到账" : "本期算力已到期";
-            if (checkoutPending) return "首期支付尚未完成";
             if (paymentPending) return "扣款结果确认中";
             if (cancelled()) return "自动续费已解除";
             if (renewalStopped) return "本周期续费已暂停";
             if ("payment-failed".equals(paymentIssue)) return "最近一次扣款未完成";
-            if (pending() && restoreAuthorization) return "续费授权尚未完成";
             if (active) return "包月算力已开通";
-            if (canCancel && "active".equals(status)) return "已签约 · 等待扣款";
+            if (canCancel) return "已签约 · 等待扣款";
             if (pending()) return "签约尚未完成";
             if (appleActive) return "已通过 Apple 订阅";
             return "包月算力";
         }
 
         public String paymentNotice() {
-            if (cancelPending) return "已暂停新的续费申请，正在确认微信解约结果。已付算力继续有效，此前已提交的订单仍可能完成扣款。请稍后刷新。";
-            if (waitingForCoverageExpiry() && !paymentPending) return "自动续费已关闭，本期算力可继续使用至到期。到期后可重新付款，并在支付时开通自动续费。";
-            if (restoreAuthorization) return "已付算力保留至原到期日，本次仅申请自动续费授权，不重复购买当前周期。后续按到期前三天的计划申请扣款；若已到计划时间，授权后即可申请下一期扣款。";
-            if (cancelled()) return "自动续费已解除，已付算力保留至各自到期日。权益已到期后，重新开通需支付新一期费用；未完成的旧订单仍需先确认结果。";
-            if (!active && checkoutPaid && !renewalAvailable) return "已购买的算力周期已到期。请先在微信扣费服务中确认原授权状态，解除后返回刷新再重新开通。";
-            if (!renewalAvailable) return (checkoutPaid ? "首期算力已到账，无需再次付款。" : "首期付款成功后发放算力。")
-                    + "当前暂不支持后续自动续费和 App 内解约；请在微信扣费服务中查看或解除授权。";
-            if (paidWithoutConfirmedRenewal()) return active
-                    ? "本期算力已到账，无需再次付款。仅付款不会开通自动续费；如已在微信授权，请以微信扣费服务中的状态为准。"
-                    : "本期算力已到期。尚未确认自动续费授权，可在微信扣费服务中查看后刷新状态。";
-            if (checkoutPending) return "首期订单尚未确认付款。可继续进入微信完成支付并签约，返回后刷新结果。";
             if (paymentPending) return "微信正在处理扣款，以最终支付结果为准。无需重复开通，可稍后刷新查看。";
             if (cancelled()) return "不再发起新的续费扣款。已付算力保留至各自到期日，解约前提交的订单仍可能完成支付。";
             if (renewalStopped) return "本周期多次扣款未成功，已停止自动重试。请检查微信支付方式；需要恢复时，可解除后重新签约。";
@@ -249,56 +176,49 @@ public final class WechatSubscriptionStore {
                     nullable(body, "payment_issue"), body.optDouble("sub_suanli", 0),
                     body.optDouble("monthly_suanli", 200), known,
                     known && current.optBoolean("active") && "apple".equals(current.optString("provider")),
-                    body.optBoolean("payment_pending", false), body.optBoolean("renewal_stopped", false),
-                    body.optBoolean("checkout_pending", false), body.optBoolean("checkout_paid", false),
-                    Math.max(1, body.optInt("amount_fen", 1990)),
-                    body.optBoolean("renewal_available", true), body.optBoolean("contract_management_available", true), body.optBoolean("cancel_pending", false), body.optBoolean("restore_authorization", false),
-                    nullable(body, "contract_code"), body.optBoolean("contract_status_known", false));
+                    body.optBoolean("payment_pending", false), body.optBoolean("renewal_stopped", false), Math.max(1, body.optInt("amount_fen", 1990)));
         }
     }
 
     public static final class Contract {
         public final String contractCode;
+        public final String preEntrustwebId;
+        public final String miniProgramUserName;
+        public final String miniProgramPath;
         public final long expiresAt;
-        public final AppPayParams appPayParams;
-        public final String miniProgramUsername, miniProgramPath;
-        public final boolean authorizationOnly;
 
-        Contract(String contractCode, long expiresAt, AppPayParams appPayParams, JSONObject body) {
-            authorizationOnly = "restore-authorization".equals(body.optString("checkout_mode"));
-            miniProgramUsername = body.optString("wechat_mini_program_username", "");
-            miniProgramPath = body.optString("wechat_mini_program_path", "");
+        Contract(String contractCode, String preEntrustwebId, String miniProgramUserName,
+                 String miniProgramPath, long expiresAt) {
             this.contractCode = contractCode;
+            this.preEntrustwebId = preEntrustwebId;
+            this.miniProgramUserName = miniProgramUserName;
+            this.miniProgramPath = miniProgramPath;
             this.expiresAt = expiresAt;
-            this.appPayParams = appPayParams;
         }
 
-        public boolean validAuthorization() {
-            return authorizationOnly && !empty(contractCode) && miniProgramUsername.startsWith("gh_")
-                    && !empty(miniProgramPath) && appPayParams == null;
-        }
-
+        /**
+         * The backend owns all signed WeChat parameters.  The aliases retain compatibility while
+         * the service migrates from its original response naming to the Android handoff fields.
+         */
         static Contract fromJson(JSONObject body) {
-            return new Contract(nullable(body, "contract_code"), body.optLong("expires_at", 0),
-                    AppPayParams.fromJson(body.optJSONObject("pay_params")), body);
+            return new Contract(nullable(body, "contract_code"), first(body,
+                    "pre_entrustweb_id", "preEntrustwebId"), first(body,
+                    "wechat_mini_program_username", "mini_program_username", "miniProgramUserName"),
+                    first(body, "wechat_mini_program_path", "mini_program_path", "miniProgramPath"),
+                    body.optLong("expires_at", 0));
+        }
+
+        public boolean canLaunchWechat() {
+            return !empty(miniProgramUserName) && !empty(miniProgramPath);
         }
     }
 
-    public static final class AppPayParams {
-        public final String appId, partnerId, prepayId, packageValue, nonceStr, timeStamp, sign;
-        private AppPayParams(JSONObject p) {
-            appId = nullable(p, "appId"); partnerId = nullable(p, "partnerId");
-            prepayId = nullable(p, "prepayId"); packageValue = nullable(p, "packageValue");
-            nonceStr = nullable(p, "nonceStr"); timeStamp = nullable(p, "timeStamp"); sign = nullable(p, "sign");
+    private static String first(JSONObject body, String... names) {
+        for (String name : names) {
+            String value = nullable(body, name);
+            if (!empty(value)) return value;
         }
-        static AppPayParams fromJson(JSONObject p) {
-            return p == null ? null : new AppPayParams(p);
-        }
-        public boolean validFor(String expectedAppId) {
-            return expectedAppId != null && expectedAppId.equals(appId) && !empty(partnerId)
-                    && !empty(prepayId) && "Sign=WXPay".equals(packageValue) && !empty(nonceStr)
-                    && timeStamp != null && timeStamp.matches("[0-9]{10}") && !empty(sign);
-        }
+        return null;
     }
 
     private static String nullable(JSONObject body, String name) {

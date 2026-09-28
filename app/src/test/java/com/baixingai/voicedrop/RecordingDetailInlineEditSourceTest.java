@@ -28,6 +28,30 @@ public class RecordingDetailInlineEditSourceTest {
         assertTrue(store.contains("http.putBytes"));
     }
 
+    @Test
+    public void inlineEditorHasABorderedSurfaceWithoutChangingTheReadingView() throws Exception {
+        String detail = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+        String editor = detail.substring(detail.indexOf("protected void startInlineParagraphEdit("),
+                detail.indexOf("protected void finishInlineParagraphEdit("));
+        assertTrue(editor.contains("input.setBackground(roundStroke(0xfffffdf9, 7, 0x85d8593b, 1))"));
+        assertTrue(editor.contains("input.setIncludeFontPadding(false)"));
+        assertTrue(editor.contains("input.setPadding(dp(8), dp(8), dp(8), dp(8))"));
+        String cancel = detail.substring(detail.indexOf("protected void cancelInlineParagraphEdit()"),
+                detail.indexOf("protected void setInlineParagraphEditChrome("));
+        assertTrue(cancel.contains("inlineEditingRow.removeView(inlineEditingInput)"));
+        assertTrue(cancel.contains("inlineEditingRow.addView(inlineEditingReadView,"));
+    }
+
+    @Test
+    public void keyboardRequestWaitsForPopupWindowToReleaseFocus() throws Exception {
+        String detail = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
+        assertTrue(detail.contains("public void onWindowFocusChanged(boolean hasFocus)"));
+        assertTrue(detail.contains("if (hasFocus) showInlineKeyboardWhenReady()"));
+        assertTrue(detail.contains("!inlineKeyboardShowPending || input == null || !input.hasWindowFocus()"));
+        assertTrue(detail.contains("inlineEditingInput != input || !input.hasWindowFocus()"));
+        assertTrue(detail.contains("inlineKeyboardShowPending = false"));
+    }
+
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

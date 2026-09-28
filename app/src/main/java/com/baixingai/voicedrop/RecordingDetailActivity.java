@@ -47,6 +47,9 @@ import android.widget.Space;
 import android.widget.TextView;
 import com.baixingai.voicedrop.ui.SimpleToast;
 import androidx.core.content.FileProvider;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.baixingai.voicedrop.core.InlineEditorViewport;
 import com.baixingai.voicedrop.audio.AudioRecorder;
 import com.baixingai.voicedrop.audio.AsrDictationSession;
 import com.baixingai.voicedrop.audio.RecordingQuality;
@@ -257,6 +260,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
     protected int inlineEditingArticleIndex = -1;
     protected int inlineEditingViewIndex = -1;
     protected boolean inlineEditingSaving;
+    private boolean inlineKeyboardShowPending;
     protected JSONArray articleHistoryVersions = new JSONArray();
     protected ZonedDateTime recordingStart;
     protected Recording insertPhotoTarget;
@@ -331,6 +335,13 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         root.setFitsSystemWindows(false);
         root.setBackgroundColor(Theme.BG);
         setContentView(root);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            int bottom = inlineEditingInput != null && insets.isVisible(WindowInsetsCompat.Type.ime())
+                    ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0;
+            if (root.getPaddingBottom() != bottom) root.setPadding(0, 0, 0, bottom);
+            root.post(this::keepInlineEditorAboveKeyboard);
+            return insets;
+        });
         io.execute(() -> {
             if (promptStore != null) promptStore.refresh();
         });
@@ -978,6 +989,8 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         scroll.addView(content);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         articleScroll = scroll;
+        scroll.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) ->
+                scroll.post(this::keepInlineEditorAboveKeyboard));
         articleContent = content;
 
         renderCurrentArticle(content, rec, doc);
@@ -3224,16 +3237,18 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         input.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16);
         input.setTextColor(0xff5d574f);
         input.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
-        input.setBackgroundColor(Color.TRANSPARENT);
-        input.setIncludeFontPadding(readView.getIncludeFontPadding());
-        input.setPadding(readView.getPaddingLeft(), readView.getPaddingTop(),
-                readView.getPaddingRight(), readView.getPaddingBottom());
+        input.setBackground(roundStroke(0xfffffdf9, 7, 0x85d8593b, 1));
+        input.setIncludeFontPadding(false);
+        input.setPadding(dp(8), dp(8), dp(8), dp(8));
         input.setLineSpacing(dp(9), 1.0f);
         input.setSingleLine(false);
         input.setMaxLines(Integer.MAX_VALUE);
         input.setHorizontallyScrolling(false);
         input.setRawInputType(android.text.InputType.TYPE_CLASS_TEXT
                 | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        input.setGravity(Gravity.TOP | Gravity.START);
+        input.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) ->
+                v.post(this::keepInlineEditorAboveKeyboard));
         input.setImeOptions(EditorInfo.IME_ACTION_DONE);
         input.setOnEditorActionListener((view, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
@@ -3265,12 +3280,11 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         row.removeView(readView);
         row.addView(input, Math.max(0, inlineEditingViewIndex), inlineEditingReadLayoutParams);
         setInlineParagraphEditChrome(true);
+        ViewCompat.requestApplyInsets(root);
         input.requestFocus();
         input.setSelection(input.length());
-        main.post(() -> {
-            InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
-        });
+        inlineKeyboardShowPending = true;
+        showInlineKeyboardWhenReady();
     }
 
     protected void finishInlineParagraphEdit() {
@@ -3357,6 +3371,48 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         if (articleEditPanel != null) articleEditPanel.setVisibility(editing ? View.GONE : View.VISIBLE);
     }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) showInlineKeyboardWhenReady();
+    }
+
+    private void showInlineKeyboardWhenReady() {
+        EditText input = inlineEditingInput;
+        if (!inlineKeyboardShowPending || input == null || !input.hasWindowFocus()) return;
+        // PopupWindow dismissal restores the Activity window focus asynchronously.
+        // Post after focus restoration so the IME has registered this EditText.
+        input.post(() -> {
+            if (!inlineKeyboardShowPending || inlineEditingInput != input || !input.hasWindowFocus()) return;
+            input.requestFocus();
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+            inlineKeyboardShowPending = false;
+        });
+    }
+
+    protected void keepInlineEditorAboveKeyboard() {
+        EditText input = inlineEditingInput;
+        if (activityDestroyed || input == null || articleScroll == null) return;
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
+        boolean keyboardVisible = insets != null && insets.isVisible(WindowInsetsCompat.Type.ime());
+        int gap = dp(4);
+        int maxHeight = keyboardVisible
+                ? Math.max(1, articleScroll.getHeight() - 2 * gap) : Integer.MAX_VALUE;
+        if (input.getMaxHeight() != maxHeight) {
+            input.setMaxHeight(maxHeight);
+            return; // Align after the new editor height has been laid out.
+        }
+        if (!keyboardVisible || articleScroll.getHeight() == 0) return;
+        int[] viewport = new int[2];
+        int[] field = new int[2];
+        articleScroll.getLocationInWindow(viewport);
+        input.getLocationInWindow(field);
+        int delta = InlineEditorViewport.scrollDelta(viewport[1], articleScroll.getHeight(),
+                field[1], input.getHeight(), gap);
+        if (delta != 0) articleScroll.scrollBy(0, delta);
+    }
+
     protected void dismissInlineKeyboard() {
         if (inlineEditingInput == null) return;
         InputMethodManager keyboard = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -3365,6 +3421,7 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
     }
 
     protected void clearInlineParagraphEditReferences() {
+        inlineKeyboardShowPending = false;
         inlineEditingInput = null;
         inlineEditingRow = null;
         inlineEditingReadView = null;
@@ -3376,6 +3433,10 @@ public final class RecordingDetailActivity extends VoiceDropActivity {
         inlineEditingArticleIndex = -1;
         inlineEditingViewIndex = -1;
         inlineEditingSaving = false;
+        if (root != null) {
+            root.setPadding(0, 0, 0, 0);
+            ViewCompat.requestApplyInsets(root);
+        }
     }
 
     protected void showConfiguredImageMenu(View anchor, Recording rec, String relKey) {

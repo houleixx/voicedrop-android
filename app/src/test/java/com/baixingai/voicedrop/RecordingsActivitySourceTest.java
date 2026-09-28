@@ -31,212 +31,6 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
-    public void homeRecordButtonSupportsTapRecordAndLongPressTalk() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-
-        assertTrue(source.contains("轻点录音 · 长按说话"));
-        assertTrue(source.contains("松开发送 · 上滑取消"));
-        assertTrue(source.contains("上滑取消 · 松开放弃"));
-        assertTrue(source.contains("startRecordingFlow();"));
-        assertTrue(source.contains("startLibraryCommandTalk();"));
-        assertTrue(source.contains("finishLibraryCommandTalk"));
-        assertTrue(source.contains("commandSession.enqueue(text, currentCommandRefs())"));
-        assertTrue(source.contains("HoldToTalkGesture.shouldCancel(startRawY[0], event.getRawY(), dp(60))"));
-        assertTrue(source.contains("if (rec.uploading) continue;"));
-        assertFalse(source.contains("if (!rec.hasArticles) continue;"));
-    }
-
-    @Test
-    public void homeRecordTouchOnlyRespondsOnRedButton() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String fab = methodBody(source, "protected void addRecordFab");
-
-        assertTrue(fab.contains("fab.setOnTouchListener(commandTouch);"));
-        assertFalse(fab.contains("fabCol.setOnTouchListener(commandTouch);"));
-        assertFalse(fab.contains("fabRing.setOnTouchListener(commandTouch);"));
-        assertFalse(fab.contains("fabLabel.setOnTouchListener(commandTouch);"));
-    }
-
-    @Test
-    public void homeDoesNotShowPersistentLibraryCommandConnectionState() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String commandSessionListener = source.substring(source.indexOf("commandSession = new LibraryCommandSession"));
-        commandSessionListener = commandSessionListener.substring(0, commandSessionListener.indexOf("root = new FrameLayout"));
-
-        assertFalse(commandSessionListener.contains("commandReply = state"));
-        assertTrue(commandSessionListener.contains("connection lifecycle is quiet"));
-        assertTrue(commandSessionListener.contains("isQuietLibraryCommandMessage(text)"));
-        assertTrue(commandSessionListener.contains("isQuietLibraryCommandMessage(message)"));
-    }
-
-    @Test
-    public void homeCommandReplyUsesBubbleWithoutToastLikeIos() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String commandSessionListener = source.substring(source.indexOf("commandSession = new LibraryCommandSession"));
-        commandSessionListener = commandSessionListener.substring(0, commandSessionListener.indexOf("root = new FrameLayout"));
-        String onReply = commandSessionListener.substring(commandSessionListener.indexOf("@Override public void onReply"));
-        onReply = onReply.substring(0, onReply.indexOf("@Override public void onConfirm"));
-
-        assertTrue(onReply.contains("commandReply = text;"));
-        assertTrue(onReply.contains("updateFabStatus();"));
-        assertFalse(onReply.contains("refreshHomePages();"));
-        assertFalse(onReply.contains("toast("));
-    }
-
-    @Test
-    public void homeCommandPrerollsAudioBeforeLongPressConfirmation() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String touch = methodBody(source, "protected View.OnTouchListener createLibraryCommandFabTouchListener");
-
-        assertTrue(source.contains("protected int commandLongPressConfirmDelayMs()"));
-        assertTrue(source.contains("return 300;"));
-        assertTrue(source.contains("protected boolean primeLibraryCommandTalk()"));
-        assertTrue(touch.contains("startLibraryCommandTalk();"));
-        assertTrue(touch.contains("pressHandler.postDelayed(startRunnable[0], commandLongPressConfirmDelayMs())"));
-        String actionDown = touch.substring(touch.indexOf("case MotionEvent.ACTION_DOWN:"),
-                touch.indexOf("startRunnable[0] = () ->"));
-        assertTrue(actionDown.contains("primeLibraryCommandTalk();"));
-        assertFalse(actionDown.contains("startLibraryCommandTalk();"));
-        String longPressRunnable = touch.substring(touch.indexOf("startRunnable[0] = () ->"));
-        longPressRunnable = longPressRunnable.substring(0, longPressRunnable.indexOf("pressHandler.postDelayed"));
-        assertTrue(longPressRunnable.contains("startLibraryCommandTalk();"));
-        String actionUp = touch.substring(touch.indexOf("case MotionEvent.ACTION_UP:"),
-                touch.indexOf("case MotionEvent.ACTION_CANCEL:"));
-        assertTrue(actionUp.contains("cancelPrimedLibraryCommandTalk(this::startRecordingFlow)"));
-        assertFalse(actionUp.contains("finishLibraryCommandTalk(true);"));
-        assertFalse(touch.contains("ViewConfiguration.getLongPressTimeout()"));
-    }
-
-    @Test
-    public void homeCommandGestureBlocksRapidReentryAndInvalidatesDestroyedHandoffs() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String touch = methodBody(source, "protected View.OnTouchListener createLibraryCommandFabTouchListener");
-        String cancelPrime = methodBody(source, "protected void cancelPrimedLibraryCommandTalk");
-        String onDestroy = methodBody(source, "protected void onDestroy");
-        String onPause = methodBody(source, "protected void onPause");
-
-        assertTrue(source.contains("CommandGestureGate commandGestureGate"));
-        assertTrue(touch.contains("commandGestureGate.beginPress()"));
-        assertTrue(touch.contains("commandGestureGate.beginHandoff()"));
-        assertTrue(cancelPrime.contains("handoffGeneration == commandHandoffGeneration"));
-        assertTrue(cancelPrime.contains("!isFinishing() && !isDestroyed()"));
-        assertTrue(cancelPrime.contains("activityResumed"));
-        assertTrue(onPause.contains("commandHandoffGeneration++"));
-        assertTrue(onPause.contains("commandGestureGate.cancelPendingPress()"));
-        assertTrue(onDestroy.contains("commandHandoffGeneration++"));
-        assertTrue(onDestroy.contains("commandGestureGate.cancel()"));
-    }
-
-    @Test
-    public void pausedActivityStillCompletesAnAlreadyReleasedVoiceCommand() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String finish = methodBody(source, "protected void finishLibraryCommandTalk");
-
-        assertTrue(finish.contains("commandDictationSession == session"));
-        assertFalse(finish.contains("finishGeneration == commandHandoffGeneration"));
-        assertFalse(finish.contains("activityResumed"));
-    }
-
-    @Test
-    public void homeCommandShowsListeningWhileAsrConnectsLikeIos() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String prime = methodBody(source, "protected boolean primeLibraryCommandTalk");
-        String start = methodBody(source, "protected void startLibraryCommandTalk");
-
-        assertTrue(start.contains("commandReply = \"在听…\";"));
-        assertFalse(start.contains("commandReply = \"正在连接…\";"));
-        String onState = prime.substring(prime.indexOf("@Override public void onState"),
-                prime.indexOf("@Override public void onError"));
-        assertTrue(onState.contains("commandReply = \"在听…\";"));
-        assertFalse(onState.contains("commandReply = state;"));
-    }
-
-    @Test
-    public void homeLongPressReleaseShowsRecognitionProgressUntilAsrCompletes() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String finish = methodBody(source, "protected void finishLibraryCommandTalk");
-        String complete = methodBody(source, "protected void completeLibraryCommandTalk");
-
-        assertTrue(finish.indexOf("commandTalking = false;") < finish.indexOf("session.finish("));
-        assertTrue(finish.contains("commandReply = cancel ? null : \"正在识别…\";"));
-        assertTrue(complete.contains("commandReply = null;"));
-        assertFalse(complete.contains("commandReply = \"没有识别到指令\""));
-        assertFalse(complete.contains("commandReply = \"已取消图库指令\""));
-    }
-
-    @Test
-    public void homeVoiceCommandUpdatesFeedbackWithoutRebuildingCoverRows() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String start = methodBody(source, "protected void startLibraryCommandTalk");
-        String complete = methodBody(source, "protected void completeLibraryCommandTalk");
-        String queueListener = source.substring(source.indexOf("@Override public void onQueueChanged"),
-                source.indexOf("@Override public void onReply"));
-
-        assertTrue(start.contains("setCommandNumberBadgesVisible(true)"));
-        assertTrue(complete.contains("setCommandNumberBadgesVisible(false)"));
-        assertFalse(start.contains("refreshRecordingList()"));
-        assertFalse(complete.contains("refreshHomePages()"));
-        assertFalse(queueListener.contains("refreshHomePages()"));
-        assertTrue(queueListener.contains("updateFabStatus()"));
-    }
-
-    @Test
-    public void homeDeleteConfirmationsAreQueuedAndRestoredLikeMiniProgram() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String listener = source.substring(source.indexOf("@Override public void onConfirm"),
-                source.indexOf("@Override public void onUpdate"));
-        String enqueue = methodBody(source, "protected void enqueueLibraryCommandConfirm");
-        String showNext = methodBody(source, "protected void showNextLibraryCommandConfirm");
-        String onResume = methodBody(source, "protected void onResume");
-        String onPause = methodBody(source, "protected void onPause");
-
-        assertTrue(listener.contains("enqueueLibraryCommandConfirm(id, text)"));
-        assertFalse(listener.contains("showLibraryCommandConfirm(id, text)"));
-        assertTrue(enqueue.contains("activeLibraryCommandConfirm"));
-        assertTrue(enqueue.contains("pendingLibraryCommandConfirms"));
-        assertTrue(enqueue.contains("showNextLibraryCommandConfirm()"));
-        assertTrue(showNext.contains("IosDialog.showConfirmation"));
-        assertTrue(showNext.contains("commandSession.confirm(item.id)"));
-        assertTrue(showNext.contains("commandSession.cancel(item.id)"));
-        assertTrue(onResume.contains("showNextLibraryCommandConfirm()"));
-        assertTrue(onPause.contains("pendingLibraryCommandConfirms.add(0, activeLibraryCommandConfirm)"));
-    }
-
-    @Test
-    public void homeCommandFeedbackIsAnchoredAboveRecordButtonNotList() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String listPage = methodBody(source, "protected View buildRecordingsListPage");
-        String stoppedRecordingShell = methodBody(source, "protected void buildHomeShell");
-        String fab = methodBody(source, "protected void addRecordFab");
-
-        assertFalse(listPage.contains("addLibraryCommandStatus(list)"));
-        assertFalse(stoppedRecordingShell.contains("addLibraryCommandStatus(list)"));
-        assertTrue(fab.contains("addLibraryCommandStatus(fabCol)"));
-        assertTrue(fab.indexOf("addLibraryCommandStatus(fabCol)") < fab.indexOf("fabCol.addView(fabRing"));
-    }
-
-    @Test
-    public void homeCommandNumbersFloatOverIconTopLeftWhileHolding() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String row = methodBody(source, "protected View recordingRow");
-        String badge = methodBody(source, "protected TextView commandNumberBadge");
-
-        assertTrue(row.contains("FrameLayout iconWrap = new FrameLayout(this);"));
-        assertTrue(row.contains("iconWrap.addView(waveIcon"));
-        assertTrue(row.contains("new FrameLayout.LayoutParams(dp(24), dp(24),"));
-        assertTrue(row.contains("Gravity.START | Gravity.TOP"));
-        assertTrue(row.contains("iconWrap.addView(badge"));
-        assertTrue(row.contains("row.addView(iconWrap"));
-        assertFalse(row.contains("FrameLayout numberSlot"));
-        assertFalse(row.contains("row.addView(numberSlot"));
-        assertFalse(row.contains("badgeLp.setMargins(-dp("));
-        assertTrue(row.contains("badge.setVisibility(commandTalking ? View.VISIBLE : View.GONE)"));
-        assertTrue(badge.contains("Color.BLACK"));
-        assertTrue(badge.contains("roundStroke(Color.WHITE, 12"));
-        assertFalse(row.contains("if (commandTalking && !rec.uploading)"));
-    }
-
-    @Test
     public void rowCoverStaysSquareUntilDedicatedCoverSucceedsLikeIos() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String row = methodBody(source, "protected View recordingRow");
@@ -257,64 +51,6 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
-    public void homeCommandTipHasHorizontalBreathingRoom() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String status = methodBody(source, "protected void addLibraryCommandStatus");
-
-        assertTrue(status.contains("lp.setMargins(dp(16), 0, dp(16), dp(12))"));
-    }
-
-    @Test
-    public void homeCommandQueueShowsInstructionTextLikeIos() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String status = methodBody(source, "protected void updateFabStatus");
-
-        assertTrue(status.contains("commandQueue.get(commandQueue.size() - 1).text"));
-        assertFalse(status.contains("图库指令处理中：\" + commandQueue.size()"));
-    }
-
-    @Test
-    public void homeCommandStatusShowsListeningDuringConnection() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String prime = methodBody(source, "protected boolean primeLibraryCommandTalk");
-        String start = methodBody(source, "protected void startLibraryCommandTalk");
-        String status = methodBody(source, "protected void updateFabStatus");
-
-        assertTrue(start.contains("commandReply = \"在听…\""));
-        assertTrue(prime.contains("if (commandTranscript.bestText().isEmpty()) commandReply = \"在听…\";"));
-        assertTrue(status.contains("String transcriptText = commandTranscript.bestText();"));
-        assertTrue(status.contains("text = transcriptText.isEmpty() ? commandReply : transcriptText;"));
-        assertFalse(start.contains("正在连接…"));
-        assertFalse(start.contains("commandReply = \"按住说图库指令\""));
-    }
-
-    @Test
-    public void homeConnectsAsrOnlyWhenPressingRecordToSavePower() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        assertTrue(source.contains("protected boolean primeLibraryCommandTalk()"));
-        String onCreate = methodBody(source, "protected void onCreate");
-        String prime = methodBody(source, "protected boolean primeLibraryCommandTalk");
-        String start = methodBody(source, "protected void startLibraryCommandTalk");
-        String complete = methodBody(source, "protected void completeLibraryCommandTalk");
-
-        assertFalse(onCreate.contains("prewarmConnection"));
-        assertFalse(complete.contains("prewarmConnection"));
-        assertTrue(prime.contains("commandDictationSession.start();"));
-        assertFalse(prime.contains("commandDictationSession.startCapture();"));
-        assertFalse(start.contains("commandDictationSession.activate();"));
-    }
-
-    @Test
-    public void commandTextCanArriveAfterFingerRelease() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String start = methodBody(source, "protected boolean primeLibraryCommandTalk");
-
-        assertTrue(start.contains("commandTranscript.accept(text, isFinal);"));
-        assertTrue(start.contains("if (!commandTalking) return;"));
-        assertTrue(start.indexOf("commandTranscript.accept(text, isFinal);") < start.indexOf("if (!commandTalking) return;"));
-    }
-
-    @Test
     public void swipeDeleteDisallowsParentScrollAfterHorizontalIntent() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String pullRefresh = readSource("src/main/java/com/baixingai/voicedrop/ui/PullRefreshLayout.java");
@@ -327,16 +63,13 @@ public class RecordingsActivitySourceTest {
     }
 
     @Test
-    public void homeSupportsDynamicTagTabsAndTaggedCommandTargets() throws Exception {
+    public void homeSupportsDynamicTagTabsAndTaggedRecordings() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
 
         assertTrue(source.contains("protected final List<String> homeTags = new ArrayList<>()"));
         assertTrue(source.contains("selectedTag = tag"));
         assertTrue(source.contains("buildTagTabPage(tag)"));
         assertTrue(source.contains("recordingsForTag(tag)"));
-        assertTrue(source.contains("currentCommandTargets()"));
-        assertTrue(source.contains("if (selectedTag == null) return recordings;"));
-        assertTrue(source.contains("rec.tags != null && rec.tags.contains(selectedTag)"));
         assertTrue(source.contains("defaultRecordTag = link.tag"));
         assertTrue(source.contains("Uploader.writeTagsSidecar(take.file, java.util.Collections.singletonList(defaultRecordTag))"));
     }
@@ -400,7 +133,7 @@ public class RecordingsActivitySourceTest {
     public void completedStatusRefreshesOnlyItsRecordingRow() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
         String statusListener = source.substring(source.indexOf("statusSession = new StatusSession"),
-                source.indexOf("commandSession = new LibraryCommandSession"));
+                source.indexOf("restoreCachedCommunityFeed();"));
         String complete = methodBody(source, "protected void refreshCompletedRecording");
         String replace = methodBody(source, "protected void replaceRecordingRows");
 
@@ -529,6 +262,28 @@ public class RecordingsActivitySourceTest {
         assertTrue(icon.contains("M12.2,18.4"));
         assertTrue(icon.contains("M15.2,12.2"));
         assertFalse(icon.contains("M15,5"));
+    }
+
+    @Test
+    public void homeUsesOrdinaryRecordingForTapAndHoldWithoutCommandSession() throws Exception {
+        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
+        String fab = methodBody(source, "protected void addRecordFab");
+        String touch = methodBody(source, "protected View.OnTouchListener createRecordFabTouchListener");
+        String start = methodBody(source, "protected void startRecordingFlow");
+        assertTrue(fab.contains("fab.setOnClickListener(v -> startRecordingFlow())"));
+        assertTrue(fab.contains("fab.setOnTouchListener(createRecordFabTouchListener())"));
+        assertTrue(fab.contains("轻点录音"));
+        assertTrue(touch.contains("RecordButtonGesture.HOLD_MILLIS"));
+        assertTrue(touch.contains("recordButtonGesture.hold()"));
+        assertTrue(touch.contains("performHapticFeedback"));
+        assertTrue(touch.contains("startRecordingFlow();"));
+        assertTrue(touch.contains("if (launch) v.performClick()"));
+        assertTrue(methodBody(source, "protected void onPause").contains("cancelRecordHold()"));
+        assertTrue(start.contains("recordPermissionPending || (recorder != null && recorder.isRecording())"));
+        assertTrue(methodBody(source, "public void onRequestPermissionsResult").contains("recordPermissionPending = false"));
+        assertFalse(source.contains("LibraryCommand"));
+        assertFalse(source.contains("commandDictationSession"));
+        assertFalse(source.contains("COMMAND_NUMBER_BADGE_TAG"));
     }
 
     private static String readSource(String moduleRelative) throws Exception {

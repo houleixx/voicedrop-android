@@ -20,35 +20,6 @@ public class SocketRecoverySourceTest {
         assertFalse(source.contains("socket = null;\n                listener.onError"));
     }
 
-    @Test public void commandSocketRestoresConfirmationAndControlState() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/net/LibraryCommandSession.java");
-
-        assertTrue(source.contains("CommandStateStore.loadControls"));
-        assertTrue(source.contains("CommandStateStore.loadConfirmations"));
-        assertTrue(source.contains("obj.optString(\"summary\""));
-        assertTrue(source.contains("flushControls()"));
-        assertTrue(source.contains("notifyConfirmations()"));
-    }
-
-    @Test public void completedSnapshotClearsAControlWhoseReplyWasMissed() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/net/LibraryCommandSession.java");
-        String reconcile = source.substring(source.indexOf("private void reconcile"),
-                source.indexOf("private static List<String> strings"));
-
-        assertTrue(reconcile.contains("for (String id : done) clearCommandState(id);"));
-    }
-
-    @Test public void commandSocketLogsMessageTypeAndIdWithoutInstructionText() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/net/LibraryCommandSession.java");
-        String handle = source.substring(source.indexOf("private void handle(String text)"),
-                source.indexOf("private void reconcile"));
-
-        assertTrue(source.contains("private static final String TAG = \"LibraryCommandSession\";"));
-        assertTrue(handle.contains("Log.d(TAG, \"message type=\" + type + \" id=\""));
-        assertFalse(handle.contains("Log.d(TAG, text)"));
-        assertFalse(handle.contains("Log.d(TAG, \"message=\" + text)"));
-    }
-
     private static String readSource(String moduleRelative) throws Exception {
         Path path = Paths.get(moduleRelative);
         if (!Files.exists(path)) path = Paths.get("app", moduleRelative);

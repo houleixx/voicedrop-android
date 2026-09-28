@@ -11,14 +11,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class AsrReleaseFeedbackSourceTest {
-    @Test public void homeShowsRecognitionProgressAfterFingerRelease() throws Exception {
-        String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingsActivity.java");
-        String finish = methodBody(source, "protected void finishLibraryCommandTalk");
-
-        assertTrue(finish.contains("正在识别…"));
-        assertTrue(finish.contains("session.finish"));
-    }
-
     @Test public void audioDetailKeepsProgressVisibleWhileSharedAsrFinishes() throws Exception {
         String source = readSource("src/main/java/com/baixingai/voicedrop/RecordingDetailActivity.java");
         String finish = methodBody(source, "protected void finishHoldArticleEdit");

@@ -7,7 +7,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -74,15 +76,13 @@ import com.baixingai.voicedrop.data.UsageStore;
 import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.ArticleEditSession;
 import com.baixingai.voicedrop.net.ClientReliability;
-import com.baixingai.voicedrop.net.LibraryCommandSession;
 import com.baixingai.voicedrop.net.StatusSession;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.BooksShelfPanel;
 import com.baixingai.voicedrop.ui.CommunityFeedView;
 import com.baixingai.voicedrop.ui.CommunityFeedPresentation;
-import com.baixingai.voicedrop.ui.CommandGestureGate;
-import com.baixingai.voicedrop.ui.HoldToTalkGesture;
 import com.baixingai.voicedrop.ui.HoldToTalkTranscript;
+import com.baixingai.voicedrop.ui.RecordButtonGesture;
 import com.baixingai.voicedrop.ui.IosDialog;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
@@ -151,32 +151,19 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected boolean recordingStopInProgress;
     protected StatusSession statusSession;
     protected ArticleEditSession editSession;
-    protected LibraryCommandSession commandSession;
     protected AsrDictationSession dictationSession;
-    protected AsrDictationSession commandDictationSession;
     protected MediaPlayer mediaPlayer;
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
     protected Recording deferredArticleRenderRecording;
     protected ArticleDoc deferredArticleRenderDoc;
     protected List<ArticleEditSession.EditRequest> editQueue = new ArrayList<>();
-    protected List<LibraryCommandSession.CommandRequest> commandQueue = new ArrayList<>();
     protected String editReply;
     protected boolean editReplyOk = true;
-    protected String commandReply;
-    protected boolean commandReplyOk = true;
-    protected final HoldToTalkTranscript commandTranscript = new HoldToTalkTranscript();
-    protected final List<LibraryCommandConfirm> pendingLibraryCommandConfirms = new ArrayList<>();
-    protected LibraryCommandConfirm activeLibraryCommandConfirm;
-    protected IosDialog libraryCommandConfirmDialog;
     protected boolean activityResumed;
-    protected final CommandGestureGate commandGestureGate = new CommandGestureGate();
-    protected int commandHandoffGeneration;
-    protected boolean commandTalking;
-    protected boolean commandCanceled;
-    protected View commandFabView;
-    protected TextView fabLabel;
-    protected TextView fabStatus;
+    private final RecordButtonGesture recordButtonGesture = new RecordButtonGesture();
+    private Runnable pendingRecordHold;
+    private boolean recordPermissionPending;
     protected LinearLayout recordingsList;
     protected String emptyListText;
     protected final HashMap<String, LinearLayout> recordingsListsByPage = new HashMap<>();
@@ -185,7 +172,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
     // list and panel references at the same time, instead of retaining whole pages.
     protected final HashMap<View, String> homeRecordingPageKeys = new HashMap<>();
     protected final HashMap<View, Integer> homePagePositions = new HashMap<>();
-    protected static final String COMMAND_NUMBER_BADGE_TAG = "command-number-badge";
     private final HoldToTalkTranscript holdEditTranscript = new HoldToTalkTranscript();
     protected boolean holdEditCanceled;
     protected boolean holdEditFinishing;
@@ -311,47 +297,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 // Silent: the list still refreshes on resume/upload.
             }
         });
-        commandSession = new LibraryCommandSession(this, auth, new LibraryCommandSession.Listener() {
-            @Override public void onQueueChanged(List<LibraryCommandSession.CommandRequest> queue) {
-                main.post(() -> {
-                    commandQueue = queue;
-                    updateFabStatus();
-                });
-            }
-
-            @Override public void onReply(String text, boolean ok) {
-                main.post(() -> {
-                    if (isQuietLibraryCommandMessage(text)) return;
-                    commandReply = text;
-                    commandReplyOk = ok;
-                    updateFabStatus();
-                });
-            }
-
-            @Override public void onConfirm(String id, String text) {
-                main.post(() -> enqueueLibraryCommandConfirm(id, text));
-            }
-
-            @Override public void onUpdate(List<String> stems) {
-                library.invalidateArticleCaches(stems);
-                main.post(RecordingsActivity.this::refreshAndDrain);
-            }
-
-            @Override public void onState(String state) {
-                // Match iOS: connection lifecycle is quiet. The home feedback area is only
-                // for active dictation, queued commands, confirmations, replies, and errors.
-            }
-
-            @Override public void onError(String message) {
-                main.post(() -> {
-                    if (isQuietLibraryCommandMessage(message)) return;
-                    commandReply = message;
-                    commandReplyOk = false;
-                    if (message != null && !message.isEmpty()) toast(message);
-                    updateFabStatus();
-                });
-            }
-        });
         restoreCachedCommunityFeed();
         onPageCreate(getIntent());
     }
@@ -397,12 +342,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 }
             }
             if (statusSession != null) statusSession.connect();
-            if (commandSession != null) {
-                commandSession.setRefs(currentCommandRefs());
-                commandSession.connect();
-            }
         }
-        showNextLibraryCommandConfirm();
     }
 
     // Android 10+ 仅允许前台窗口读取剪贴板；首页首次获焦后补做一次归因检查。
@@ -419,23 +359,13 @@ public final class RecordingsActivity extends VoiceDropActivity {
     @Override
     protected void onPause() {
         activityResumed = false;
-        commandHandoffGeneration++;
-        commandGestureGate.cancelPendingPress();
-        if (libraryCommandConfirmDialog != null) {
-            libraryCommandConfirmDialog.dismiss();
-            libraryCommandConfirmDialog = null;
-        }
-        if (activeLibraryCommandConfirm != null) {
-            pendingLibraryCommandConfirms.add(0, activeLibraryCommandConfirm);
-            activeLibraryCommandConfirm = null;
-        }
+        cancelRecordHold();
         super.onPause();
     }
     @Override
     protected void onDestroy() {
-        commandHandoffGeneration++;
         recordingMetadataGeneration++;
-        commandGestureGate.cancel();
+        cancelRecordHold();
         super.onDestroy();
         main.removeCallbacks(timerTick);
         main.removeCallbacks(communityTimerTick);
@@ -443,9 +373,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         if (statusSession != null) statusSession.close();
         if (editSession != null) editSession.close();
         if (dictationSession != null) dictationSession.stop();
-        if (commandDictationSession != null) commandDictationSession.stop();
         if (interviewer != null) interviewer.stop();
-        if (commandSession != null) commandSession.close();
         if (deviceLinkSession != null) deviceLinkSession.cancel();
         stopPlayback();
         io.shutdownNow();
@@ -932,17 +860,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
     protected void uploadArticlePhoto(Recording rec, Uri uri) {
     }
 
-    protected boolean isQuietLibraryCommandMessage(String message) {
-        if (message == null) return false;
-        String value = message.trim();
-        if (value.isEmpty()) return false;
-        return value.contains("已连接图库指令")
-                || value.contains("已连接到图库指令")
-                || value.contains("正在恢复图库指令")
-                || value.contains("正在执行图库指令")
-                || value.contains("图库指令连接断开")
-                || value.contains("图库指令已完成");
-    }
     // MARK: - Community Terms Gate
 
     protected void showCommunityTermsGate(Runnable onAgree) {
@@ -1171,18 +1088,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
             editSession = null;
         }
         editQueue.clear();
-        commandQueue.clear();
         recordings.clear();
-        pendingLibraryCommandConfirms.clear();
-        activeLibraryCommandConfirm = null;
-        if (libraryCommandConfirmDialog != null) {
-            libraryCommandConfirmDialog.dismiss();
-            libraryCommandConfirmDialog = null;
-        }
-        if (commandSession != null) {
-            commandSession.setRefs(currentCommandRefs());
-            commandSession.resetForAccountChange();
-        }
         if (library != null) library.invalidateArticleCaches(new ArrayList<>());
     }
 
@@ -1537,6 +1443,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         });
     }
     protected void showHome() {
+        cancelRecordHold();
         if (recorder != null && recorder.isRecording()) {
             homeRefreshDeferredWhileRecording = true;
             return;
@@ -1648,6 +1555,7 @@ public final class RecordingsActivity extends VoiceDropActivity {
         homePager.setCurrentItem(currentHomePageIndex(), false);
         homePager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
             @Override public void onPageSelected(int position) {
+                cancelRecordHold();
                 communityTab = position == 1;
                 booksTab = position == 2;
                 selectedTag = position >= 3 && position - 3 < homeTags.size() ? homeTags.get(position - 3) : null;
@@ -1873,308 +1781,89 @@ public final class RecordingsActivity extends VoiceDropActivity {
         micIcon.setScaleType(ImageView.ScaleType.CENTER);
         fab.addView(micIcon, new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER));
         fabRing.addView(fab, new FrameLayout.LayoutParams(dp(60), dp(60), Gravity.CENTER));
-        addLibraryCommandStatus(fabCol);
-        TextView localFabStatus = fabStatus;
         fabCol.addView(fabRing, new LinearLayout.LayoutParams(dp(82), dp(82)));
 
-        fabLabel = text(recordFabLabel(), 12, commandTalking ? Theme.RED : Theme.SECONDARY, Typeface.NORMAL);
-        TextView localFabLabel = fabLabel;
+        TextView fabLabel = new TextView(this) {
+            @Override protected void onDraw(Canvas canvas) {
+                if (getLayout() != null) {
+                    // An opaque glyph outline separates the hint from scrolling text.
+                    Paint paint = getPaint();
+                    int color = paint.getColor();
+                    Paint.Style style = paint.getStyle();
+                    float width = paint.getStrokeWidth();
+                    paint.setColor(Theme.BG);
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(dp(4));
+                    int save = canvas.save();
+                    canvas.translate(getCompoundPaddingLeft(), getExtendedPaddingTop());
+                    getLayout().draw(canvas);
+                    canvas.restoreToCount(save);
+                    paint.setColor(color);
+                    paint.setStyle(style);
+                    paint.setStrokeWidth(width);
+                }
+                super.onDraw(canvas);
+            }
+        };
+        fabLabel.setText(com.baixingai.voicedrop.ui.I18n.text(this, "轻点录音"));
+        fabLabel.setTextSize(13);
+        fabLabel.setTextColor(Theme.SECONDARY);
+        fabLabel.setTypeface(Typeface.DEFAULT, Typeface.NORMAL);
+        fabLabel.setSingleLine(true);
         fabLabel.setLetterSpacing(0.08f);
-        fabLabel.setPadding(0, 0, 0, 0);
+        fabLabel.setPadding(dp(3), 0, dp(3), 0);
         fabLabel.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(-2, -2);
         labelLp.setMargins(0, -dp(3), 0, 0);
         fabCol.addView(fabLabel, labelLp);
-        View.OnTouchListener commandTouch = createLibraryCommandFabTouchListener(localFabLabel, localFabStatus);
-        fab.setOnTouchListener(commandTouch);
+        fab.setContentDescription(com.baixingai.voicedrop.ui.I18n.text(this, "录音"));
+        fab.setOnClickListener(v -> startRecordingFlow());
+        fab.setOnTouchListener(createRecordFabTouchListener());
     }
 
-    protected String recordFabLabel() {
-        if (!commandTalking) return "轻点录音 · 长按说话";
-        return commandCanceled ? "上滑取消 · 松开放弃" : "松开发送 · 上滑取消";
-    }
-
-    protected View.OnTouchListener createLibraryCommandFabTouchListener(TextView localFabLabel, TextView localFabStatus) {
-        final Handler pressHandler = new Handler(Looper.getMainLooper());
-        final boolean[] longPressed = {false};
-        final boolean[] movedToCancel = {false};
-        final boolean[] gestureAccepted = {false};
-        final float[] startRawY = {0};
-        final Runnable[] startRunnable = new Runnable[1];
+    protected View.OnTouchListener createRecordFabTouchListener() {
         return (v, event) -> {
-            fabLabel = localFabLabel;
-            fabStatus = localFabStatus;
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    gestureAccepted[0] = commandGestureGate.beginPress();
-                    if (!gestureAccepted[0]) return true;
-                    commandFabView = v;
-                    longPressed[0] = false;
-                    movedToCancel[0] = false;
-                    startRawY[0] = event.getRawY();
-                    primeLibraryCommandTalk();
-                    startRunnable[0] = () -> {
-                        if (!gestureAccepted[0] || !commandGestureGate.confirmLongPress()) return;
-                        longPressed[0] = true;
+                    cancelRecordHold();
+                    recordButtonGesture.begin(event.getRawX(), event.getRawY());
+                    v.setPressed(true);
+                    pendingRecordHold = () -> {
+                        pendingRecordHold = null;
+                        if (!v.isAttachedToWindow() || !v.isShown() || !activityResumed
+                                || !recordButtonGesture.hold()) return;
+                        v.setPressed(false);
                         v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-                        startLibraryCommandTalk();
+                        startRecordingFlow();
                     };
-                    pressHandler.postDelayed(startRunnable[0], commandLongPressConfirmDelayMs());
+                    main.postDelayed(pendingRecordHold, RecordButtonGesture.HOLD_MILLIS);
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    if (!gestureAccepted[0]) return true;
-                    if (longPressed[0]) {
-                        boolean shouldCancel = HoldToTalkGesture.shouldCancel(startRawY[0], event.getRawY(), dp(60));
-                        if (shouldCancel != movedToCancel[0]) {
-                            movedToCancel[0] = shouldCancel;
-                            commandCanceled = shouldCancel;
-                            updateFabLabel();
-                            updateFabStatus();
-                        }
+                    if (recordButtonGesture.move(event.getRawX(), event.getRawY(), dp(24))) {
+                        cancelRecordHold();
+                        v.setPressed(false);
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
-                    if (!gestureAccepted[0]) return true;
-                    gestureAccepted[0] = false;
-                    if (!longPressed[0]) {
-                        if (startRunnable[0] != null) pressHandler.removeCallbacks(startRunnable[0]);
-                        if (commandGestureGate.beginHandoff()) {
-                            cancelPrimedLibraryCommandTalk(this::startRecordingFlow);
-                        }
-                    } else {
-                        finishLibraryCommandTalk(HoldToTalkGesture.shouldAbortOnEnd(false, movedToCancel[0]));
-                    }
+                    boolean launch = recordButtonGesture.release();
+                    cancelRecordHold();
+                    v.setPressed(false);
+                    if (launch) v.performClick();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
-                    if (!gestureAccepted[0]) return true;
-                    gestureAccepted[0] = false;
-                    if (startRunnable[0] != null) pressHandler.removeCallbacks(startRunnable[0]);
-                    if (longPressed[0]) finishLibraryCommandTalk(true);
-                    else {
-                        commandGestureGate.cancel();
-                        cancelPrimedLibraryCommandTalk(null);
-                    }
+                    cancelRecordHold();
+                    v.setPressed(false);
                     return true;
                 default:
-                    return false;
+                    return true;
             }
         };
     }
 
-    protected int commandLongPressConfirmDelayMs() {
-        return 300;
-    }
-
-    protected boolean primeLibraryCommandTalk() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false;
-        if (commandDictationSession != null) return true;
-        commandTranscript.clear();
-        commandDictationSession = new AsrDictationSession(auth, new AsrDictationSession.Listener() {
-            @Override public void onText(String text, boolean isFinal) {
-                main.post(() -> {
-                    commandTranscript.accept(text, isFinal);
-                    if (!commandTalking) return;
-                    commandReply = commandTranscript.bubbleText();
-                    updateFabLabel();
-                    updateFabStatus();
-                });
-            }
-
-            @Override public void onState(String state) {
-                main.post(() -> {
-                    if (!commandTalking) return;
-                    if (commandTranscript.bestText().isEmpty()) commandReply = "在听…";
-                    updateFabLabel();
-                    updateFabStatus();
-                });
-            }
-
-            @Override public void onError(String message) {
-                main.post(() -> {
-                    if (!commandTalking) return;
-                    commandReply = message;
-                    commandReplyOk = false;
-                    toast(message == null || message.isEmpty() ? "听写失败" : message);
-                    updateFabStatus();
-                });
-            }
-        });
-        // Match iOS dictation: open the ASR socket and start capturing together
-        // on touch-down so the first spoken syllable is never waiting on setup.
-        commandDictationSession.start();
-        return true;
-    }
-
-    protected void startLibraryCommandTalk() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            commandGestureGate.cancel();
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 12);
-            return;
-        }
-        if (commandTalking || !primeLibraryCommandTalk()) {
-            commandGestureGate.cancel();
-            return;
-        }
-        commandReply = "在听…";
-        commandReplyOk = true;
-        commandCanceled = false;
-        commandTalking = true;
-        if (commandSession != null) {
-            commandSession.setRefs(currentCommandRefs());
-            commandSession.connect();
-        }
-        // Update FAB label/status in-place without rebuilding the view tree,
-        // so the ongoing long-press touch stream isn't interrupted.
-        updateFabLabel();
-        updateFabStatus();
-        setCommandNumberBadgesVisible(true);
-    }
-
-    protected void cancelPrimedLibraryCommandTalk(Runnable onReleased) {
-        final int handoffGeneration = ++commandHandoffGeneration;
-        final AsrDictationSession session = commandDictationSession;
-        commandDictationSession = null;
-        commandTranscript.clear();
-        Runnable afterRelease = onReleased == null ? null : () -> main.post(() -> {
-            if (handoffGeneration == commandHandoffGeneration
-                    && activityResumed && !isFinishing() && !isDestroyed()) {
-                commandGestureGate.complete();
-                onReleased.run();
-            }
-        });
-        if (session == null) {
-            if (afterRelease != null) afterRelease.run();
-            return;
-        }
-        session.stop(afterRelease);
-    }
-
-    protected void finishLibraryCommandTalk(boolean cancel) {
-        if (!commandTalking) {
-            commandGestureGate.cancel();
-            return;
-        }
-        if (cancel) commandGestureGate.cancel();
-        else if (!commandGestureGate.beginFinish()) return;
-        commandCanceled = cancel;
-        // Don't refreshHomePages() here -- the view tree rebuild destroys the touch
-        // target. Just update the label in-place. Full rebuild happens after release.
-        commandTalking = false;
-        commandReply = cancel ? null : "正在识别…";
-        commandReplyOk = true;
-        updateFabLabel();
-        updateFabStatus();
-        final AsrDictationSession session = commandDictationSession;
-        if (session == null) {
-            completeLibraryCommandTalk(cancel);
-            return;
-        }
-        if (cancel) {
-            session.stop();
-            completeLibraryCommandTalk(true);
-            return;
-        }
-        session.finish(() -> main.post(() -> {
-            if (commandDictationSession == session && !isFinishing() && !isDestroyed()) {
-                completeLibraryCommandTalk(false);
-            }
-        }));
-    }
-
-    protected void completeLibraryCommandTalk(boolean cancel) {
-        commandGestureGate.complete();
-        commandDictationSession = null;
-        setCommandNumberBadgesVisible(false);
-        String text = commandTranscript.bestText();
-        if (cancel) {
-            commandReply = null;
-            commandReplyOk = true;
-        } else if (text.isEmpty()) {
-            commandReply = null;
-            commandReplyOk = true;
-        } else {
-            commandReply = text;
-            commandReplyOk = true;
-            if (commandSession != null) commandSession.enqueue(text, currentCommandRefs());
-        }
-        commandTranscript.clear();
-        commandCanceled = false;
-        updateFabLabel();
-        updateFabStatus();
-    }
-
-    protected List<LibraryCommandSession.CommandRef> currentCommandRefs() {
-        List<LibraryCommandSession.CommandRef> refs = new ArrayList<>();
-        for (Recording rec : currentCommandTargets()) {
-            if (rec.uploading) continue;
-            refs.add(new LibraryCommandSession.CommandRef(refs.size() + 1, rec.stem(), rec.rowTitle()));
-        }
-        return refs;
-    }
-
-    protected List<Recording> currentCommandTargets() {
-        if (selectedTag == null) return recordings;
-        List<Recording> out = new ArrayList<>();
-        for (Recording rec : recordings) {
-            if (rec.tags != null && rec.tags.contains(selectedTag)) out.add(rec);
-        }
-        return out;
-    }
-
-    protected int commandRefNumberFor(Recording rec) {
-        if (rec.uploading) return 0;
-        int n = 0;
-        for (Recording item : currentCommandTargets()) {
-            if (item.uploading) continue;
-            n++;
-            if (item == rec || item.audioName.equals(rec.audioName)) return n;
-        }
-        return 0;
-    }
-
-    protected void addLibraryCommandStatus(LinearLayout list) {
-        fabStatus = text("", 13, Theme.SECONDARY, Typeface.BOLD);
-        fabStatus.setGravity(Gravity.CENTER);
-        fabStatus.setSingleLine(false);
-        fabStatus.setPadding(dp(20), dp(9), dp(20), dp(9));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(dp(16), 0, dp(16), dp(12));
-        list.addView(fabStatus, lp);
-        updateFabStatus();
-    }
-
-    protected void updateFabLabel() {
-        if (fabLabel == null) return;
-        fabLabel.setText(recordFabLabel());
-        fabLabel.setTextColor(commandTalking ? Theme.RED : Theme.SECONDARY);
-    }
-
-    protected void updateFabStatus() {
-        if (fabStatus == null) return;
-        String text;
-        int color = commandReplyOk ? Theme.SECONDARY : Theme.RED;
-        if (commandTalking) {
-            String transcriptText = commandTranscript.bestText();
-            if (commandCanceled) {
-                text = "松手取消图库指令";
-                color = Theme.RED;
-            } else {
-                text = transcriptText.isEmpty() ? commandReply : transcriptText;
-                color = Theme.INK;
-            }
-        } else if (!commandQueue.isEmpty()) {
-            text = commandQueue.get(commandQueue.size() - 1).text;
-            color = Theme.RED;
-        } else if (commandReply != null && !commandReply.isEmpty()) {
-            text = commandReply;
-        } else {
-            fabStatus.setVisibility(View.GONE);
-            return;
-        }
-        fabStatus.setText(com.baixingai.voicedrop.ui.I18n.text(this, text));
-        fabStatus.setTextColor(color);
-        fabStatus.setBackground(round(commandReplyOk ? Theme.ACCENT_SOFT : 0xffffebe8, 14));
-        fabStatus.setVisibility(View.VISIBLE);
+    private void cancelRecordHold() {
+        if (pendingRecordHold != null) main.removeCallbacks(pendingRecordHold);
+        pendingRecordHold = null;
+        recordButtonGesture.cancel();
     }
 
     /** Rebuild just the recording list rows without touching the FAB column. */
@@ -2188,69 +1877,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
                 ? "轻点下方按钮开始第一条录音"
                 : "「" + selectedTag + "」标签下还没有文章";
         populateRecordingList(list, emptyText, listForPage);
-    }
-
-    protected void setCommandNumberBadgesVisible(boolean visible) {
-        for (LinearLayout list : recordingsListsByPage.values()) {
-            setTaggedDescendantsVisible(list, COMMAND_NUMBER_BADGE_TAG, visible);
-        }
-    }
-
-    private void setTaggedDescendantsVisible(View view, Object tag, boolean visible) {
-        if (tag.equals(view.getTag())) {
-            view.setVisibility(visible ? View.VISIBLE : View.GONE);
-        }
-        if (!(view instanceof ViewGroup)) return;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            setTaggedDescendantsVisible(group.getChildAt(i), tag, visible);
-        }
-    }
-
-    protected void enqueueLibraryCommandConfirm(String id, String text) {
-        if (id == null || id.isEmpty()) return;
-        if (activeLibraryCommandConfirm != null && id.equals(activeLibraryCommandConfirm.id)) return;
-        for (LibraryCommandConfirm item : pendingLibraryCommandConfirms) {
-            if (id.equals(item.id)) return;
-        }
-        pendingLibraryCommandConfirms.add(new LibraryCommandConfirm(id, text));
-        showNextLibraryCommandConfirm();
-    }
-
-    protected void showNextLibraryCommandConfirm() {
-        if (!activityResumed || activeLibraryCommandConfirm != null
-                || pendingLibraryCommandConfirms.isEmpty() || isFinishing() || isDestroyed()) return;
-        final LibraryCommandConfirm item = pendingLibraryCommandConfirms.remove(0);
-        activeLibraryCommandConfirm = item;
-        libraryCommandConfirmDialog = IosDialog.showConfirmation(this, "确认操作", item.text,
-                "删除", () -> {
-                    if (activeLibraryCommandConfirm != item) return;
-                    activeLibraryCommandConfirm = null;
-                    libraryCommandConfirmDialog = null;
-                    if (commandSession != null) commandSession.confirm(item.id);
-                    showNextLibraryCommandConfirm();
-                }, "取消", () -> {
-                    if (activeLibraryCommandConfirm != item) return;
-                    activeLibraryCommandConfirm = null;
-                    libraryCommandConfirmDialog = null;
-                    if (commandSession != null) commandSession.cancel(item.id);
-                    showNextLibraryCommandConfirm();
-                });
-        if (!libraryCommandConfirmDialog.isShowing()) {
-            libraryCommandConfirmDialog = null;
-            activeLibraryCommandConfirm = null;
-            pendingLibraryCommandConfirms.add(0, item);
-        }
-    }
-
-    protected static final class LibraryCommandConfirm {
-        final String id;
-        final String text;
-
-        LibraryCommandConfirm(String id, String text) {
-            this.id = id;
-            this.text = text == null || text.isEmpty() ? "确认执行这条指令？" : text;
-        }
     }
 
     protected View communityRow(CommunityStore.Post post) {
@@ -2420,14 +2046,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
         iconWrap.setClipChildren(false);
         iconWrap.setClipToPadding(false);
         iconWrap.addView(waveIcon, new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.CENTER));
-        int commandNumber = commandRefNumberFor(rec);
-        if (commandNumber > 0) {
-            View badge = commandNumberBadge(commandNumber);
-            badge.setTag(COMMAND_NUMBER_BADGE_TAG);
-            badge.setVisibility(commandTalking ? View.VISIBLE : View.GONE);
-            iconWrap.addView(badge, new FrameLayout.LayoutParams(dp(24), dp(24),
-                    Gravity.START | Gravity.TOP));
-        }
         row.addView(iconWrap, new LinearLayout.LayoutParams(dp(44), dp(44)));
         maybeLoadRowCover(rec, iconWrap, waveIcon);
 
@@ -2586,13 +2204,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
         }
     }
 
-    protected TextView commandNumberBadge(int n) {
-        TextView badge = text(String.valueOf(n), 13, Color.BLACK, Typeface.BOLD);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(roundStroke(Color.WHITE, 12, 0xffd8d8d8, 1));
-        return badge;
-    }
-
     /**
      * Mirrors iOS RowCoverIcon: keep the mounted waveform tile square while loading.
      * Only a successfully decoded dedicated cover may change the row icon to 2:3;
@@ -2722,8 +2333,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
 
         // Bottom: stop button + camera
         FrameLayout bottom = new FrameLayout(this);
+        // Measure the controls plus the navigation inset; a fixed height clips the stop label.
+        bottom.setMinimumHeight(dp(160));
         SystemBarDefaults.applyBottomInsets(bottom, 0, 0, 0, 0);
-        page.addView(bottom, new LinearLayout.LayoutParams(-1, dp(160)));
+        page.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
 
         // Stop button column (centered at bottom)
         LinearLayout stopCol = new LinearLayout(this);
@@ -2863,8 +2476,6 @@ public final class RecordingsActivity extends VoiceDropActivity {
         return row;
     }
 
-
-
     protected View recordingFilmstrip() {
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -2900,7 +2511,10 @@ public final class RecordingsActivity extends VoiceDropActivity {
     }
 
     protected void startRecordingFlow() {
+        if (isFinishing() || isDestroyed()) return;
+        if (recordPermissionPending || (recorder != null && recorder.isRecording())) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            recordPermissionPending = true;
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 10);
             return;
         }
@@ -3370,13 +2984,13 @@ public final class RecordingsActivity extends VoiceDropActivity {
     }
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 10) recordPermissionPending = false;
         if (grantResults.length == 0 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
             toast("权限被拒绝");
             return;
         }
         if (requestCode == 10) startRecordingFlow();
         if (requestCode == 11) openCamera();
-        if (requestCode == 12) startLibraryCommandTalk();
     }
 
     protected void handleShareIntent(Intent intent) {

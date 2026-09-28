@@ -250,7 +250,7 @@ public final class I18n {
         copy.put("屏蔽后，你将不再看到 %@ 的任何社区内容。可在「设置」里取消屏蔽。", "After blocking, you won't see any community content from %@. You can unblock in Settings.");
         copy.put("其他", "Other");
         copy.put("切换", "Switch");
-        copy.put("轻点录音 · 长按说话", "Tap to Record · Hold to Talk");
+        copy.put("轻点录音", "Tap to Record");
         copy.put("请输入 4 位验证码", "Enter the 4-digit code");
         copy.put("请输入 6 位代码（设置→账户里那串）", "Enter the 6-digit code (the one in Settings → Account)");
         copy.put("请先登录", "Please sign in first");
@@ -531,7 +531,6 @@ public final class I18n {
         copy.put("取消分享失败：", "Couldn't unshare: ");
         copy.put("听写失败", "Dictation failed");
         copy.put("正在识别…", "Recognizing…");
-        copy.put("松手取消图库指令", "Release to cancel gallery command");
         copy.put("确认执行这条指令？", "Run this command?");
         copy.put("社区文章", "Community article");
         copy.put("匿名作者", "Anonymous author");
@@ -1142,16 +1141,6 @@ public final class I18n {
         copy.put("加载中...", "Loading...");
         copy.put("简体中文", "Simplified Chinese");
         copy.put("风格 v", "Style v");
-        copy.put("已连接图库指令", "Gallery command connected");
-        copy.put("已连接到图库指令", "Connected to gallery command");
-        copy.put("正在恢复图库指令", "Restoring gallery command");
-        copy.put("正在恢复图库指令…", "Restoring gallery command…");
-        copy.put("正在执行图库指令", "Running gallery command");
-        copy.put("图库指令执行失败", "Gallery command failed");
-        copy.put("图库指令已完成", "Gallery command complete");
-        copy.put("图库指令连接断开", "Gallery command disconnected");
-        copy.put("图库指令连接断开，稍后重试", "Gallery command disconnected. Try again later.");
-        copy.put("确认执行这条图库指令？", "Run this gallery command?");
         copy.put("连接文章编辑器…", "Connecting article editor…");
         copy.put("正在恢复未完成修改…", "Restoring unfinished revision…");
         copy.put("正在改", "Revising");

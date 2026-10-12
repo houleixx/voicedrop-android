@@ -38,6 +38,8 @@ import com.baixingai.voicedrop.net.HttpClient;
 import com.baixingai.voicedrop.net.Api;
 import com.baixingai.voicedrop.ui.AliIconFont;
 import com.baixingai.voicedrop.ui.I18n;
+import com.baixingai.voicedrop.ui.ReadingFont;
+import com.baixingai.voicedrop.core.ReadingFontScale;
 import com.baixingai.voicedrop.ui.LoadingStateView;
 import com.baixingai.voicedrop.ui.PageTitleBar;
 import com.baixingai.voicedrop.ui.PopupMenuPosition;
@@ -117,6 +119,7 @@ public final class BookReaderActivity extends VoiceDropActivity {
         web.setBackgroundColor(Theme.BG);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
+        applyReadingFont();
         // WebView does not save attachment responses itself. The in-page PDF link is
         // therefore routed to the native PDF downloader.
         web.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
@@ -182,6 +185,19 @@ public final class BookReaderActivity extends VoiceDropActivity {
         if (loadingState != null) loadingState.setVisibility(View.GONE);
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        applyReadingFont();
+    }
+
+    private void applyReadingFont() {
+        if (web != null) {
+            // Scale text and let WebView reflow it, keeping images and viewport width intact.
+            // This setting also survives chapter navigation and page reloads.
+            web.getSettings().setTextZoom(ReadingFontScale.percent(ReadingFont.scale(this)));
+        }
+    }
+
     private void showBookMenu(View anchor) {
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
@@ -214,6 +230,14 @@ public final class BookReaderActivity extends VoiceDropActivity {
             showBookShareSheet();
         });
         menu.addView(shareRow);
+
+        addMenuDivider(menu);
+        LinearLayout fontRow = bookMenuRow("字号", RemixIconGlyph.FONT_SIZE, Theme.SECONDARY);
+        fontRow.setOnClickListener(ignored -> {
+            if (popupRef[0] != null) popupRef[0].dismiss();
+            ReadingFont.show(this, this::applyReadingFont);
+        });
+        menu.addView(fontRow);
 
         int popupWidth = dp(220);
         PopupWindow popup = new PopupWindow(menu, popupWidth, -2, true);

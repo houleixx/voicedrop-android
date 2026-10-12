@@ -78,6 +78,7 @@ public class SettingsActivity extends VoiceDropActivity {
 
     private AuthStore auth;
     private LibraryStore library;
+    private TextView readingFontValue;
     private SettingsStore settingsStore;
     private UsageStore usageStore;
     private ExportManager exportManager;
@@ -168,6 +169,7 @@ public class SettingsActivity extends VoiceDropActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (readingFontValue != null) readingFontValue.setText(com.baixingai.voicedrop.ui.ReadingFont.label(this));
         requestCacheSizeRefresh();
     }
 
@@ -215,6 +217,11 @@ public class SettingsActivity extends VoiceDropActivity {
             addCardDivider(card);
             addCardRow(card, R.drawable.ic_globe_flat, "语言", "选择 VoiceDrop 显示语言",
                     this::openLanguageSettings);
+            addCardDivider(card);
+            readingFontValue = addCardRowWithValue(card, R.drawable.ic_reading_font,
+                    "阅读字号", "社区文章、分享文章和书的正文大小", com.baixingai.voicedrop.ui.ReadingFont.label(this),
+                    () -> com.baixingai.voicedrop.ui.ReadingFont.show(this,
+                            () -> readingFontValue.setText(com.baixingai.voicedrop.ui.ReadingFont.label(this))));
             addCardDivider(card);
             addCacheRow(card);
             addCardDivider(card);

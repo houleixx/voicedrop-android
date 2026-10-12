@@ -79,6 +79,11 @@ public final class I18n {
 
     private static Map<String, String> englishCatalog() {
         Map<String, String> copy = new HashMap<>();
+        copy.put("阅读字号", "Reading font size");
+        copy.put("字号", "Font size");
+        copy.put("社区文章、分享文章和书的正文大小", "Text size in community articles, shared articles and books");
+        copy.put("小", "Small"); copy.put("标准", "Standard"); copy.put("大", "Large");
+        copy.put("特大", "Extra large"); copy.put("超大", "Largest");
         copy.put("  录音中 · %@  ", "  Recording · %@  ");
         copy.put(" 已拍 %lld 张 ", " %lld photos taken ");
         copy.put("，成文时各生成一篇，在阅读页顶部切换对比。最多选 3 个。", ", each will produce its own article at write-up — switch between them at the top of the reading page. Pick up to 3.");

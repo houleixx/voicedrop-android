@@ -25,6 +25,7 @@ public final class IosDialog extends Dialog {
     private static final int SCRIM_COLOR = 0x66000000;
     private static final int BOTTOM_SHEET_EXIT_DURATION_MS = 200;
     private View bottomSheetRoot;
+    private View titleDivider;
     private View bottomSheetCard;
     private boolean bottomSheetExitAnimating;
     private Runnable bottomSheetExitCompletion;
@@ -42,6 +43,14 @@ public final class IosDialog extends Dialog {
         } catch (RuntimeException ignored) {
             try { dismiss(); } catch (Exception ignoredDismiss) {}
         }
+    }
+
+    public void setTitleDividerInset(int insetDp) {
+        if (titleDivider == null) return;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) titleDivider.getLayoutParams();
+        int inset = dp(getContext(), insetDp);
+        params.setMargins(inset, 0, inset, 0);
+        titleDivider.setLayoutParams(params);
     }
 
     /** Slides a bottom sheet away before dismissing, then runs the selected action once. */
@@ -453,6 +462,7 @@ public final class IosDialog extends Dialog {
             View divider = new View(ctx);
             divider.setBackgroundColor(0x1a000000);
             card.addView(divider, new LinearLayout.LayoutParams(-1, dp(ctx, 1)));
+            titleDivider = divider;
         }
 
         // Most dialog content benefits from an outer scroller. Complex custom pages can

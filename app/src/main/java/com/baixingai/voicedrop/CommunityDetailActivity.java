@@ -162,6 +162,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
     protected ArticleDoc currentArticleDoc;
     protected String currentArticleStem;
     protected boolean communityDataChanged;
+    private float renderedReadingScale = 1f;
     protected BouncyScrollView communityArticleScroll;
     protected LinearLayout communityArticleContent;
     protected LinearLayout communityReplyToSection;
@@ -286,6 +287,10 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (communityArticlePost != null && !communityArticlePost.isPrompt()
+                && renderedReadingScale != com.baixingai.voicedrop.ui.ReadingFont.scale(this)) {
+            updateCommunityPostInPlace(communityArticlePost, currentArticleDoc);
+        }
         if (!isDetailActivity()) {
             if (ResumeRefreshPolicy.shouldRedrawOnResume(false, topLevelUiRendered)) {
                 refreshAndDrain();
@@ -1128,9 +1133,12 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
 
     protected void renderCommunityPostContent(LinearLayout content, CommunityStore.Post post,
                                                ArticleDoc doc, LinearLayout replyToSection) {
+        float readingScale = com.baixingai.voicedrop.ui.ReadingFont.scale(this);
+        renderedReadingScale = readingScale;
         TextView title = text(post.title == null || post.title.isEmpty() ? "社区文章" : post.title,
                 26, Theme.INK, Typeface.BOLD);
-        title.setLineSpacing(dp(5), 1.0f);
+        title.setTextSize(26 * readingScale);
+        title.setLineSpacing(dp(5) * readingScale, 1.0f);
         content.addView(title);
 
         TextView meta = text("", 14, Theme.FAINT, Typeface.NORMAL);
@@ -1143,10 +1151,11 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
             for (MinedArticle article : doc.articles) {
                 if (!article.title.equals(post.title)) {
                     TextView articleTitle = text(article.title, 20, Theme.INK, Typeface.BOLD);
+                    articleTitle.setTextSize(20 * readingScale);
                     articleTitle.setPadding(0, dp(10), 0, 0);
                     content.addView(articleTitle);
                 }
-                renderArticleBody(content, article.body, doc);
+                renderArticleBody(content, article.body, doc, readingScale);
             }
         } else {
             TextView body = text("社区正文暂不可读，请稍后刷新或打开分享链接查看。", 16, Theme.INK, Typeface.NORMAL);
@@ -1826,6 +1835,19 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
         menu.addView(shareRow);
         menu.addView(divider());
 
+        if (!post.isPrompt()) {
+            LinearLayout fontRow = menuRow("字号", R.drawable.ic_reading_font, Theme.RED, Theme.INK);
+            fontRow.setOnClickListener(v -> {
+                if (popupRef[0] != null) popupRef[0].dismiss();
+                com.baixingai.voicedrop.ui.ReadingFont.show(this, () -> {
+                    if (communityArticlePost != null && !communityArticlePost.isPrompt())
+                        updateCommunityPostInPlace(communityArticlePost, currentArticleDoc);
+                });
+            });
+            menu.addView(fontRow);
+            menu.addView(divider());
+        }
+
         LinearLayout reportRow = menuRow("举报", AliIconFont.FLAG, Theme.RED, Theme.RED);
         reportRow.setOnClickListener(v -> {
             if (popupRef[0] != null) popupRef[0].dismiss();
@@ -2092,6 +2114,10 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
     }
 
     protected void renderArticleBody(LinearLayout content, String bodyText, ArticleDoc doc) {
+        renderArticleBody(content, bodyText, doc, 1f);
+    }
+
+    protected void renderArticleBody(LinearLayout content, String bodyText, ArticleDoc doc, float readingScale) {
         articleLocatorViews.clear();
         int[] lineNo = {0};
         int[] imageNo = {0};
@@ -2138,7 +2164,7 @@ public final class CommunityDetailActivity extends VoiceDropActivity {
                     FrameLayout.LayoutParams locatorLp = new FrameLayout.LayoutParams(dp(20), -2, Gravity.LEFT | Gravity.TOP);
                     locatorLp.setMargins(-dp(24), dp(4), 0, 0);
                     row.addView(locator, locatorLp);
-                    MarkdownRowRenderer.add(this, row, MarkdownBlock.classify(paragraph));
+                    MarkdownRowRenderer.add(this, row, MarkdownBlock.classify(paragraph), readingScale);
                     LinearLayout.LayoutParams paraLp = new LinearLayout.LayoutParams(-1, -2);
                     paraLp.setMargins(0, 0, 0, dp(20));
                     content.addView(row, paraLp);

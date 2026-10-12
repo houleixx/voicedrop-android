@@ -23,6 +23,7 @@ public final class RemixIconGlyph {
     public static final String DOWNLOAD = "\uEC54";
     public static final String EDIT = "\uEC80";
     public static final String FILE_COPY = "\uECD5";
+    public static final String FONT_SIZE = "\uED8D";
     public static final String FILE_TEXT = "\uED0F";
     public static final String FLAG = "\uED3B";
     public static final String FLASHLIGHT_FILL = "\uED3C";

@@ -18,6 +18,10 @@ public final class MarkdownRowRenderer {
     private MarkdownRowRenderer() {}
 
     public static TextView add(Context context, FrameLayout row, MarkdownBlock block) {
+        return add(context, row, block, 1f);
+    }
+
+    public static TextView add(Context context, FrameLayout row, MarkdownBlock block, float scale) {
         TextView text = new TextView(context);
         text.setTextColor(0xff5d574f);
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
@@ -61,6 +65,8 @@ public final class MarkdownRowRenderer {
                 text.setText(block.content);
                 break;
         }
+        text.setTextSize(TypedValue.COMPLEX_UNIT_PX, text.getTextSize() * scale);
+        text.setLineSpacing(text.getLineSpacingExtra() * scale, 1f);
         row.addView(text, params);
         return text;
     }

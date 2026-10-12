@@ -39,6 +39,19 @@ public final class SharedArticleActivity extends VoiceDropActivity {
     private LibraryStore library;
     private ArticleDoc doc;
     private int articleIndex;
+    private float renderedReadingScale = 1f;
+    private ScrollView articleScroll;
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (renderedReadingScale != com.baixingai.voicedrop.ui.ReadingFont.scale(this)) refreshReadingFont();
+    }
+
+    private void refreshReadingFont() {
+        int position = articleScroll == null ? 0 : articleScroll.getScrollY();
+        render();
+        if (articleScroll != null) articleScroll.post(() -> articleScroll.scrollTo(0, position));
+    }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -59,6 +72,7 @@ public final class SharedArticleActivity extends VoiceDropActivity {
     }
 
     private void render() {
+        renderedReadingScale = com.baixingai.voicedrop.ui.ReadingFont.scale(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Theme.BG);
@@ -75,6 +89,14 @@ public final class SharedArticleActivity extends VoiceDropActivity {
         back.addView(icon, new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
         bar.addView(back, new LinearLayout.LayoutParams(dp(42), dp(42)));
         back.setOnClickListener(v -> finish());
+        View spacer = new View(this);
+        bar.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
+        TextView font = text("Aa", 18, Theme.INK, Typeface.BOLD);
+        font.setGravity(Gravity.CENTER);
+        font.setContentDescription(com.baixingai.voicedrop.ui.I18n.text(this, "字号"));
+        font.setBackground(round(Theme.CARD, 11));
+        bar.addView(font, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        font.setOnClickListener(v -> com.baixingai.voicedrop.ui.ReadingFont.show(this, this::refreshReadingFont));
 
         if (doc == null || doc.articles.isEmpty()) {
             TextView empty = text("这篇分享已不可用", 16, Theme.SECONDARY, Typeface.NORMAL);
@@ -84,6 +106,7 @@ public final class SharedArticleActivity extends VoiceDropActivity {
         }
 
         ScrollView scroll = new ScrollView(this);
+        articleScroll = scroll;
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         SystemBarDefaults.applyBottomInsets(content, dp(20), dp(10), dp(20), dp(34));
@@ -94,7 +117,8 @@ public final class SharedArticleActivity extends VoiceDropActivity {
         if (doc.articles.size() > 1) addChips(content, idx);
         MinedArticle article = doc.articles.get(idx);
         TextView title = text(article.title, 23, Theme.INK, Typeface.BOLD);
-        title.setLineSpacing(dp(3), 1f);
+        title.setTextSize(23 * renderedReadingScale);
+        title.setLineSpacing(dp(3) * renderedReadingScale, 1f);
         content.addView(title, new LinearLayout.LayoutParams(-1, -2));
         renderBody(content, article.body);
     }
@@ -131,7 +155,8 @@ public final class SharedArticleActivity extends VoiceDropActivity {
                 String t = segment.value == null ? "" : segment.value.trim();
                 if (t.isEmpty()) continue;
                 TextView p = text(t, 16, 0xff4f4942, Typeface.NORMAL);
-                p.setLineSpacing(dp(7), 1f);
+                p.setTextSize(16 * renderedReadingScale);
+                p.setLineSpacing(dp(7) * renderedReadingScale, 1f);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
                 lp.setMargins(0, dp(18), 0, 0);
                 content.addView(p, lp);

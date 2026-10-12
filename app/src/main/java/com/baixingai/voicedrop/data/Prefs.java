@@ -17,6 +17,17 @@ public final class Prefs {
         prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    public float readingFontScale() {
+        try {
+            return com.baixingai.voicedrop.core.ReadingFontScale.normalize(prefs.getFloat("readingFontScale", 1f));
+        } catch (ClassCastException ignored) { return 1f; }
+    }
+
+    public void setReadingFontScale(float value) {
+        prefs.edit().putFloat("readingFontScale",
+                com.baixingai.voicedrop.core.ReadingFontScale.normalize(value)).apply();
+    }
+
     public boolean deleteLocalAfterUpload() {
         return prefs.getBoolean(DELETE_LOCAL, true);
     }
